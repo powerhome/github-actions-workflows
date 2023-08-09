@@ -22,7 +22,7 @@ on:
 
 jobs:
   js:
-    uses: powerhome/github-actions-workflows/yarn-package.yml
+    uses: powerhome/github-actions-workflows/.github/workflows/yarn-package.yml@main
     with:
       package: ${{ github.workflow }}
     secrets: inherit
