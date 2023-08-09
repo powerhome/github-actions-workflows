@@ -1,0 +1,7 @@
+site_name: Power Tools
+site_description: Packages for application configuration.
+repo_url: https://github.com/powerhome/power-tools
+nav:
+  - 'Home': 'README.md'
+plugins:
+  - techdocs-core

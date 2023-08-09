@@ -1,0 +1,14 @@
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: github-actions-workflows
+  title: github-actions-workflows
+  description: Github Actions workflows to build, package, and publish.
+  annotations:
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: library
+  owner: heroes-for-hire
+  lifecycle: production
+  system: power-application-framework
