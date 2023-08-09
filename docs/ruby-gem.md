@@ -21,7 +21,7 @@ on:
 
 jobs:
   ruby:
-    uses: powerhome/github-actions-workflows/ruby-gem.yml
+    uses: powerhome/github-actions-workflows/.github/workflows/ruby-gem.yml@main
     with:
       package: ${{ github.workflow }}
       gemfiles: "['gemfiles/rails_6_0.gemfile','gemfiles/rails_6_1.gemfile','gemfiles/rails_7_0.gemfile']"
