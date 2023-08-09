@@ -6,7 +6,7 @@
 
 Builds using multiple ruby versions, bundler versions, and Gemfile's
 
-[yarn-package](yarn-package.md) 💎
+[yarn-package](yarn-package.md) ☕️
 
 Builds using multiple node versions.
 
