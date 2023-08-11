@@ -4,14 +4,14 @@ on:
       workdir:
         required: false
         type: string
+      decisions:
+        required: false
+        type: string
+        default: doc/dependency_decisions.yml
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-    env:
-      RAILS_ENV: test
     steps:
       - uses: actions/checkout@v3
       - name: Set up Ruby
@@ -21,6 +21,6 @@ jobs:
           bundler-cache: true
           working-directory: ${{ inputs.workdir }}
       - run: gem install license_finder
-      - name: Ensure license compliance
+      - name: Ensure license compliance with ${{ inputs.workdir }}/${{ inputs.decisions }}
         working-directory: ${{ inputs.workdir }}
-        run: license_finder
+        run: "license_finder --decisions-file=${{ inputs.decisions }}"
