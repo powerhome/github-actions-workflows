@@ -1,0 +1,24 @@
+on:
+  workflow_call:
+    inputs:
+      workdir:
+        required: false
+        type: string
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    env:
+      RAILS_ENV: test
+    steps:
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.2.2
+      - uses: actions/checkout@v3
+      - run: gem install license_finder
+      - name: Ensure license compliance
+        working-directory: ${{ inputs.workdir }}
+        run: license_finder

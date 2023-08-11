@@ -37,6 +37,10 @@ jobs:
         working-directory: ${{ inputs.workdir }}
       - run: yarn test
         working-directory: ${{ inputs.workdir }}
+  license-compliance:
+    uses: ./.github/workflows/license-compliance.yml
+    with:
+      workdir: "${{ inputs.workdir }}"
 
   release:
     needs: build
