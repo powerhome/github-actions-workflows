@@ -11,6 +11,9 @@ on:
       workdir:
         required: false
         type: string
+      package:
+        required: true
+        type: string
 
 env:
   NODE_RELEASE_VERSION: "16.18.0"
@@ -47,7 +50,7 @@ jobs:
     needs: [build, license-compliance]
     runs-on: ubuntu-latest
     name: Release
-    if: ${{ contains(github.ref, 'refs/tags/v') && contains(github.ref, github.workflow) }}
+    if: ${{ contains(github.ref, 'refs/tags/v') && contains(github.ref, inputs.package) }}
     steps:
       - uses: actions/checkout@v3
       - name: Set up Node ${{ env.NODE_RELEASE_VERSION }}
