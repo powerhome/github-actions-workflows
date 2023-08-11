@@ -23,4 +23,4 @@ jobs:
       - run: gem install license_finder
       - name: Ensure license compliance
         working-directory: ${{ inputs.workdir }}
-        run: license_finder --decisions_file docs/dependency_decisions.yml
+        run: license_finder --recursive --decisions_file docs/dependency_decisions.yml
