@@ -43,7 +43,7 @@ jobs:
       workdir: "${{ inputs.workdir }}"
 
   release:
-    needs: build
+    needs: [build, license-compliance]
     runs-on: ubuntu-latest
     name: Release
     if: ${{ contains(github.ref, 'refs/tags/v') && contains(github.ref, github.workflow) }}

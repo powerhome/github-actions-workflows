@@ -60,13 +60,14 @@ jobs:
       - name: Run the build script
         working-directory: ${{ inputs.workdir }}
         run: bundle exec rake
+
   license-compliance:
     uses: ./.github/workflows/license-compliance.yml
     with:
       workdir: "${{ inputs.workdir }}"
 
   release:
-    needs: build
+    needs: [build, license-compliance]
     runs-on: ubuntu-latest
     if: ${{ contains(github.ref, 'refs/tags/v') && contains(github.ref, inputs.package) }}
     steps:
