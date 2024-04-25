@@ -60,6 +60,8 @@ jobs:
           registry-url: ${{ env.REGISTRY_URL }}
       - run: yarn install --frozen-lockfile
         working-directory: ${{ inputs.workdir }}
+      - run: yarn build
+        working-directory: ${{ inputs.workdir }}
       - run: yarn publish
         working-directory: ${{ inputs.workdir }}
         env:
