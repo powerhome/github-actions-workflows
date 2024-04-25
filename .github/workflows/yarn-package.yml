@@ -16,7 +16,7 @@ on:
         type: string
 
 env:
-  NODE_RELEASE_VERSION: "16.18.0"
+  NODE_RELEASE_VERSION: "18"
   REGISTRY_URL: "https://registry.npmjs.org"
 
 jobs:
