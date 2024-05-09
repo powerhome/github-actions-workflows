@@ -1,0 +1,41 @@
+name: "Ruby Gem"
+description: "Power Home ruby gem build"
+
+inputs:
+  workdir:
+    description: 'The working directory during this build'
+    required: false
+    type: string
+  ruby:
+    description: 'The ruby version to use on this build'
+    default: '3.3'
+    required: false
+    type: string
+  gemfile:
+    description: 'The path to a Gemfile, relative to workdir'
+    default: 'Gemfile'
+    required: false
+    type: string
+  bundler:
+    description: 'Bundler major version'
+    default: '2'
+    required: false
+    type: string
+
+runs:
+  using: 'composite'
+  env:
+    BUNDLE_GEMFILE: "${{ inputs.gemfile }}"
+    BUNDLER_VERSION: "${{ inputs.bundler }}"
+    RAILS_ENV: test
+  steps:
+    - name: Set up Ruby
+      uses: ruby/setup-ruby@v1
+      with:
+        bundler-cache: true
+        bundler: ${{ inputs.bundler }}
+        ruby-version: ${{ inputs.ruby }}
+        working-directory: ${{ inputs.workdir }}
+    - name: Run the build script
+      working-directory: ${{ inputs.workdir }}
+      run: bundle exec rake
