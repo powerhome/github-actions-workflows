@@ -20,13 +20,13 @@ inputs:
 
 runs:
   using: 'composite'
-  env:
-    BUNDLE_GEMFILE: '${{ inputs.gemfile }}'
-    BUNDLER_VERSION: '${{ inputs.bundler }}'
-    RAILS_ENV: 'test'
   steps:
     - name: 'Set up Ruby'
       uses: ruby/setup-ruby@v1
+      env:
+        BUNDLE_GEMFILE: '${{ inputs.gemfile }}'
+        BUNDLER_VERSION: '${{ inputs.bundler }}'
+        RAILS_ENV: 'test'
       with:
         bundler-cache: true
         bundler: '${{ inputs.bundler }}'
