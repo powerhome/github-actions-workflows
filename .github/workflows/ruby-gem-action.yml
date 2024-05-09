@@ -1,0 +1,24 @@
+name: ruby-gem-action
+
+on:
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Ruby ${{ matrix.ruby }}
+    strategy:
+      fail-fast: true
+      matrix:
+        ruby:
+          - 3.0
+          - 3.1
+          - 3.2
+          - 3.3
+    steps:
+      - uses: actions/checkout@v3
+      - name: 'Test ruby gem action'
+        uses: ./ruby-gem
+        with:
+          workdir: ruby-gem/test
+          ruby: ${{ matrix.ruby }}
