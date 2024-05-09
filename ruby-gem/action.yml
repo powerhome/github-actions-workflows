@@ -32,4 +32,5 @@ runs:
         working-directory: '${{ inputs.workdir }}'
     - name: 'Run the build script'
       working-directory: '${{ inputs.workdir }}'
+      shell: 'bash'
       run: 'bundle exec rake'
