@@ -46,7 +46,7 @@ jobs:
       - name: Before build
         if: ${{ inputs.before_build != '' }}
         run: "${{ inputs.before_build }}"
-      - uses: ./rubygem
+      - uses: powerhome/github-actions-workflows/ruby-gem@rubygem-action
         with:
           workdir: ${{ inputs.workdir }}
           ruby: ${{ inputs.ruby }}
