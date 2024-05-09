@@ -49,7 +49,7 @@ jobs:
       - uses: powerhome/github-actions-workflows/ruby-gem@rubygem-action
         with:
           workdir: ${{ inputs.workdir }}
-          ruby: ${{ inputs.ruby }}
+          ruby: ${{ matrix.ruby }}
           gemfile: ${{ matrix.gemfile }}
           bundler: ${{ matrix.bundler }}
 
