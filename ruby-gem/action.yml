@@ -31,6 +31,10 @@ runs:
         ruby-version: '${{ inputs.ruby }}'
         working-directory: '${{ inputs.workdir }}'
     - name: 'Run the build script'
+      env:
+        BUNDLE_GEMFILE: '${{ inputs.gemfile }}'
+        BUNDLER_VERSION: '${{ inputs.bundler }}'
+        RAILS_ENV: 'test'
       working-directory: '${{ inputs.workdir }}'
       shell: 'bash'
       run: 'bundle exec rake'
