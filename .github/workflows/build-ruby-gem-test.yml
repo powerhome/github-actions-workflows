@@ -1,4 +1,4 @@
-name: ruby-gem-action
+name: build-ruby-gem
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: 'Test ruby gem action'
-        uses: ./ruby-gem
+        uses: ./build-ruby-gem
         with:
-          workdir: ruby-gem/test
+          workdir: build-ruby-gem/test
           ruby: ${{ matrix.ruby }}
