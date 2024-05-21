@@ -1,0 +1,8 @@
+#!/usr/bin/env rake
+
+# frozen_string_literal: true
+
+task :default do
+  puts "Default task invoked successfully"
+  puts "Ruby: #{RUBY_VERSION}"
+end

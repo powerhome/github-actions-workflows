@@ -41,25 +41,17 @@ jobs:
         gemfile: ${{ fromJSON(inputs.gemfiles) }}
         bundler: ${{ fromJSON(inputs.bundler) }}
         exclude: ${{ fromJSON(inputs.exclude)}}
-    env:
-      BUNDLE_GEMFILE: "${{ matrix.gemfile }}"
-      BUNDLER_VERSION: "${{ matrix.bundler }}"
-      RAILS_ENV: test
     steps:
       - uses: actions/checkout@v3
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          bundler-cache: true
-          bundler: ${{ matrix.bundler }}
-          ruby-version: ${{ matrix.ruby }}
-          working-directory: ${{ inputs.workdir }}
       - name: Before build
         if: ${{ inputs.before_build != '' }}
         run: "${{ inputs.before_build }}"
-      - name: Run the build script
-        working-directory: ${{ inputs.workdir }}
-        run: bundle exec rake
+      - uses: powerhome/github-actions-workflows/build-ruby-gem@main
+        with:
+          workdir: ${{ inputs.workdir }}
+          ruby: ${{ matrix.ruby }}
+          gemfile: ${{ matrix.gemfile }}
+          bundler: ${{ matrix.bundler }}
 
   license-compliance:
     uses: ./.github/workflows/license-compliance.yml
@@ -72,7 +64,7 @@ jobs:
     if: ${{ contains(github.ref, 'refs/tags/v') && contains(github.ref, inputs.package) }}
     steps:
       - uses: actions/checkout@v3
-      - uses: powerhome/publish-rubygems-action@git-safe-directory
+      - uses: cadwallion/publish-rubygems-action@master
         env:
           RELEASE_COMMAND: rake build release:guard_clean release:rubygem_push
           RUBYGEMS_API_KEY: ${{ secrets.rubygems_api_key }}
