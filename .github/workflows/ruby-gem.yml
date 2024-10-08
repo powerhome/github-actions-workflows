@@ -57,6 +57,20 @@ jobs:
           gemfile: ${{ matrix.gemfile }}
           bundler: ${{ matrix.bundler }}
 
+  all_builds:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    name: All Builds
+    needs: [build]
+    steps:
+      - run: |
+          result="${{ needs.build.result }}"
+          if [[ $result == "success" || $result == "skipped" ]]; then
+            exit 0
+          else
+            exit 1
+          fi
+
   license-compliance:
     uses: ./.github/workflows/license-compliance.yml
     with:
