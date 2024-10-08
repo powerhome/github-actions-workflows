@@ -44,6 +44,6 @@ jobs:
 
 The following secrets are expected to be available:
 
-| **Secret**       | **Required** |
-| ---------------- | ------------ |
-| rubygems_api_key | true         |
+| **Secret**       | **Required**       |
+| ---------------- | ------------------ |
+| rubygems_api_key | true, if releasing |
