@@ -1,7 +1,7 @@
 on:
   workflow_call:
     secrets:
-      rubygems_api_key:
+      secrets.rubygems_api_key:
         required: false
     inputs:
       before_build:
@@ -29,6 +29,10 @@ on:
         default: "[]"
         required: false
         type: string
+      license-decisions:
+        required: false
+        type: string
+        default: doc/dependency_decisions.yml
 
 jobs:
   build:
@@ -57,11 +61,26 @@ jobs:
     uses: ./.github/workflows/license-compliance.yml
     with:
       workdir: "${{ inputs.workdir }}"
+      decisions: "${{ inputs.license-decisions }}"
+
+  all:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    name: All
+    needs: [build, license-compliance]
+    steps:
+      - run: |
+          result="${{ needs.build.result }}"
+          if [[ $result == "success" || $result == "skipped" ]]; then
+            exit 0
+          else
+            exit 1
+          fi
 
   release:
     needs: [build, license-compliance]
     runs-on: ubuntu-latest
-    if: ${{ secrets.rubygems_api_key != '' && contains(github.ref, 'refs/tags/v') && contains(github.ref, inputs.package) }}
+    if: ${{ contains(github.ref, 'refs/tags/v') && contains(github.ref, inputs.package) }}
     steps:
       - uses: actions/checkout@v3
       - uses: cadwallion/publish-rubygems-action@master
