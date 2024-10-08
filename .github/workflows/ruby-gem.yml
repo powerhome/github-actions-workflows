@@ -57,11 +57,17 @@ jobs:
           gemfile: ${{ matrix.gemfile }}
           bundler: ${{ matrix.bundler }}
 
-  all_builds:
+  license-compliance:
+    uses: ./.github/workflows/license-compliance.yml
+    with:
+      workdir: "${{ inputs.workdir }}"
+      decisions: "${{ inputs.license-decisions }}"
+
+  all:
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    name: All Builds
-    needs: [build]
+    name: All
+    needs: [build, license-compliance]
     steps:
       - run: |
           result="${{ needs.build.result }}"
@@ -70,12 +76,6 @@ jobs:
           else
             exit 1
           fi
-
-  license-compliance:
-    uses: ./.github/workflows/license-compliance.yml
-    with:
-      workdir: "${{ inputs.workdir }}"
-      decisions: "${{ inputs.license-decisions }}"
 
   release:
     needs: [build, license-compliance]
