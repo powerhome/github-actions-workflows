@@ -1,7 +1,7 @@
 on:
   workflow_call:
     secrets:
-      rubygems_api_key:
+      secrets.rubygems_api_key:
         required: false
     inputs:
       before_build:
@@ -67,5 +67,5 @@ jobs:
       - uses: cadwallion/publish-rubygems-action@master
         env:
           RELEASE_COMMAND: rake build release:guard_clean release:rubygem_push
-          RUBYGEMS_API_KEY: ${{ rubygems_api_key }}
+          RUBYGEMS_API_KEY: ${{ secrets.rubygems_api_key }}
           WORKDIR: ${{ inputs.workdir }}
