@@ -29,7 +29,7 @@ on:
         default: "[]"
         required: false
         type: string
-      license_decisions:
+      license-decisions:
         required: false
         type: string
         default: doc/dependency_decisions.yml
@@ -61,7 +61,7 @@ jobs:
     uses: ./.github/workflows/license-compliance.yml
     with:
       workdir: "${{ inputs.workdir }}"
-      decisions: "${{ inputs.license_decisions }}"
+      decisions: "${{ inputs.license-decisions }}"
 
   release:
     needs: [build, license-compliance]
