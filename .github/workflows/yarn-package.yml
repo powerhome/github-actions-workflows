@@ -14,6 +14,10 @@ on:
       package:
         required: true
         type: string
+      license-decisions:
+        required: false
+        type: string
+        default: doc/dependency_decisions.yml
 
 env:
   NODE_RELEASE_VERSION: "18"
@@ -45,6 +49,7 @@ jobs:
     uses: ./.github/workflows/license-compliance.yml
     with:
       workdir: "${{ inputs.workdir }}"
+      decisions: "${{ inputs.license-decisions }}"
 
   release:
     needs: [build, license-compliance]
