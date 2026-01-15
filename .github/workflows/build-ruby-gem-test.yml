@@ -16,7 +16,7 @@ jobs:
           - 3.2
           - 3.3
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: 'Test ruby gem action'
         uses: ./build-ruby-gem
         with:
