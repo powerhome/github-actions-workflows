@@ -20,7 +20,7 @@ on:
         default: doc/dependency_decisions.yml
 
 env:
-  NODE_RELEASE_VERSION: "18"
+  NODE_RELEASE_VERSION: "20"
   REGISTRY_URL: "https://registry.npmjs.org"
 
 jobs:
