@@ -1,0 +1,124 @@
+name: Agentic PR review
+description: Run a headless agent on the PR diff and post a comment-only GitHub review
+
+inputs:
+  app-id:
+    description: GitHub App ID used to create an installation token
+    required: true
+  private-key:
+    description: GitHub App private key (PEM)
+    required: true
+  provider:
+    description: Review backend (supported values — cursor)
+    required: false
+    default: cursor
+  provider-api-key:
+    description: API credential for the selected provider (e.g. Cursor maps this to CURSOR_API_KEY)
+    required: true
+  pull-request-number:
+    description: Pull request number to review
+    required: true
+  deepen-length:
+    description: Passed to rmacklin/fetch-through-merge-base as deepen_length
+    required: false
+    default: "30"
+  additional-prompt:
+    description: Extra instructions appended to the review prompt (e.g. full text of an @nitro-pr-review PR comment)
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Create GitHub App token
+      id: app_token
+      uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+
+    - name: Fetch PR metadata
+      id: pr_gate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+      run: |
+        set -euo pipefail
+
+        gh api \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2026-03-10" \
+          "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+          > pr.json
+
+        {
+          echo "base_sha=$(jq -r '.base.sha' pr.json)"
+          echo "head_sha=$(jq -r '.head.sha' pr.json)"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Check out repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        ref: ${{ steps.pr_gate.outputs.head_sha }}
+        fetch-depth: 1
+        token: ${{ steps.app_token.outputs.token }}
+
+    - name: Fetch base commit (for merge-base)
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
+      run: git fetch --depth=1 origin "$BASE_SHA"
+
+    - name: Fetch through merge-base
+      uses: rmacklin/fetch-through-merge-base@98594af01ba0825b881902a5dcadbf87bb46d084 # v0
+      with:
+        base_ref: ${{ steps.pr_gate.outputs.base_sha }}
+        head_ref: ${{ steps.pr_gate.outputs.head_sha }}
+        deepen_length: ${{ inputs.deepen-length }}
+
+    - name: Compute PR diff
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.pr_gate.outputs.head_sha }}
+      run: |
+        set -euo pipefail
+        git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
+
+    - name: Run review provider
+      shell: bash
+      env:
+        PROVIDER: ${{ inputs.provider }}
+        PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
+        REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
+        REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
+        REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
+      run: |
+        set -euo pipefail
+
+        provider="${PROVIDER:-cursor}"
+        provider_script="${{ github.action_path }}/scripts/providers/${provider}.sh"
+
+        if [[ ! -f "${provider_script}" ]]; then
+          echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
+          exit 1
+        fi
+
+        exec bash "${provider_script}"
+
+    - name: Upload agent review JSON
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: agentic-pr-review-json
+        path: ${{ github.workspace }}/review-agent.json
+        if-no-files-found: warn
+
+    - name: Post review to GitHub
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+        PULL_NUMBER: ${{ inputs.pull-request-number }}
+        COMMIT_SHA: ${{ steps.pr_gate.outputs.head_sha }}
+        REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
+      run: ruby "${{ github.action_path }}/scripts/process_review.rb"
