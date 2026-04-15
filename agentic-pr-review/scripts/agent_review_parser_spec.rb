@@ -83,6 +83,32 @@ RSpec.describe AgentReviewParser do
     end
   end
 
+  describe "code fence stripping" do
+    it "parses JSON wrapped in ```json fences" do
+      raw = "```json\n#{{"summary" => "fenced"}.to_json}\n```"
+      parsed = described_class.new(raw)
+      expect(parsed.summary_body).to include("fenced")
+    end
+
+    it "parses JSON wrapped in bare ``` fences" do
+      raw = "```\n#{{"summary" => "bare"}.to_json}\n```"
+      parsed = described_class.new(raw)
+      expect(parsed.summary_body).to include("bare")
+    end
+
+    it "handles surrounding whitespace with fences" do
+      raw = "  \n```json\n#{{"summary" => "padded"}.to_json}\n```\n  "
+      parsed = described_class.new(raw)
+      expect(parsed.summary_body).to include("padded")
+    end
+
+    it "leaves plain JSON untouched" do
+      raw = {"summary" => "plain"}.to_json
+      parsed = described_class.new(raw)
+      expect(parsed.summary_body).to include("plain")
+    end
+  end
+
   describe "validation" do
     it "rejects a non-object JSON root" do
       expect do

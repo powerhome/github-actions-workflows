@@ -12,7 +12,7 @@ class AgentReviewParser
   end
 
   def initialize(json_string)
-    @payload = JSON.parse(json_string)
+    @payload = JSON.parse(strip_code_fences(json_string))
     validate_root!
     @summary_body = build_summary_body
     @inline_comments = build_inline_comments
@@ -21,6 +21,12 @@ class AgentReviewParser
   attr_reader :summary_body, :inline_comments
 
 private
+
+  def strip_code_fences(raw)
+    stripped = raw.strip
+    stripped = stripped.sub(/\A```\w*\s*\n?/, "").sub(/\n?```\s*\z/, "") if stripped.start_with?("```")
+    stripped
+  end
 
   def validate_root!
     raise "Review JSON root must be a JSON object" unless @payload.is_a?(Hash)

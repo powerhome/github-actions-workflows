@@ -22,6 +22,10 @@ inputs:
     description: Passed to rmacklin/fetch-through-merge-base as deepen_length
     required: false
     default: "30"
+  model:
+    description: Model to use for the review (passed to the provider CLI)
+    required: false
+    default: ""
   additional-prompt:
     description: Extra instructions appended to the review prompt (e.g. full text of an @nitro-pr-review PR comment)
     required: false
@@ -91,6 +95,7 @@ runs:
       env:
         PROVIDER: ${{ inputs.provider }}
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
+        MODEL: ${{ inputs.model }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
         REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}

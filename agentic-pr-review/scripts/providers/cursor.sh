@@ -46,6 +46,11 @@ if [[ -n "${REVIEW_ADDITIONAL_INSTRUCTIONS:-}" ]]; then
   PROMPT+=$'\n\n## Additional instructions from the PR comment\n\n'"${REVIEW_ADDITIONAL_INSTRUCTIONS}"
 fi
 
+MODEL_ARGS=()
+if [[ -n "${MODEL:-}" ]]; then
+  MODEL_ARGS+=(--model "${MODEL}")
+fi
+
 # --trust is required: headless agent refuses to run unless the workspace is trusted.
 # Read-only CLI permissions via .cursor/cli-config.json (copied from config/cli-config.json).
-agent --print --trust --output-format text "${PROMPT}" >"${REVIEW_JSON_PATH}"
+agent --print --trust --output-format text "${MODEL_ARGS[@]}" "${PROMPT}" >"${REVIEW_JSON_PATH}"
