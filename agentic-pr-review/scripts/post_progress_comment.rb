@@ -5,7 +5,7 @@ require_relative "status_comment_builder"
 
 command = ARGV[0]
 unless %w[create success failure].include?(command)
-  warn "Usage: status_comment.rb <create|success|failure>"
+  warn "Usage: post_progress_comment.rb <create|success|failure>"
   exit 1
 end
 

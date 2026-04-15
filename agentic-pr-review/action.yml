@@ -56,7 +56,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         MODEL: ${{ inputs.model }}
         ACTION_VERSION: "1.1.0"
-      run: ruby "${{ github.action_path }}/scripts/status_comment.rb" create
+      run: ruby "${{ github.action_path }}/scripts/post_progress_comment.rb" create
 
     - name: Fetch PR metadata
       id: pr_gate
@@ -159,7 +159,7 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         MODEL: ${{ inputs.model }}
         ACTION_VERSION: "1.1.0"
-      run: ruby "${{ github.action_path }}/scripts/status_comment.rb" success
+      run: ruby "${{ github.action_path }}/scripts/post_progress_comment.rb" success
 
     - name: Update status comment — failure
       if: failure() && steps.status_comment.outputs.comment_id != ''
@@ -173,4 +173,4 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         MODEL: ${{ inputs.model }}
         ACTION_VERSION: "1.1.0"
-      run: ruby "${{ github.action_path }}/scripts/status_comment.rb" failure
+      run: ruby "${{ github.action_path }}/scripts/post_progress_comment.rb" failure
