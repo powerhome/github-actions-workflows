@@ -42,10 +42,10 @@ class StatusCommentBuilder
     ].join("\n")
   end
 
-  def failure_body(duration_seconds:, failure_reason: nil)
+  def failure_body(duration_seconds:)
     human = format_duration(duration_seconds)
 
-    lines = [
+    [
       ":x: **Agentic PR Review** — failed after #{human}",
       "",
       "[View workflow run](#{@run_url}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](#{SUPPORT_URL}).",
@@ -54,14 +54,7 @@ class StatusCommentBuilder
       "<!-- agentic-pr-review:completed_at=#{now_utc} -->",
       "<!-- agentic-pr-review:duration_seconds=#{duration_seconds} -->",
       "<!-- agentic-pr-review:status=failure -->",
-    ]
-
-    if failure_reason && !failure_reason.strip.empty?
-      escaped = failure_reason.lines.first.chomp
-      lines << "<!-- agentic-pr-review:failure_reason=#{escaped} -->"
-    end
-
-    lines.join("\n")
+    ].join("\n")
   end
 
 private

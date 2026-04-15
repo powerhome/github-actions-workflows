@@ -108,7 +108,6 @@ runs:
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
 
     - name: Run review provider
-      id: review_provider
       shell: bash
       env:
         PROVIDER: ${{ inputs.provider }}
@@ -117,7 +116,6 @@ runs:
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
         REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
-        ERROR_FILE: ${{ github.workspace }}/.review-error
       run: |
         set -euo pipefail
 
@@ -125,13 +123,11 @@ runs:
         provider_script="${{ github.action_path }}/scripts/providers/${provider}.sh"
 
         if [[ ! -f "${provider_script}" ]]; then
-          msg="Unknown provider: ${provider} (expected script at ${provider_script})"
-          echo "${msg}" > "${ERROR_FILE}"
-          echo "${msg}" >&2
+          echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
           exit 1
         fi
 
-        bash "${provider_script}"
+        exec bash "${provider_script}"
 
     - name: Upload agent review JSON
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -148,7 +144,6 @@ runs:
         PULL_NUMBER: ${{ inputs.pull-request-number }}
         COMMIT_SHA: ${{ steps.pr_gate.outputs.head_sha }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
-        ERROR_FILE: ${{ github.workspace }}/.review-error
       run: ruby "${{ github.action_path }}/scripts/process_review.rb"
 
     - name: Update status comment — success
@@ -178,5 +173,4 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         MODEL: ${{ inputs.model }}
         ACTION_VERSION: "1.1.0"
-        ERROR_FILE: ${{ github.workspace }}/.review-error
       run: ruby "${{ github.action_path }}/scripts/status_comment.rb" failure

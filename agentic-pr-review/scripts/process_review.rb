@@ -3,13 +3,6 @@
 require_relative "agent_review_parser"
 require_relative "github_review_poster"
 
-def fail_with(msg)
-  warn msg
-  error_file = ENV["ERROR_FILE"]
-  File.write(error_file, msg) if error_file && !error_file.empty?
-  exit 1
-end
-
 def output_review_url(result)
   return unless result.is_a?(Hash) && result["html_url"]
   github_output = ENV["GITHUB_OUTPUT"]
@@ -20,16 +13,22 @@ end
 def load_review(path)
   AgentReviewParser.parse_file(path)
 rescue JSON::ParserError => e
-  fail_with("Failed to parse review JSON: #{e.message}")
+  warn "Failed to parse review JSON: #{e.message}"
+  exit 1
 rescue Errno::ENOENT => e
-  fail_with("Review JSON not found: #{e.message}")
+  warn "Review JSON not found: #{e.message}"
+  exit 1
 rescue => e
-  fail_with(e.message)
+  warn e.message
+  exit 1
 end
 
 review_path = ENV["REVIEW_JSON_PATH"] || File.join(Dir.pwd, "review-agent.json")
 
-fail_with("Review JSON not found at #{review_path}") unless File.file?(review_path)
+unless File.file?(review_path)
+  warn "Review JSON not found at #{review_path}"
+  exit 1
+end
 
 parsed = load_review(review_path)
 
@@ -45,7 +44,7 @@ env_var_errors << "PULL_NUMBER" if pr_number.empty?
 env_var_errors << "GITHUB_TOKEN" if token.empty?
 env_var_errors << "COMMIT_SHA" if commit_sha.empty?
 
-fail_with("Missing required env vars: #{env_var_errors.join(', ')}") unless env_var_errors.empty?
+raise "Missing required env vars: #{env_var_errors.join(', ')}" unless env_var_errors.empty?
 
 poster = GitHubReviewPoster.new(
   owner:,
@@ -63,7 +62,10 @@ if result
 end
 
 result = poster.post_summary_only(parsed.summary_body)
-fail_with("[process_review] Failed to post review summary") unless result
+unless result
+  warn "[process_review] Failed to post review summary"
+  exit 1
+end
 
 output_review_url(result)
 warn "[process_review] Posted summary review; posting #{parsed.inline_comments.size} inline comment(s)"

@@ -106,26 +106,6 @@ RSpec.describe StatusCommentBuilder do
       expect(body).to include("<!-- agentic-pr-review:duration_seconds=10 -->")
     end
 
-    it "includes failure_reason in metadata when provided" do
-      body = builder.failure_body(duration_seconds: 10, failure_reason: "API key invalid")
-      expect(body).to include("<!-- agentic-pr-review:failure_reason=API key invalid -->")
-    end
-
-    it "omits failure_reason metadata when nil" do
-      body = builder.failure_body(duration_seconds: 10)
-      expect(body).not_to include("failure_reason")
-    end
-
-    it "omits failure_reason metadata when blank" do
-      body = builder.failure_body(duration_seconds: 10, failure_reason: "  ")
-      expect(body).not_to include("failure_reason")
-    end
-
-    it "takes only the first line of a multi-line failure reason" do
-      body = builder.failure_body(duration_seconds: 10, failure_reason: "line one\nline two\n")
-      expect(body).to include("<!-- agentic-pr-review:failure_reason=line one -->")
-      expect(body).not_to include("line two")
-    end
   end
 
   describe "agent_cli_version" do

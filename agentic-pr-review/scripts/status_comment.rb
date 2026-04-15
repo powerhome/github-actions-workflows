@@ -66,13 +66,7 @@ when "failure"
   comment_id = Integer(ENV.fetch("COMMENT_ID"))
   duration = Time.now.to_i - start_time
 
-  failure_reason = nil
-  error_file = ENV["ERROR_FILE"]
-  if error_file && !error_file.empty? && File.exist?(error_file) && File.size(error_file) > 0
-    failure_reason = File.readlines(error_file).first&.chomp
-  end
-
-  body = builder.failure_body(duration_seconds: duration, failure_reason:)
+  body = builder.failure_body(duration_seconds: duration)
   poster.update_issue_comment(comment_id, body)
   warn "[status_comment] Updated comment #{comment_id} — failure"
 end
