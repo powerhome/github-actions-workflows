@@ -118,20 +118,16 @@ BODY
     duration=$(( now - START_TIME ))
     human=$(format_duration "${duration}")
 
-    failure_detail=""
     failure_meta=""
     if [[ -n "${FAILURE_REASON:-}" ]]; then
-      # Show up to 5 lines of the failure reason as a blockquote
-      failure_detail=$(echo "${FAILURE_REASON}" | head -5 | sed 's/^/> /')
-      failure_detail=$'\n'"${failure_detail}"$'\n'
       escaped=$(echo "${FAILURE_REASON}" | head -1 | tr -d '\n')
       failure_meta="<!-- agentic-pr-review:failure_reason=${escaped} -->"
     fi
 
     cat > "${tmpfile}" <<BODY
 :x: **Agentic PR Review** — failed after ${human}
-${failure_detail}
-[View workflow run](${run_url})
+
+[View workflow run](${run_url}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](https://nitro.powerhrg.com/connect/#rooms/138).
 
 $(metadata_block)
 <!-- agentic-pr-review:completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ) -->

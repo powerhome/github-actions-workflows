@@ -183,7 +183,7 @@ runs:
       run: |
         error_file="${{ github.workspace }}/.review-error"
         if [[ -s "${error_file}" ]]; then
-          FAILURE_REASON=$(head -5 "${error_file}")
           export FAILURE_REASON
+          FAILURE_REASON=$(head -1 "${error_file}")
         fi
         bash "${{ github.action_path }}/scripts/status_comment.sh" failure
