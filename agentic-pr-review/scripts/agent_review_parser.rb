@@ -12,7 +12,7 @@ class AgentReviewParser
   end
 
   def initialize(json_string)
-    @payload = JSON.parse(strip_code_fences(json_string))
+    @payload = JSON.parse(extract_json(json_string))
     validate_root!
     @summary_body = build_summary_body
     @inline_comments = build_inline_comments
@@ -22,10 +22,33 @@ class AgentReviewParser
 
 private
 
+  # Models sometimes emit prose or code fences around the JSON object.
+  # Strategy: strip code fences first, then fall back to extracting the
+  # substring between the first `{` and last `}` in the output.
+  def extract_json(raw)
+    stripped = strip_code_fences(raw)
+    return stripped if valid_json_object?(stripped)
+
+    first_brace = raw.index("{")
+    last_brace = raw.rindex("}")
+    if first_brace && last_brace && last_brace > first_brace
+      candidate = raw[first_brace..last_brace]
+      return candidate if valid_json_object?(candidate)
+    end
+
+    stripped
+  end
+
   def strip_code_fences(raw)
     stripped = raw.strip
     stripped = stripped.sub(/\A```\w*\s*\n?/, "").sub(/\n?```\s*\z/, "") if stripped.start_with?("```")
     stripped
+  end
+
+  def valid_json_object?(str)
+    JSON.parse(str).is_a?(Hash)
+  rescue JSON::ParserError
+    false
   end
 
   def validate_root!

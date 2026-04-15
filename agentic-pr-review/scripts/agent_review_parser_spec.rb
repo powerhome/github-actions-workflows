@@ -83,7 +83,7 @@ RSpec.describe AgentReviewParser do
     end
   end
 
-  describe "code fence stripping" do
+  describe "JSON extraction" do
     it "parses JSON wrapped in ```json fences" do
       raw = "```json\n#{{"summary" => "fenced"}.to_json}\n```"
       parsed = described_class.new(raw)
@@ -106,6 +106,30 @@ RSpec.describe AgentReviewParser do
       raw = {"summary" => "plain"}.to_json
       parsed = described_class.new(raw)
       expect(parsed.summary_body).to include("plain")
+    end
+
+    it "extracts JSON when the model emits text before the object" do
+      raw = "Here is my review:\n#{{"summary" => "prefixed"}.to_json}"
+      parsed = described_class.new(raw)
+      expect(parsed.summary_body).to include("prefixed")
+    end
+
+    it "extracts JSON when the model emits text after the object" do
+      raw = "#{{"summary" => "suffixed"}.to_json}\nI hope this helps!"
+      parsed = described_class.new(raw)
+      expect(parsed.summary_body).to include("suffixed")
+    end
+
+    it "extracts JSON when the model emits text before and after" do
+      raw = "Sure, here you go:\n#{{"summary" => "wrapped", "comments" => []}.to_json}\nLet me know if you need more."
+      parsed = described_class.new(raw)
+      expect(parsed.summary_body).to include("wrapped")
+    end
+
+    it "extracts JSON when the model wraps with prose and code fences" do
+      raw = "Here is the review:\n```json\n#{{"summary" => "both"}.to_json}\n```\nDone!"
+      parsed = described_class.new(raw)
+      expect(parsed.summary_body).to include("both")
     end
   end
 
