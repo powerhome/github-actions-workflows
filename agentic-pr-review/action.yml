@@ -144,7 +144,7 @@ runs:
         PULL_NUMBER: ${{ inputs.pull-request-number }}
         COMMIT_SHA: ${{ steps.pr_gate.outputs.head_sha }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
-      run: ruby "${{ github.action_path }}/scripts/process_review.rb"
+      run: ruby "${{ github.action_path }}/scripts/post_review.rb"
 
     - name: Update status comment — success
       if: success()
