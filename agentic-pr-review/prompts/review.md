@@ -45,7 +45,12 @@ Do not emit a `medium` or `high` finding unless you can point to a plausible fai
 
 ## Output format
 
-Respond with **a single JSON object only**. No markdown code fences, no text before or after the JSON.
+Your **entire** response must be a single JSON object — nothing else. Specifically:
+
+- Do NOT include any text, explanation, or commentary before the opening `{`.
+- Do NOT include any text, explanation, or commentary after the closing `}`.
+- Do NOT wrap the JSON in markdown code fences (no `` ``` ``).
+- The very first character of your response must be `{` and the very last character must be `}`.
 
 Required shape (keys and types):
 
@@ -87,4 +92,4 @@ The summary should be brief and non-redundant.
 - Use the summary for overall outcome only: for example, whether the review found blocking issues, whether the diff looks sound overall, or the single highest-level concern.
 - If there are no inline comments, the summary may explain the key concern(s) directly.
 
-Output valid JSON only.
+Remember: output the raw JSON object only. No preamble, no postamble, no code fences. The first character must be `{`.
