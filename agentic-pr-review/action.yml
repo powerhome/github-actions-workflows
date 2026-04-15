@@ -50,15 +50,13 @@ runs:
       id: status_comment
       shell: bash
       env:
-        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
         PR_NUMBER: ${{ inputs.pull-request-number }}
         START_TIME: ${{ steps.timer.outputs.start }}
         PROVIDER: ${{ inputs.provider }}
         MODEL: ${{ inputs.model }}
         ACTION_VERSION: "1.1.0"
-      run: |
-        comment_id=$("${{ github.action_path }}/scripts/status_comment.sh" create)
-        echo "comment_id=${comment_id}" >> "$GITHUB_OUTPUT"
+      run: ruby "${{ github.action_path }}/scripts/status_comment.rb" create
 
     - name: Fetch PR metadata
       id: pr_gate
@@ -158,7 +156,7 @@ runs:
       continue-on-error: true
       shell: bash
       env:
-        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
         PR_NUMBER: ${{ inputs.pull-request-number }}
         COMMENT_ID: ${{ steps.status_comment.outputs.comment_id }}
         START_TIME: ${{ steps.timer.outputs.start }}
@@ -166,24 +164,19 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         MODEL: ${{ inputs.model }}
         ACTION_VERSION: "1.1.0"
-      run: bash "${{ github.action_path }}/scripts/status_comment.sh" success
+      run: ruby "${{ github.action_path }}/scripts/status_comment.rb" success
 
     - name: Update status comment — failure
       if: failure() && steps.status_comment.outputs.comment_id != ''
       continue-on-error: true
       shell: bash
       env:
-        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
         PR_NUMBER: ${{ inputs.pull-request-number }}
         COMMENT_ID: ${{ steps.status_comment.outputs.comment_id }}
         START_TIME: ${{ steps.timer.outputs.start }}
         PROVIDER: ${{ inputs.provider }}
         MODEL: ${{ inputs.model }}
         ACTION_VERSION: "1.1.0"
-      run: |
-        error_file="${{ github.workspace }}/.review-error"
-        if [[ -s "${error_file}" ]]; then
-          export FAILURE_REASON
-          FAILURE_REASON=$(head -1 "${error_file}")
-        fi
-        bash "${{ github.action_path }}/scripts/status_comment.sh" failure
+        ERROR_FILE: ${{ github.workspace }}/.review-error
+      run: ruby "${{ github.action_path }}/scripts/status_comment.rb" failure

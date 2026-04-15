@@ -34,7 +34,7 @@ RSpec.describe GitHubReviewPoster do
     response
   end
 
-  def stub_post(response, host: "api.github.com", port: 443, use_ssl: true)
+  def stub_http(response, host: "api.github.com", port: 443, use_ssl: true)
     captured_request = nil
     http = instance_double(Net::HTTP)
     allow(http).to receive(:request) do |request|
@@ -55,7 +55,7 @@ RSpec.describe GitHubReviewPoster do
         message: "Created",
         body: { id: 1 }.to_json
       )
-      request_for = stub_post(response)
+      request_for = stub_http(response)
       comments = [{ "path" => "a.rb", "line" => 7, "side" => "RIGHT", "body" => "Please fix" }]
 
       result = poster.post_batch_review("Summary", comments)
@@ -86,7 +86,7 @@ RSpec.describe GitHubReviewPoster do
         message: "Unprocessable Entity",
         body: { message: "Validation Failed", errors: [{ "field" => "line" }] }.to_json
       )
-      stub_post(response)
+      stub_http(response)
 
       expect do
         expect(poster.post_summary_only("Summary")).to eq(false)
@@ -102,7 +102,7 @@ RSpec.describe GitHubReviewPoster do
         message: "Created",
         body: { id: 2 }.to_json
       )
-      request_for = stub_post(response, host: "github.example.com", port: 8443, use_ssl: true)
+      request_for = stub_http(response, host: "github.example.com", port: 8443, use_ssl: true)
       comment = { "path" => "lib/test.rb", "line" => 3, "body" => "Nit: rename this" }
       allow(ENV).to receive(:fetch).with("GITHUB_API_URL", "https://api.github.com")
                                    .and_return("https://github.example.com:8443/api/v3")
@@ -118,6 +118,95 @@ RSpec.describe GitHubReviewPoster do
         "line" => 3,
         "side" => "RIGHT"
       )
+    end
+  end
+
+  describe "#create_issue_comment" do
+    it "posts to the issues comments endpoint and returns the response" do
+      response = build_response(
+        Net::HTTPCreated,
+        code: 201,
+        message: "Created",
+        body: { id: 99, html_url: "https://github.com/acme/widgets/pull/42#issuecomment-99" }.to_json
+      )
+      request_for = stub_http(response)
+
+      result = poster.create_issue_comment("Hello world")
+
+      expect(result).to be_a(Hash)
+      expect(result["id"]).to eq(99)
+
+      request = request_for.call
+      expect(request).to be_a(Net::HTTP::Post)
+      expect(request.path).to eq("/repos/acme/widgets/issues/42/comments")
+      expect(JSON.parse(request.body)).to eq("body" => "Hello world")
+    end
+
+    it "returns false on API error" do
+      response = build_response(
+        Net::HTTPForbidden,
+        code: 403,
+        message: "Forbidden",
+        body: { message: "Resource not accessible by integration" }.to_json
+      )
+      stub_http(response)
+
+      expect do
+        expect(poster.create_issue_comment("body")).to eq(false)
+      end.to output(/Create issue comment failed/).to_stderr
+    end
+  end
+
+  describe "#update_issue_comment" do
+    it "patches the specific comment and returns the response" do
+      response = build_response(
+        Net::HTTPOK,
+        code: 200,
+        message: "OK",
+        body: { id: 99 }.to_json
+      )
+      request_for = stub_http(response)
+
+      result = poster.update_issue_comment(99, "Updated body")
+
+      expect(result).to be_a(Hash)
+      expect(result["id"]).to eq(99)
+
+      request = request_for.call
+      expect(request).to be_a(Net::HTTP::Patch)
+      expect(request.path).to eq("/repos/acme/widgets/issues/comments/99")
+      expect(JSON.parse(request.body)).to eq("body" => "Updated body")
+    end
+
+    it "returns false on API error" do
+      response = build_response(
+        Net::HTTPNotFound,
+        code: 404,
+        message: "Not Found",
+        body: { message: "Not Found" }.to_json
+      )
+      stub_http(response)
+
+      expect do
+        expect(poster.update_issue_comment(999, "body")).to eq(false)
+      end.to output(/Update issue comment failed/).to_stderr
+    end
+  end
+
+  describe "commit_sha optional" do
+    it "can be constructed without commit_sha" do
+      poster_no_sha = described_class.new(owner:, repo:, pr_number:, token:)
+
+      response = build_response(
+        Net::HTTPCreated,
+        code: 201,
+        message: "Created",
+        body: { id: 100 }.to_json
+      )
+      stub_http(response)
+
+      result = poster_no_sha.create_issue_comment("works without sha")
+      expect(result).to be_a(Hash)
     end
   end
 end

@@ -5,7 +5,7 @@ require "net/http"
 require "uri"
 
 class GitHubReviewPoster
-  def initialize(owner:, repo:, pr_number:, commit_sha:, token:)
+  def initialize(owner:, repo:, pr_number:, token:, commit_sha: nil)
     @owner = owner
     @repo = repo
     @pr_number = pr_number
@@ -14,7 +14,8 @@ class GitHubReviewPoster
   end
 
   def post_batch_review(summary_body, inline_comments)
-    post(
+    api_request(
+      :post,
       "/repos/#{@owner}/#{@repo}/pulls/#{@pr_number}/reviews",
       {
         commit_id: @commit_sha,
@@ -29,7 +30,8 @@ class GitHubReviewPoster
   end
 
   def post_summary_only(summary_body)
-    post(
+    api_request(
+      :post,
       "/repos/#{@owner}/#{@repo}/pulls/#{@pr_number}/reviews",
       {
         commit_id: @commit_sha,
@@ -43,7 +45,8 @@ class GitHubReviewPoster
   end
 
   def post_single_comment(comment, failure_label: "Inline comment failed")
-    post(
+    api_request(
+      :post,
       "/repos/#{@owner}/#{@repo}/pulls/#{@pr_number}/comments",
       {
         body: comment["body"],
@@ -59,18 +62,46 @@ class GitHubReviewPoster
     false
   end
 
+  def create_issue_comment(body)
+    api_request(
+      :post,
+      "/repos/#{@owner}/#{@repo}/issues/#{@pr_number}/comments",
+      { body: body }
+    )
+  rescue RequestError => e
+    log_request_error("Create issue comment failed", e)
+    false
+  end
+
+  def update_issue_comment(comment_id, body)
+    api_request(
+      :patch,
+      "/repos/#{@owner}/#{@repo}/issues/comments/#{comment_id}",
+      { body: body }
+    )
+  rescue RequestError => e
+    log_request_error("Update issue comment failed", e)
+    false
+  end
+
 private
 
   class RequestError < StandardError; end
+
+  HTTP_METHODS = {
+    post: Net::HTTP::Post,
+    patch: Net::HTTP::Patch,
+  }.freeze
 
   def api_endpoint
     base = ENV.fetch("GITHUB_API_URL", "https://api.github.com").chomp("/")
     URI("#{base}/")
   end
 
-  def post(path, payload)
+  def api_request(method, path, payload)
     uri = api_endpoint + path.delete_prefix("/")
-    request = Net::HTTP::Post.new(uri)
+    klass = HTTP_METHODS.fetch(method) { raise ArgumentError, "Unsupported HTTP method: #{method}" }
+    request = klass.new(uri)
     request["Authorization"] = "Bearer #{@token}"
     request["Accept"] = "application/vnd.github+json"
     request["X-GitHub-Api-Version"] = "2022-11-28"
