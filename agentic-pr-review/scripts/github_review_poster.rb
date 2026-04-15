@@ -23,7 +23,6 @@ class GitHubReviewPoster
         comments: inline_comments,
       }
     )
-    true
   rescue RequestError => e
     log_request_error("Batch review failed", e)
     false
@@ -38,7 +37,6 @@ class GitHubReviewPoster
         event: "COMMENT",
       }
     )
-    true
   rescue RequestError => e
     log_request_error("Summary review failed", e)
     false

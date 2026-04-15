@@ -58,7 +58,9 @@ RSpec.describe GitHubReviewPoster do
       request_for = stub_post(response)
       comments = [{ "path" => "a.rb", "line" => 7, "side" => "RIGHT", "body" => "Please fix" }]
 
-      expect(poster.post_batch_review("Summary", comments)).to eq(true)
+      result = poster.post_batch_review("Summary", comments)
+      expect(result).to be_truthy
+      expect(result).to be_a(Hash)
 
       request = request_for.call
       expect(request.path).to eq("/repos/acme/widgets/pulls/42/reviews")

@@ -41,6 +41,25 @@ runs:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
 
+    - name: Record start time
+      id: timer
+      shell: bash
+      run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+    - name: Post in-progress status comment
+      id: status_comment
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        START_TIME: ${{ steps.timer.outputs.start }}
+        PROVIDER: ${{ inputs.provider }}
+        MODEL: ${{ inputs.model }}
+        ACTION_VERSION: "1.1.0"
+      run: |
+        comment_id=$("${{ github.action_path }}/scripts/status_comment.sh" create)
+        echo "comment_id=${comment_id}" >> "$GITHUB_OUTPUT"
+
     - name: Fetch PR metadata
       id: pr_gate
       shell: bash
@@ -91,6 +110,7 @@ runs:
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
 
     - name: Run review provider
+      id: review_provider
       shell: bash
       env:
         PROVIDER: ${{ inputs.provider }}
@@ -99,6 +119,7 @@ runs:
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
         REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
+        ERROR_FILE: ${{ github.workspace }}/.review-error
       run: |
         set -euo pipefail
 
@@ -106,11 +127,13 @@ runs:
         provider_script="${{ github.action_path }}/scripts/providers/${provider}.sh"
 
         if [[ ! -f "${provider_script}" ]]; then
-          echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
+          msg="Unknown provider: ${provider} (expected script at ${provider_script})"
+          echo "${msg}" > "${ERROR_FILE}"
+          echo "${msg}" >&2
           exit 1
         fi
 
-        exec bash "${provider_script}"
+        bash "${provider_script}"
 
     - name: Upload agent review JSON
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -120,10 +143,47 @@ runs:
         if-no-files-found: warn
 
     - name: Post review to GitHub
+      id: post_review
       shell: bash
       env:
         GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
         PULL_NUMBER: ${{ inputs.pull-request-number }}
         COMMIT_SHA: ${{ steps.pr_gate.outputs.head_sha }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
+        ERROR_FILE: ${{ github.workspace }}/.review-error
       run: ruby "${{ github.action_path }}/scripts/process_review.rb"
+
+    - name: Update status comment — success
+      if: success()
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        COMMENT_ID: ${{ steps.status_comment.outputs.comment_id }}
+        START_TIME: ${{ steps.timer.outputs.start }}
+        REVIEW_URL: ${{ steps.post_review.outputs.review_url }}
+        PROVIDER: ${{ inputs.provider }}
+        MODEL: ${{ inputs.model }}
+        ACTION_VERSION: "1.1.0"
+      run: bash "${{ github.action_path }}/scripts/status_comment.sh" success
+
+    - name: Update status comment — failure
+      if: failure() && steps.status_comment.outputs.comment_id != ''
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        COMMENT_ID: ${{ steps.status_comment.outputs.comment_id }}
+        START_TIME: ${{ steps.timer.outputs.start }}
+        PROVIDER: ${{ inputs.provider }}
+        MODEL: ${{ inputs.model }}
+        ACTION_VERSION: "1.1.0"
+      run: |
+        error_file="${{ github.workspace }}/.review-error"
+        if [[ -s "${error_file}" ]]; then
+          FAILURE_REASON=$(head -5 "${error_file}")
+          export FAILURE_REASON
+        fi
+        bash "${{ github.action_path }}/scripts/status_comment.sh" failure

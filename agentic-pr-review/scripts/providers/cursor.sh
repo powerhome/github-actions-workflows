@@ -5,6 +5,17 @@ set -euo pipefail
 : "${REVIEW_JSON_PATH:?}"
 : "${REVIEW_PROMPT_PATH:?}"
 
+report_error() {
+  echo "${1}" >&2
+  if [[ -n "${ERROR_FILE:-}" ]]; then
+    echo "${1}" > "${ERROR_FILE}"
+  fi
+}
+
+# Write a generic message for unexpected failures (e.g. agent CLI crash) unless
+# a specific error was already reported via report_error.
+trap 'rc=$?; if [[ $rc -ne 0 && -n "${ERROR_FILE:-}" && ! -s "${ERROR_FILE}" ]]; then report_error "Review provider (cursor) exited with code ${rc}"; fi' EXIT
+
 export PATH="${HOME}/.local/bin:${PATH}"
 
 if ! command -v agent >/dev/null 2>&1; then
@@ -16,19 +27,19 @@ if ! command -v agent >/dev/null 2>&1; then
 fi
 
 if ! command -v agent >/dev/null 2>&1; then
-  echo "agent CLI not found after install" >&2
+  report_error "agent CLI not found after install"
   exit 1
 fi
 
 if [[ -z "${PROVIDER_API_KEY:-}" ]]; then
-  echo "PROVIDER_API_KEY is required for the cursor provider" >&2
+  report_error "PROVIDER_API_KEY is required for the cursor provider"
   exit 1
 fi
 
 export CURSOR_API_KEY="${PROVIDER_API_KEY}"
 
 if [[ ! -f "${REVIEW_PROMPT_PATH}" ]]; then
-  echo "Review prompt not found: ${REVIEW_PROMPT_PATH}" >&2
+  report_error "Review prompt not found: ${REVIEW_PROMPT_PATH}"
   exit 1
 fi
 
