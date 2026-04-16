@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-
-exit 1
-
 set -euo pipefail
 
 : "${GITHUB_WORKSPACE:?}"
