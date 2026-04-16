@@ -52,7 +52,10 @@ if poster.post_batch_review(parsed.summary_body, parsed.inline_comments)
   exit 0
 end
 
-exit 1 unless poster.post_summary_only(parsed.summary_body)
+unless poster.post_summary_only(parsed.summary_body)
+  warn "[process_review] Failed to post review summary"
+  exit 1
+end
 
 warn "[process_review] Posted summary review; posting #{parsed.inline_comments.size} inline comment(s)"
 

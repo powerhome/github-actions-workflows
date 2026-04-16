@@ -41,6 +41,18 @@ runs:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
 
+    - name: Post in-progress status comment
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-pr-review-status
+        mode: delete-on-completion
+        message: |
+          :hourglass_flowing_sand: **Agentic PR Review** — in progress
+
+          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
+
     - name: Fetch PR metadata
       id: pr_gate
       shell: bash
@@ -126,4 +138,15 @@ runs:
         PULL_NUMBER: ${{ inputs.pull-request-number }}
         COMMIT_SHA: ${{ steps.pr_gate.outputs.head_sha }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
-      run: ruby "${{ github.action_path }}/scripts/process_review.rb"
+      run: ruby "${{ github.action_path }}/scripts/post_review.rb"
+
+    - name: Post failure comment
+      if: failure()
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        message: |
+          :x: **Agentic PR Review** — failed
+
+          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](https://nitro.powerhrg.com/connect/#rooms/138).
