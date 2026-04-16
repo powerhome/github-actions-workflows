@@ -25,23 +25,6 @@ class StatusCommentBuilder
     ].join("\n")
   end
 
-  def success_body(duration_seconds:, review_url: nil)
-    human = format_duration(duration_seconds)
-    links = "[View workflow run](#{@run_url})"
-    links = "[View review](#{review_url}) · #{links}" if review_url && !review_url.empty?
-
-    [
-      ":white_check_mark: **Agentic PR Review** — complete",
-      "",
-      "Review posted in #{human}. #{links}",
-      "",
-      metadata_block,
-      "<!-- agentic-pr-review:completed_at=#{now_utc} -->",
-      "<!-- agentic-pr-review:duration_seconds=#{duration_seconds} -->",
-      "<!-- agentic-pr-review:status=success -->",
-    ].join("\n")
-  end
-
   def failure_body(duration_seconds:)
     human = format_duration(duration_seconds)
 

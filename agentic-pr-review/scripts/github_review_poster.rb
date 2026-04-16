@@ -84,6 +84,17 @@ class GitHubReviewPoster
     false
   end
 
+  def delete_issue_comment(comment_id)
+    api_request(
+      :delete,
+      "/repos/#{@owner}/#{@repo}/issues/comments/#{comment_id}"
+    )
+    true
+  rescue RequestError => e
+    log_request_error("Delete issue comment failed", e)
+    false
+  end
+
 private
 
   class RequestError < StandardError; end
@@ -91,6 +102,7 @@ private
   HTTP_METHODS = {
     post: Net::HTTP::Post,
     patch: Net::HTTP::Patch,
+    delete: Net::HTTP::Delete,
   }.freeze
 
   def api_endpoint
@@ -98,7 +110,7 @@ private
     URI("#{base}/")
   end
 
-  def api_request(method, path, payload)
+  def api_request(method, path, payload = nil)
     uri = api_endpoint + path.delete_prefix("/")
     klass = HTTP_METHODS.fetch(method) { raise ArgumentError, "Unsupported HTTP method: #{method}" }
     request = klass.new(uri)
@@ -106,8 +118,10 @@ private
     request["Accept"] = "application/vnd.github+json"
     request["X-GitHub-Api-Version"] = "2022-11-28"
     request["User-Agent"] = "nitro-agentic-pr-review"
-    request.content_type = "application/json"
-    request.body = JSON.dump(payload)
+    if payload
+      request.content_type = "application/json"
+      request.body = JSON.dump(payload)
+    end
 
     response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
       http.request(request)

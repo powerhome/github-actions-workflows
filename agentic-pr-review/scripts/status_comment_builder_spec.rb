@@ -51,43 +51,6 @@ RSpec.describe StatusCommentBuilder do
     end
   end
 
-  describe "#success_body" do
-    it "includes the complete header and formatted duration" do
-      body = builder.success_body(duration_seconds: 125)
-      expect(body).to include(":white_check_mark: **Agentic PR Review** — complete")
-      expect(body).to include("Review posted in 2m 5s.")
-    end
-
-    it "formats sub-minute durations as seconds" do
-      body = builder.success_body(duration_seconds: 45)
-      expect(body).to include("45s")
-    end
-
-    it "links to the review when a URL is provided" do
-      body = builder.success_body(duration_seconds: 30, review_url: "https://example.com/review#123")
-      expect(body).to include("[View review](https://example.com/review#123)")
-      expect(body).to include("[View workflow run](#{run_url})")
-    end
-
-    it "omits the review link when review_url is nil" do
-      body = builder.success_body(duration_seconds: 30)
-      expect(body).not_to include("[View review]")
-      expect(body).to include("[View workflow run](#{run_url})")
-    end
-
-    it "omits the review link when review_url is blank" do
-      body = builder.success_body(duration_seconds: 30, review_url: "")
-      expect(body).not_to include("[View review]")
-    end
-
-    it "includes success metadata" do
-      body = builder.success_body(duration_seconds: 60)
-      expect(body).to include("<!-- agentic-pr-review:status=success -->")
-      expect(body).to include("<!-- agentic-pr-review:duration_seconds=60 -->")
-      expect(body).to match(/<!-- agentic-pr-review:completed_at=\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z -->/)
-    end
-  end
-
   describe "#failure_body" do
     it "includes the failure header with duration" do
       body = builder.failure_body(duration_seconds: 45)

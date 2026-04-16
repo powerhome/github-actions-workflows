@@ -146,19 +146,14 @@ runs:
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
       run: ruby "${{ github.action_path }}/scripts/post_review.rb"
 
-    - name: Update status comment — success
-      if: success()
+    - name: Delete status comment — success
+      if: success() && steps.status_comment.outputs.comment_id != ''
       continue-on-error: true
       shell: bash
       env:
         GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
         PR_NUMBER: ${{ inputs.pull-request-number }}
         COMMENT_ID: ${{ steps.status_comment.outputs.comment_id }}
-        START_TIME: ${{ steps.timer.outputs.start }}
-        REVIEW_URL: ${{ steps.post_review.outputs.review_url }}
-        PROVIDER: ${{ inputs.provider }}
-        MODEL: ${{ inputs.model }}
-        ACTION_VERSION: "1.1.0"
       run: ruby "${{ github.action_path }}/scripts/post_progress_comment.rb" success
 
     - name: Update status comment — failure

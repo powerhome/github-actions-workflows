@@ -193,6 +193,38 @@ RSpec.describe GitHubReviewPoster do
     end
   end
 
+  describe "#delete_issue_comment" do
+    it "sends a DELETE and returns true on success" do
+      response = build_response(
+        Net::HTTPOK,
+        code: 204,
+        message: "No Content",
+        body: ""
+      )
+      request_for = stub_http(response)
+
+      expect(poster.delete_issue_comment(99)).to eq(true)
+
+      request = request_for.call
+      expect(request).to be_a(Net::HTTP::Delete)
+      expect(request.path).to eq("/repos/acme/widgets/issues/comments/99")
+    end
+
+    it "returns false on API error" do
+      response = build_response(
+        Net::HTTPNotFound,
+        code: 404,
+        message: "Not Found",
+        body: { message: "Not Found" }.to_json
+      )
+      stub_http(response)
+
+      expect do
+        expect(poster.delete_issue_comment(999)).to eq(false)
+      end.to output(/Delete issue comment failed/).to_stderr
+    end
+  end
+
   describe "commit_sha optional" do
     it "can be constructed without commit_sha" do
       poster_no_sha = described_class.new(owner:, repo:, pr_number:, token:)
