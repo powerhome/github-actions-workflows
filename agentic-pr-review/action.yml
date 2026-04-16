@@ -41,22 +41,17 @@ runs:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
 
-    - name: Record start time
-      id: timer
-      shell: bash
-      run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
-
     - name: Post in-progress status comment
-      id: status_comment
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
-        PR_NUMBER: ${{ inputs.pull-request-number }}
-        START_TIME: ${{ steps.timer.outputs.start }}
-        PROVIDER: ${{ inputs.provider }}
-        MODEL: ${{ inputs.model }}
-        ACTION_VERSION: "1.1.0"
-      run: ruby "${{ github.action_path }}/scripts/post_progress_comment.rb" create
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-pr-review-status
+        mode: delete-on-completion
+        message: |
+          :hourglass_flowing_sand: **Agentic PR Review** — in progress
+
+          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
 
     - name: Fetch PR metadata
       id: pr_gate
@@ -146,26 +141,15 @@ runs:
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
       run: ruby "${{ github.action_path }}/scripts/post_review.rb"
 
-    - name: Delete status comment — success
-      if: success() && steps.status_comment.outputs.comment_id != ''
-      continue-on-error: true
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
-        PR_NUMBER: ${{ inputs.pull-request-number }}
-        COMMENT_ID: ${{ steps.status_comment.outputs.comment_id }}
-      run: ruby "${{ github.action_path }}/scripts/post_progress_comment.rb" success
-
     - name: Update status comment — failure
-      if: failure() && steps.status_comment.outputs.comment_id != ''
-      continue-on-error: true
-      shell: bash
-      env:
-        GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
-        PR_NUMBER: ${{ inputs.pull-request-number }}
-        COMMENT_ID: ${{ steps.status_comment.outputs.comment_id }}
-        START_TIME: ${{ steps.timer.outputs.start }}
-        PROVIDER: ${{ inputs.provider }}
-        MODEL: ${{ inputs.model }}
-        ACTION_VERSION: "1.1.0"
-      run: ruby "${{ github.action_path }}/scripts/post_progress_comment.rb" failure
+      if: failure()
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-pr-review-status
+        mode: upsert
+        message: |
+          :x: **Agentic PR Review** — failed
+
+          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](https://nitro.powerhrg.com/connect/#rooms/138).
