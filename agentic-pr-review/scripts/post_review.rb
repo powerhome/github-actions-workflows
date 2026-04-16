@@ -3,13 +3,6 @@
 require_relative "agent_review_parser"
 require_relative "github_review_poster"
 
-def output_review_url(result)
-  return unless result.is_a?(Hash) && result["html_url"]
-  github_output = ENV["GITHUB_OUTPUT"]
-  return unless github_output && !github_output.empty?
-  File.open(github_output, "a") { |f| f.puts "review_url=#{result["html_url"]}" }
-end
-
 def load_review(path)
   AgentReviewParser.parse_file(path)
 rescue JSON::ParserError => e
@@ -54,20 +47,16 @@ poster = GitHubReviewPoster.new(
   token:
 )
 
-result = poster.post_batch_review(parsed.summary_body, parsed.inline_comments)
-if result
-  output_review_url(result)
+if poster.post_batch_review(parsed.summary_body, parsed.inline_comments)
   warn "[process_review] Posted batch review"
   exit 0
 end
 
-result = poster.post_summary_only(parsed.summary_body)
-unless result
+unless poster.post_summary_only(parsed.summary_body)
   warn "[process_review] Failed to post review summary"
   exit 1
 end
 
-output_review_url(result)
 warn "[process_review] Posted summary review; posting #{parsed.inline_comments.size} inline comment(s)"
 
 parsed.inline_comments.each_with_index do |c, i|

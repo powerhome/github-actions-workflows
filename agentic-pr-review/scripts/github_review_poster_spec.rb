@@ -58,7 +58,7 @@ RSpec.describe GitHubReviewPoster do
       request_for = stub_post(response)
       comments = [{ "path" => "a.rb", "line" => 7, "side" => "RIGHT", "body" => "Please fix" }]
 
-      expect(poster.post_batch_review("Summary", comments)).to be_truthy
+      expect(poster.post_batch_review("Summary", comments)).to eq(true)
 
       request = request_for.call
       expect(request.path).to eq("/repos/acme/widgets/pulls/42/reviews")
@@ -118,5 +118,4 @@ RSpec.describe GitHubReviewPoster do
       )
     end
   end
-
 end

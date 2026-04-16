@@ -132,7 +132,6 @@ runs:
         if-no-files-found: warn
 
     - name: Post review to GitHub
-      id: post_review
       shell: bash
       env:
         GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
