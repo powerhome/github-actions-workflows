@@ -41,17 +41,20 @@ runs:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
 
-    - name: Post in-progress status comment
+    - name: Update progress — starting
       uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
       with:
         github-token: ${{ steps.app_token.outputs.token }}
         pr-number: ${{ inputs.pull-request-number }}
-        comment-tag: agentic-pr-review-status
+        comment-tag: agentic-pr-review-progress
         mode: delete-on-completion
         message: |
-          :hourglass_flowing_sand: **Agentic PR Review** — in progress
+          **Agentic PR Review** — [run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
 
-          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
+          :hourglass_flowing_sand: Fetch PR metadata
+          :white_circle: Compute diff
+          :white_circle: Run review
+          :white_circle: Post review
 
     - name: Fetch PR metadata
       id: pr_gate
@@ -102,6 +105,21 @@ runs:
         set -euo pipefail
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
 
+    - name: Update progress — diff ready
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-pr-review-progress
+        mode: upsert
+        message: |
+          **Agentic PR Review** — [run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
+
+          :white_check_mark: Fetch PR metadata
+          :white_check_mark: Compute diff
+          :hourglass_flowing_sand: Run review
+          :white_circle: Post review
+
     - name: Run review provider
       shell: bash
       env:
@@ -130,6 +148,21 @@ runs:
         name: agentic-pr-review-json
         path: ${{ github.workspace }}/review-agent.json
         if-no-files-found: warn
+
+    - name: Update progress — review complete
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-pr-review-progress
+        mode: upsert
+        message: |
+          **Agentic PR Review** — [run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
+
+          :white_check_mark: Fetch PR metadata
+          :white_check_mark: Compute diff
+          :white_check_mark: Run review
+          :hourglass_flowing_sand: Post review
 
     - name: Post review to GitHub
       shell: bash
