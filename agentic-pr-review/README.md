@@ -23,10 +23,14 @@ Artifacts: uploads `review-agent.json` from the workspace when present (for debu
 | `provider` | no | Review backend; the action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
+| `langfuse-secret-key` | no | Langfuse secret key; set with `langfuse-public-key` to enable tracing. |
+| `langfuse-public-key` | no | Langfuse public key; required when tracing is enabled. |
+| `langfuse-base-url` | no | Langfuse base URL (defaults to `https://cloud.langfuse.com`). |
 
 ## Secrets and permissions
 
 - Store **`app-id`**, **`private-key`**, and **`provider-api-key`** as repository (or org) secrets; do not commit them.
+- If enabling Langfuse tracing, also store **`langfuse-secret-key`** and **`langfuse-public-key`** as secrets.
 - The calling workflow needs permission to **read** contents and **write** pull requests (for posting the review). The GitHub App installation must be allowed to clone the repo and create reviews on the target repository.
 
 ## Example Usage
@@ -98,3 +102,13 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
 mkdir -p .cursor
 cp path/to/agentic-pr-review/config/cli-config.json .cursor/cli-config.json
 ```
+
+## Langfuse tracing (Cursor)
+
+Provide `langfuse-secret-key` and `langfuse-public-key` inputs to trace Cursor agent activity to Langfuse. When both are present, the action:
+
+- Copies the bundled Cursor hooks from `config/langfuse-hooks` into `.cursor/`
+- Installs hook dependencies with `npm ci` before invoking the Cursor CLI
+- Exports `LANGFUSE_*` variables (optional `langfuse-base-url` overrides the default `https://cloud.langfuse.com`)
+
+If the keys are omitted, Langfuse tracing is skipped and the review runs as before.
