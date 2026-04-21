@@ -30,6 +30,18 @@ inputs:
     description: Extra instructions appended to the review prompt (e.g. full text of an @nitro-pr-review PR comment)
     required: false
     default: ""
+  langfuse-secret-key:
+    description: Langfuse secret key used to enable Cursor tracing
+    required: false
+    default: ""
+  langfuse-public-key:
+    description: Langfuse public key used to enable Cursor tracing
+    required: false
+    default: ""
+  langfuse-base-url:
+    description: Langfuse base URL (defaults to https://cloud.langfuse.com)
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -111,6 +123,9 @@ runs:
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
         REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
+        LANGFUSE_SECRET_KEY: ${{ inputs.langfuse-secret-key }}
+        LANGFUSE_PUBLIC_KEY: ${{ inputs.langfuse-public-key }}
+        LANGFUSE_BASE_URL: ${{ inputs.langfuse-base-url }}
       run: |
         set -euo pipefail
 
