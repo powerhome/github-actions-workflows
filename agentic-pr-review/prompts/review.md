@@ -66,6 +66,17 @@ Example object (structure only; your output must be raw JSON, not wrapped in bac
 
     { "summary": "…", "comments": [ { "path": "src/a.rb", "line": 10, "body": "…", "severity": "high" } ] }
 
+## Anchoring comments to the diff
+
+Every inline comment's `path` and `line` must point to a line that this PR actually changed. GitHub rejects review comments on files or lines that are not part of the diff (HTTP 422), which drops the entire review.
+
+If the observation is about a file the PR did not modify — for example, dead code, a template, or a caller that becomes stale as a consequence of this PR's changes — do **not** put that file's path in `path`. Instead:
+
+- Anchor the comment to the changed line in the PR that prompted the observation, and reference the unmodified file by name inside the comment `body`. For example: "This caller change leaves `app/views/foo/_bar.html.erb` with a now-unused `.transcription_text` div…"
+- Or, if no changed line is a natural anchor, fold the observation into the top-level `summary` instead and omit the inline comment.
+
+Before emitting each inline comment, verify its `path` appears in `pr.diff` and its `line` falls on a line the diff added or modified on the PR head.
+
 ## Comment style
 
 For each inline comment:
