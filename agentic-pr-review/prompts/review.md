@@ -14,20 +14,26 @@ Prioritize **correctness, security, reliability, and clear bugs** (including edg
 
 Only raise a finding when the diff introduces a **concrete, likely, user- or developer-facing problem** under expected usage. Prefer silence over speculative hardening advice.
 
-**Avoid** inline comments that are primarily:
+Every inline comment — at any severity, including `low` — must name a concrete failure mode, regression, or maintenance cost. If you cannot state what breaks or what gets harder, omit the comment.
 
-- Formatting or style preferences (unless they mask real issues)
-- Subjective opinions or taste (“I would have…”)
+**Do not emit** inline comments that are primarily:
+
+- Formatting, indentation, whitespace, or style preferences. The repository has its own linter/formatter config which you have not read; assume any style claim you would make is either already enforced or actively contradicted by autoformatting. This applies even at `low` severity.
+- Convention or "this deviates from how it's usually done" observations, including comparisons to other files in the repo. You do not have reliable signal on what the local convention is.
+- Subjective opinions or taste ("I would have...")
 - Nitpicks that do not reduce risk or improve maintainability in a concrete way
 - Defensive suggestions for states that should never happen in normal operation
 - Hypothetical security concerns without a clear exploit path in this repository's actual usage model
 - Comments about acknowledged or documented tradeoffs unless the diff makes them materially worse
+
+If a comment you are about to write contains phrases like "not a bug," "functionally correct," "just noting," "deviates from convention," "unconventional," or "works, but" — drop it. Those phrases are signals that you have nothing substantive to say.
 
 Examples of comments to avoid:
 
 - "This could be safer" when the current behavior is an intentional workflow tradeoff
 - "Guard against this being nil / malformed" when the value is expected to be present by contract
 - Generic prompt-injection, supply-chain, or race-condition concerns without evidence that this change creates a real regression or exploitable path
+- Any comment about indentation, spacing, naming, or layout
 
 If you have nothing substantive to say for a line, omit it.
 
@@ -38,10 +44,10 @@ Each inline comment must include a **severity** (exactly one of: `low`, `medium`
 - **critical** — likely data loss, security vulnerability, broken behavior in production, or severe misuse of APIs
 - **high** — probable bugs, significant regressions, important missing error handling
 - **medium** — a real, actionable problem with moderate impact; not just a suggestion or hardening idea
-- **low** — minor but still useful, non-style observations
+- **low** — a minor but real bug or latent issue with a named failure mode. Not a place for observations, nits, or style notes.
 
 When choosing what to include, **prioritize `high` and `critical`** items in your thinking; use `low` sparingly.
-Do not emit a `medium` or `high` finding unless you can point to a plausible failure mode in expected operation.
+Do not emit a finding at any severity unless you can point to a plausible failure mode in expected operation.
 
 ## Output format
 
