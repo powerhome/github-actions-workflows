@@ -36,8 +36,12 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
+          registry-url: https://npm.powerapp.cloud
+          always-auth: true
       - run: yarn install --frozen-lockfile
         working-directory: ${{ inputs.workdir }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
       - run: yarn lint
         working-directory: ${{ inputs.workdir }}
       - run: yarn build
