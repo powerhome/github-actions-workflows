@@ -36,6 +36,18 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
+      - name: Enable npm.powerapp.cloud auth
+        shell: bash
+        env:
+          NPM_REGISTRY_PASSWORD: ${{ secrets.npm_token }}
+        run: |
+          auth="$(printf 'gh-actions:%s' "$NPM_REGISTRY_PASSWORD" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth"
+          {
+            echo "registry=https://npm.powerapp.cloud"
+            echo "//npm.powerapp.cloud/:_auth=${auth}"
+            echo "//npm.powerapp.cloud/:always-auth=true"
+          } >> "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
       - run: yarn install --frozen-lockfile
         working-directory: ${{ inputs.workdir }}
       - run: yarn lint
@@ -50,6 +62,8 @@ jobs:
     with:
       workdir: "${{ inputs.workdir }}"
       decisions: "${{ inputs.license-decisions }}"
+    secrets:
+      npm_token: ${{ secrets.npm_token }}
 
   release:
     needs: [build, license-compliance]

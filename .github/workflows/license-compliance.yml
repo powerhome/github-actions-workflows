@@ -1,5 +1,8 @@
 on:
   workflow_call:
+    secrets:
+      npm_token:
+        required: false
     inputs:
       workdir:
         required: false
@@ -14,6 +17,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Enable npm.powerapp.cloud auth
+        shell: bash
+        env:
+          NPM_REGISTRY_PASSWORD: ${{ secrets.npm_token }}
+        run: |
+          if [ -z "$NPM_REGISTRY_PASSWORD" ]; then
+            exit 0
+          fi
+
+          auth="$(printf 'gh-actions:%s' "$NPM_REGISTRY_PASSWORD" | base64 | tr -d '\n')"
+          echo "::add-mask::$auth"
+          {
+            echo "registry=https://npm.powerapp.cloud"
+            echo "//npm.powerapp.cloud/:_auth=${auth}"
+            echo "//npm.powerapp.cloud/:always-auth=true"
+          } >> "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
