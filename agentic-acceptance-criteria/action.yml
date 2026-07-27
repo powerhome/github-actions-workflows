@@ -44,7 +44,8 @@ runs:
     - name: Post in-progress status comment
       uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
       with:
-        github-token: ${{ steps.app_token.outputs.token }}
+        # GITHUB_TOKEN-authored comments do not trigger recursive issue_comment runs.
+        github-token: ${{ github.token }}
         pr-number: ${{ inputs.pull-request-number }}
         comment-tag: agentic-acceptance-criteria-status
         mode: delete-on-completion
@@ -146,7 +147,7 @@ runs:
       id: acceptance_criteria_comment
       uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
       with:
-        github-token: ${{ steps.app_token.outputs.token }}
+        github-token: ${{ github.token }}
         pr-number: ${{ inputs.pull-request-number }}
         comment-tag: agentic-acceptance-criteria
         mode: upsert
@@ -156,7 +157,7 @@ runs:
       continue-on-error: true
       uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
       with:
-        github-token: ${{ steps.app_token.outputs.token }}
+        github-token: ${{ github.token }}
         pr-number: ${{ inputs.pull-request-number }}
         comment-tag: agentic-acceptance-criteria-failure
         mode: delete
@@ -166,7 +167,7 @@ runs:
       if: failure() && steps.acceptance_criteria_comment.outcome != 'success'
       uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
       with:
-        github-token: ${{ steps.app_token.outputs.token }}
+        github-token: ${{ github.token }}
         pr-number: ${{ inputs.pull-request-number }}
         comment-tag: agentic-acceptance-criteria-failure
         mode: upsert

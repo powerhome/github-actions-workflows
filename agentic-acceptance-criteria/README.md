@@ -34,7 +34,7 @@ The raw `acceptance-criteria-agent.json` file is uploaded as an artifact for deb
 
 ## Secrets and permissions
 
-The calling workflow needs `contents: read` and `pull-requests: write`. The GitHub App installation must be able to clone the target repository and create or edit its PR comments.
+The calling workflow needs `contents: read` and `pull-requests: write`. The GitHub App installation token is used to read PR metadata and clone the target repository. PR comments use the calling workflow's `GITHUB_TOKEN` so action-authored comments do not trigger recursive `issue_comment` workflow runs.
 
 The action can reuse the same secrets as `agentic-pr-review`:
 
@@ -76,7 +76,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   acceptance-criteria:
