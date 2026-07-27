@@ -1,0 +1,178 @@
+name: Agentic acceptance criteria
+description: Generate a non-technical manual QA plan for a pull request and upsert it as a comment
+
+inputs:
+  app-id:
+    description: GitHub App ID used to create an installation token
+    required: true
+  private-key:
+    description: GitHub App private key (PEM)
+    required: true
+  provider:
+    description: Acceptance-criteria backend (supported values — cursor)
+    required: false
+    default: cursor
+  provider-api-key:
+    description: API credential for the selected provider (e.g. Cursor maps this to CURSOR_API_KEY)
+    required: true
+  pull-request-number:
+    description: Pull request number to analyze
+    required: true
+  deepen-length:
+    description: Passed to rmacklin/fetch-through-merge-base as deepen_length
+    required: false
+    default: "30"
+  model:
+    description: Model to use for generation (passed to the provider CLI)
+    required: false
+    default: ""
+  additional-prompt:
+    description: Extra instructions appended to the generation prompt
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Create GitHub App token
+      id: app_token
+      uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+
+    - name: Post in-progress status comment
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-acceptance-criteria-status
+        mode: delete-on-completion
+        message: |
+          :hourglass_flowing_sand: **Agentic Acceptance Criteria** — in progress
+
+          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
+
+    - name: Fetch PR metadata
+      id: pr_metadata
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+      run: |
+        set -euo pipefail
+
+        gh api \
+          -H "Accept: application/vnd.github+json" \
+          -H "X-GitHub-Api-Version: 2026-03-10" \
+          "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+          > pr.json
+
+        {
+          echo "base_sha=$(jq -r '.base.sha' pr.json)"
+          echo "head_sha=$(jq -r '.head.sha' pr.json)"
+          echo "title=$(jq -r '.title | gsub("[\r\n]"; " ")' pr.json)"
+        } >> "${GITHUB_OUTPUT}"
+
+    - name: Check out repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        ref: ${{ steps.pr_metadata.outputs.head_sha }}
+        fetch-depth: 1
+        token: ${{ steps.app_token.outputs.token }}
+
+    - name: Fetch base commit (for merge-base)
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
+      run: git fetch --depth=1 origin "$BASE_SHA"
+
+    - name: Fetch through merge-base
+      uses: rmacklin/fetch-through-merge-base@98594af01ba0825b881902a5dcadbf87bb46d084 # v0
+      with:
+        base_ref: ${{ steps.pr_metadata.outputs.base_sha }}
+        head_ref: ${{ steps.pr_metadata.outputs.head_sha }}
+        deepen_length: ${{ inputs.deepen-length }}
+
+    - name: Compute PR diff
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
+      run: |
+        set -euo pipefail
+        git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
+
+    - name: Run acceptance-criteria provider
+      shell: bash
+      env:
+        PROVIDER: ${{ inputs.provider }}
+        PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
+        MODEL: ${{ inputs.model }}
+        ACCEPTANCE_CRITERIA_JSON_PATH: ${{ github.workspace }}/acceptance-criteria-agent.json
+        ACCEPTANCE_CRITERIA_PROMPT_PATH: ${{ github.action_path }}/prompts/acceptance_criteria.md
+        ACCEPTANCE_CRITERIA_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
+      run: |
+        set -euo pipefail
+
+        provider="${PROVIDER:-cursor}"
+        provider_script="${{ github.action_path }}/scripts/providers/${provider}.sh"
+
+        if [[ ! -f "${provider_script}" ]]; then
+          echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
+          exit 1
+        fi
+
+        exec bash "${provider_script}"
+
+    - name: Upload acceptance-criteria JSON
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: agentic-acceptance-criteria-json
+        path: ${{ github.workspace }}/acceptance-criteria-agent.json
+        if-no-files-found: warn
+
+    - name: Render acceptance-criteria comment
+      shell: bash
+      env:
+        ACCEPTANCE_CRITERIA_JSON_PATH: ${{ github.workspace }}/acceptance-criteria-agent.json
+        ACCEPTANCE_CRITERIA_COMMENT_PATH: ${{ github.workspace }}/acceptance-criteria-comment.md
+        PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
+        PULL_REQUEST_TITLE: ${{ steps.pr_metadata.outputs.title }}
+      run: ruby "${{ github.action_path }}/scripts/render_acceptance_criteria.rb"
+
+    - name: Upsert acceptance-criteria comment
+      id: acceptance_criteria_comment
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-acceptance-criteria
+        mode: upsert
+        file-path: ${{ github.workspace }}/acceptance-criteria-comment.md
+
+    - name: Clear previous failure comment
+      continue-on-error: true
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-acceptance-criteria-failure
+        mode: delete
+        create-if-not-exists: false
+
+    - name: Post failure comment
+      if: failure() && steps.acceptance_criteria_comment.outcome != 'success'
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ steps.app_token.outputs.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: agentic-acceptance-criteria-failure
+        mode: upsert
+        message: |
+          :x: **Agentic Acceptance Criteria** — failed
+
+          The last successful QA plan, if one exists, has been preserved.
+
+          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](https://nitro.powerhrg.com/connect/#rooms/138).
