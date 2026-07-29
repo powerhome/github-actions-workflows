@@ -6,13 +6,11 @@ require_relative "acceptance_criteria_parser"
 begin
   json_path = ENV.fetch("ACCEPTANCE_CRITERIA_JSON_PATH")
   comment_path = ENV.fetch("ACCEPTANCE_CRITERIA_COMMENT_PATH")
-  pull_request_number = ENV.fetch("PULL_REQUEST_NUMBER")
   pull_request_title = ENV.fetch("PULL_REQUEST_TITLE", "")
 
   parsed = AcceptanceCriteriaParser.parse_file(json_path)
   comment = AcceptanceCriteriaFormatter.new(
     parsed: parsed,
-    pull_request_number: pull_request_number,
     pull_request_title: pull_request_title
   ).render
 

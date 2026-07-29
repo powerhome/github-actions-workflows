@@ -49,7 +49,10 @@ The prompt will instruct Cursor to:
 
 - Write for non-technical manual QA testers.
 - Cover all changed application behavior and plausible adjacent regressions.
-- Identify roles, permissions, validation paths, error behavior, state transitions, and differing access configurations only when supported by the diff or repository.
+- Identify roles and exact permission Subject/Action pairs, along with validation paths, error behavior, state transitions, and differing access configurations, only when supported by the diff or repository.
+- Group scenarios primarily by identical or similar tester paths and secondarily by product domain.
+- Include the landing-page relative URL and applicable Subject/Action pairs on every functional case.
+- Mark functional cases that also provide regression coverage so Regression Testing can reference only their generated identifiers.
 - Express each scenario as executable tester actions followed by observable `Verify...` outcomes.
 - Avoid implementation details, code terminology, filenames, classes, migrations, and automated-test instructions.
 - Avoid inventing application behavior or access requirements.
@@ -62,16 +65,30 @@ The response schema will be:
 {
   "permissions": {
     "required": "yes | no | not_identified",
-    "roles": ["Role or access configuration"]
+    "roles": ["Role or access configuration"],
+    "subject_actions": [
+      {
+        "subject": "ReminderCall",
+        "action": "read"
+      }
+    ]
   },
   "feature_areas": [
     {
-      "name": "Feature or page name",
-      "location": "Optional application location",
+      "test_path": "View and filter reminder call history",
+      "domain": "Contact Center",
       "code": "RCH",
       "scenarios": [
         {
           "title": "Page load/default results",
+          "landing_page": "/contact_center/reminder_calls",
+          "permissions": [
+            {
+              "subject": "ReminderCall",
+              "action": "read"
+            }
+          ],
+          "include_in_regression": true,
           "steps": [
             "Open the feature.",
             "Verify the page loads and displays the expected default results."
@@ -94,9 +111,10 @@ The parser and formatter will:
 - Recover valid JSON when Cursor incorrectly adds prose or code fences.
 - Require the documented root object and arrays.
 - Normalize whitespace and discard empty entries.
-- Deduplicate identical roles, steps, and regression checks while retaining their original order.
+- Deduplicate identical roles, Subject/Action pairs, steps, and regression checks while retaining their original order.
 - Validate feature codes as short uppercase identifiers; use `AC` when a supplied code is absent or invalid.
 - Assign scenario numbers deterministically in output order, such as `RCH-1` and `RCH-2`.
+- List generated identifiers for functional cases that also apply to Regression Testing without duplicating their full text.
 - Render an explicit no-QA result when no feature scenarios or regressions are found.
 
 ## Generated PR Comment
@@ -104,7 +122,7 @@ The parser and formatter will:
 Only the example beginning at line 68 (`✅ Test Plan`) informs this format. The preceding system story, launch plan, and original acceptance-criteria prose are excluded.
 
 ```markdown
-## ✅ Test Plan: PR #<number> — <PR title>
+## ✅ Test Plan: <PR title>
 
 ---
 
@@ -114,20 +132,27 @@ Only the example beginning at line 68 (`✅ Test Plan`) informs this format. The
 - **Roles to Test:**
   - <Role, permission set, or access configuration>
   - <Additional role when behavior varies by access>
+- **Permission Subjects / Actions:**
+  - **Subject:** `<exact Subject>`; **Action:** `<exact Action>`
 
 ---
 
 ### Functional / Features to Test
 
-#### <Feature or page name> — `<application location, when identifiable>`
+#### <Shared tester path> — <secondary product domain, when identifiable>
 
 - **<AREA>-1 — <Scenario name>**
+  - **Landing Page:** `/<relative URL>`
+  - **Permissions:**
+    - **Subject:** `<exact Subject>`; **Action:** `<exact Action>`
   - <Setup or action written for a non-technical tester>
   - <Next action>
   - Verify <observable result>.
   - Verify <relevant error, boundary, or alternate outcome>.
 
 - **<AREA>-2 — <Scenario name>**
+  - **Landing Page:** `/<relative URL>`
+  - **Permissions:** <No special permission required or not identified>
   - <Setup or action>
   - Verify <observable result>.
 
@@ -135,6 +160,7 @@ Only the example beginning at line 68 (`✅ Test Plan`) informs this format. The
 
 ### Regression Testing
 
+- **Applicable Functional Cases:** <AREA>-1, <AREA>-2
 - Verify <existing related behavior remains unchanged>.
 - Verify <neighboring workflow or page still works>.
 - Verify <authorization or data visibility remains correct>.
@@ -198,9 +224,10 @@ Merging the shared action first is the safest sequence. It prevents `nitro-web` 
 - Parse valid structured output.
 - Recover JSON from fenced or prefixed output.
 - Reject malformed roots and invalid field types.
-- Normalize and deduplicate roles, steps, and regression checks.
+- Normalize and deduplicate roles, Subject/Action pairs, steps, and regression checks.
 - Generate fallback `AC` scenario identifiers.
-- Render the exact Markdown hierarchy and numbering.
+- Render the exact Markdown hierarchy, landing-page URLs, per-case permissions, and numbering.
+- Reference regression-applicable functional identifiers without repeating their full scenarios.
 - Render the explicit no-manual-QA result.
 - Preserve the last successful comment when generation or parsing fails.
 

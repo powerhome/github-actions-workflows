@@ -55,6 +55,9 @@ private
     unless @payload.dig("permissions", "roles").is_a?(Array)
       raise 'Acceptance-criteria permissions must include a "roles" array'
     end
+    unless @payload.dig("permissions", "subject_actions").is_a?(Array)
+      raise 'Acceptance-criteria permissions must include a "subject_actions" array'
+    end
     raise 'Acceptance-criteria JSON must include a "feature_areas" array' unless @payload["feature_areas"].is_a?(Array)
     unless @payload["regression_tests"].is_a?(Array)
       raise 'Acceptance-criteria JSON must include a "regression_tests" array'
@@ -69,6 +72,7 @@ private
     {
       "required" => required,
       "roles" => unique_strings(raw.fetch("roles")),
+      "subject_actions" => permission_pairs(raw.fetch("subject_actions")),
     }
   end
 
@@ -81,13 +85,13 @@ private
   def build_feature_area(entry)
     return unless entry.is_a?(Hash)
 
-    name = normalize_text(entry["name"])
+    test_path = normalize_text(entry["test_path"])
     scenarios = Array(entry["scenarios"]).filter_map { |scenario| build_scenario(scenario) }
-    return if name.empty? || scenarios.empty?
+    return if test_path.empty? || scenarios.empty?
 
     {
-      "name" => name,
-      "location" => normalize_text(entry["location"]),
+      "test_path" => test_path,
+      "domain" => normalize_text(entry["domain"]),
       "code" => normalize_feature_code(entry["code"]),
       "scenarios" => scenarios,
     }
@@ -102,6 +106,9 @@ private
 
     {
       "title" => title,
+      "landing_page" => normalize_text(entry["landing_page"]),
+      "permissions" => permission_pairs(Array(entry["permissions"])),
+      "include_in_regression" => entry["include_in_regression"] == true,
       "steps" => steps,
     }
   end
@@ -126,6 +133,25 @@ private
   def normalize_feature_code(value)
     code = normalize_text(value).upcase
     FEATURE_CODE_PATTERN.match?(code) ? code : DEFAULT_FEATURE_CODE
+  end
+
+  def permission_pairs(values)
+    seen = {}
+
+    values.filter_map do |value|
+      next unless value.is_a?(Hash)
+
+      subject = normalize_text(value["subject"])
+      action = normalize_text(value["action"])
+      key = [subject, action]
+      next if subject.empty? || action.empty? || seen[key]
+
+      seen[key] = true
+      {
+        "subject" => subject,
+        "action" => action,
+      }
+    end
   end
 
   def unique_strings(values)

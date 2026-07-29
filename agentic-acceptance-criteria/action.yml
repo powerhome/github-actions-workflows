@@ -139,7 +139,6 @@ runs:
       env:
         ACCEPTANCE_CRITERIA_JSON_PATH: ${{ github.workspace }}/acceptance-criteria-agent.json
         ACCEPTANCE_CRITERIA_COMMENT_PATH: ${{ github.workspace }}/acceptance-criteria-comment.md
-        PULL_REQUEST_NUMBER: ${{ inputs.pull-request-number }}
         PULL_REQUEST_TITLE: ${{ steps.pr_metadata.outputs.title }}
       run: ruby "${{ github.action_path }}/scripts/render_acceptance_criteria.rb"
 
