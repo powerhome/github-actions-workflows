@@ -4,9 +4,9 @@ Generates a structured manual QA plan from a pull request's **merge-base diff** 
 
 The generated plan is written for non-technical testers and contains:
 
-- Permissions and roles to test.
-- Feature-oriented test scenarios with observable outcomes.
-- Targeted regression testing.
+- Permissions and roles to test, including exact permission Subject/Action pairs.
+- Test-path-oriented scenarios with landing-page relative URLs and per-case permissions.
+- Targeted regression testing that references applicable functional case identifiers.
 
 ## What it does
 
@@ -122,7 +122,7 @@ This workflow does not listen for PR opening, ready-for-review, or synchronizati
 
 ## Generation context
 
-The provider receives `pr.diff`, read-only access to repository files for context, and `additional-prompt` when supplied. The PR title is used only by the deterministic formatter's heading, and the PR title and description are not included in the provider prompt.
+The provider receives `pr.diff`, read-only access to repository files for context, and `additional-prompt` when supplied. It groups functional cases by similar tester paths before using product domain as a secondary classification. The PR title is used only by the deterministic formatter's heading, and the PR title and description are not included in the provider prompt.
 
 ## Cursor permissions
 

@@ -6,17 +6,15 @@ require_relative "acceptance_criteria_parser"
 begin
   json_path = ENV.fetch("ACCEPTANCE_CRITERIA_JSON_PATH")
   comment_path = ENV.fetch("ACCEPTANCE_CRITERIA_COMMENT_PATH")
-  pull_request_number = ENV.fetch("PULL_REQUEST_NUMBER")
   pull_request_title = ENV.fetch("PULL_REQUEST_TITLE", "")
 
   parsed = AcceptanceCriteriaParser.parse_file(json_path)
   comment = AcceptanceCriteriaFormatter.new(
     parsed: parsed,
-    pull_request_number: pull_request_number,
     pull_request_title: pull_request_title
   ).render
 
-  File.write(comment_path, comment)
+  File.write(comment_path, comment, encoding: Encoding::UTF_8)
   warn "[acceptance_criteria] Rendered #{comment_path}"
 rescue JSON::ParserError => e
   warn "Failed to parse acceptance-criteria JSON: #{e.message}"

@@ -23,7 +23,6 @@ RSpec.describe "render_acceptance_criteria.rb" do
     env = {
       "ACCEPTANCE_CRITERIA_JSON_PATH" => json_path,
       "ACCEPTANCE_CRITERIA_COMMENT_PATH" => comment_path,
-      "PULL_REQUEST_NUMBER" => "42",
       "PULL_REQUEST_TITLE" => "Search migration",
     }
     stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, script)
@@ -33,7 +32,11 @@ RSpec.describe "render_acceptance_criteria.rb" do
 
   it "renders a provider response to the requested comment path" do
     payload = {
-      "permissions" => { "required" => "no", "roles" => [] },
+      "permissions" => {
+        "required" => "no",
+        "roles" => [],
+        "subject_actions" => [],
+      },
       "feature_areas" => [],
       "regression_tests" => [],
     }
@@ -47,8 +50,8 @@ RSpec.describe "render_acceptance_criteria.rb" do
       expect(status).to be_success
       expect(stdout).to be_empty
       expect(stderr).to include("[acceptance_criteria] Rendered")
-      expect(File.read(comment_path)).to include(
-        "## ✅ Test Plan: PR #42 — Search migration"
+      expect(File.read(comment_path, encoding: Encoding::UTF_8)).to include(
+        "## ✅ Test Plan: Search migration"
       )
     end
   end
