@@ -14,7 +14,7 @@ begin
     pull_request_title: pull_request_title
   ).render
 
-  File.write(comment_path, comment)
+  File.write(comment_path, comment, encoding: Encoding::UTF_8)
   warn "[acceptance_criteria] Rendered #{comment_path}"
 rescue JSON::ParserError => e
   warn "Failed to parse acceptance-criteria JSON: #{e.message}"

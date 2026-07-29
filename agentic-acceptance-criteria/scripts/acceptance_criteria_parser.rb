@@ -10,7 +10,7 @@ class AcceptanceCriteriaParser
   attr_reader :permissions, :feature_areas, :regression_tests
 
   def self.parse_file(path)
-    new(File.read(path))
+    new(File.read(path, encoding: Encoding::UTF_8))
   end
 
   def initialize(json_string)

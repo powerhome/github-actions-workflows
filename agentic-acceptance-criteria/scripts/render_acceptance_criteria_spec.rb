@@ -50,7 +50,7 @@ RSpec.describe "render_acceptance_criteria.rb" do
       expect(status).to be_success
       expect(stdout).to be_empty
       expect(stderr).to include("[acceptance_criteria] Rendered")
-      expect(File.read(comment_path)).to include(
+      expect(File.read(comment_path, encoding: Encoding::UTF_8)).to include(
         "## ✅ Test Plan: Search migration"
       )
     end
