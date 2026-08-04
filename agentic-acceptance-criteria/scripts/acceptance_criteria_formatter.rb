@@ -118,6 +118,7 @@ private
 
     unless applicable_cases.empty?
       lines << "- **Applicable Functional Cases:** #{applicable_cases.join(", ")}"
+      lines << "" unless @parsed.regression_tests.empty?
     end
 
     @parsed.regression_tests.each do |test|

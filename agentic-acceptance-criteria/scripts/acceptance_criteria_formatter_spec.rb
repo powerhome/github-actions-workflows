@@ -122,6 +122,7 @@ RSpec.describe AcceptanceCriteriaFormatter do
       ## Regression Testing
 
       - **Applicable Functional Cases:** RCH-1
+
       - Verify existing links still work.
         - Project links.
         - Recording links.

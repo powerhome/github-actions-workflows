@@ -172,6 +172,7 @@ Only the example beginning at line 68 (`✅ Test Plan`) informs this format. The
 ## Regression Testing
 
 - **Applicable Functional Cases:** <AREA>-1, <AREA>-2
+
 - Verify <existing related behavior remains unchanged>.
 - Verify <neighboring workflow or page still works>.
 - Verify <authorization or data visibility remains correct>.
