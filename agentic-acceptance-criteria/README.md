@@ -4,8 +4,8 @@ Generates a structured manual QA plan from a pull request's **merge-base diff** 
 
 The generated plan is written for non-technical testers and contains:
 
-- Permissions and roles to test, including exact permission Subject/Action pairs.
-- Test-path-oriented scenarios with landing-page relative URLs and per-case permissions.
+- Permissions and roles to test, including the Subject/Action labels shown in the application UI and direct permission changes made by the PR.
+- Test-path-oriented scenarios with landing-page relative URLs, per-case permissions, and coverage for every distinctly affected reachable page.
 - Targeted regression testing that references applicable functional case identifiers.
 
 ## What it does
@@ -122,7 +122,7 @@ This workflow does not listen for PR opening, ready-for-review, or synchronizati
 
 ## Generation context
 
-The provider receives `pr.diff`, read-only access to repository files for context, and `additional-prompt` when supplied. It groups functional cases by similar tester paths before using product domain as a secondary classification. The PR title is used only by the deterministic formatter's heading, and the PR title and description are not included in the provider prompt.
+The provider receives `pr.diff`, read-only access to repository files for context, and `additional-prompt` when supplied. It inventories every distinctly affected reachable page before adding depth, groups only behaviorally uniform tester paths, and uses product domain as a secondary classification. It also calls out permission definitions and direct permission lookups/checks added or modified by the diff. In Consent applications, it resolves each permission through the matching action, emits `action.subject.label` as the Subject, and titleizes the action key as the UI does. The PR title is used only by the deterministic formatter's heading, and the PR title and description are not included in the provider prompt.
 
 ## Cursor permissions
 

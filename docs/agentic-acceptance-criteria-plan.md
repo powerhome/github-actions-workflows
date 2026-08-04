@@ -49,8 +49,11 @@ The prompt will instruct Cursor to:
 
 - Write for non-technical manual QA testers.
 - Cover all changed application behavior and plausible adjacent regressions.
-- Identify roles and exact permission Subject/Action pairs, along with validation paths, error behavior, state transitions, and differing access configurations, only when supported by the diff or repository.
-- Group scenarios primarily by identical or similar tester paths and secondarily by product domain.
+- Identify roles and UI-facing permission Subject/Action pairs, along with validation paths, error behavior, state transitions, and differing access configurations, only when supported by the diff or repository.
+- In Consent applications, resolve the matching action with `Consent.find_action(subject_key, action_key)`, use `action.subject.label` for the Subject, and titleize the action key for the Action. Do not use the Ruby class constant or Consent's descriptive action label.
+- Call out permission definitions and direct permission lookups/checks added, removed, or modified by the diff.
+- Inventory every distinctly affected reachable page before adding depth; each page whose changed behavior is not uniform with the others must have functional coverage.
+- Group scenarios primarily by behaviorally uniform tester paths and secondarily by product domain.
 - Include the landing-page relative URL and applicable Subject/Action pairs on every functional case.
 - Mark functional cases that also provide regression coverage so Regression Testing can reference only their generated identifiers.
 - Express each scenario as executable tester actions followed by observable `Verify...` outcomes.
@@ -66,10 +69,13 @@ The response schema will be:
   "permissions": {
     "required": "yes | no | not_identified",
     "roles": ["Role or access configuration"],
+    "changes": [
+      "Added permission lookup: Reminder Calls — Read."
+    ],
     "subject_actions": [
       {
-        "subject": "ReminderCall",
-        "action": "read"
+        "subject": "Reminder Calls",
+        "action": "Read"
       }
     ]
   },
@@ -84,8 +90,8 @@ The response schema will be:
           "landing_page": "/contact_center/reminder_calls",
           "permissions": [
             {
-              "subject": "ReminderCall",
-              "action": "read"
+              "subject": "Reminder Calls",
+              "action": "Read"
             }
           ],
           "include_in_regression": true,
@@ -111,7 +117,7 @@ The parser and formatter will:
 - Recover valid JSON when Cursor incorrectly adds prose or code fences.
 - Require the documented root object and arrays.
 - Normalize whitespace and discard empty entries.
-- Deduplicate identical roles, Subject/Action pairs, steps, and regression checks while retaining their original order.
+- Deduplicate identical roles, permission-change notes, Subject/Action pairs, steps, and regression checks while retaining their original order.
 - Validate feature codes as short uppercase identifiers; use `AC` when a supplied code is absent or invalid.
 - Assign scenario numbers deterministically in output order, such as `RCH-1` and `RCH-2`.
 - List generated identifiers for functional cases that also apply to Regression Testing without duplicating their full text.
@@ -126,39 +132,44 @@ Only the example beginning at line 68 (`✅ Test Plan`) informs this format. The
 
 ---
 
-### Permissions / Roles
+## Permissions / Roles
 
 - **Required Permissions:** <Yes, No, or Not identified>
+- **Permission Changes in This PR:**
+  - <Added, removed, or modified permission definition or direct lookup/check>
 - **Roles to Test:**
   - <Role, permission set, or access configuration>
   - <Additional role when behavior varies by access>
 - **Permission Subjects / Actions:**
-  - **Subject:** `<exact Subject>`; **Action:** `<exact Action>`
+  - <UI Subject label> — <titleized UI Action>
 
 ---
 
-### Functional / Features to Test
+## Functional / Features to Test
 
-#### <Shared tester path> — <secondary product domain, when identifiable>
+### <Shared tester path> — <secondary product domain, when identifiable>
 
-- **<AREA>-1 — <Scenario name>**
-  - **Landing Page:** `/<relative URL>`
-  - **Permissions:**
-    - **Subject:** `<exact Subject>`; **Action:** `<exact Action>`
-  - <Setup or action written for a non-technical tester>
-  - <Next action>
-  - Verify <observable result>.
-  - Verify <relevant error, boundary, or alternate outcome>.
+#### <AREA>-1 — <Scenario name>
 
-- **<AREA>-2 — <Scenario name>**
-  - **Landing Page:** `/<relative URL>`
-  - **Permissions:** <No special permission required or not identified>
-  - <Setup or action>
-  - Verify <observable result>.
+**Landing Page:** /<relative URL>
+**Permissions:** <UI Subject label> — <titleized UI Action>; <additional permission when needed>
+
+- <Setup or action written for a non-technical tester>
+- <Next action>
+- Verify <observable result>.
+- Verify <relevant error, boundary, or alternate outcome>.
+
+#### <AREA>-2 — <Scenario name>
+
+**Landing Page:** /<relative URL>
+**Permissions:** <No special permission required or not identified>
+
+- <Setup or action>
+- Verify <observable result>.
 
 ---
 
-### Regression Testing
+## Regression Testing
 
 - **Applicable Functional Cases:** <AREA>-1, <AREA>-2
 - Verify <existing related behavior remains unchanged>.
@@ -224,9 +235,10 @@ Merging the shared action first is the safest sequence. It prevents `nitro-web` 
 - Parse valid structured output.
 - Recover JSON from fenced or prefixed output.
 - Reject malformed roots and invalid field types.
-- Normalize and deduplicate roles, Subject/Action pairs, steps, and regression checks.
+- Normalize and deduplicate roles, permission-change notes, Subject/Action pairs, steps, and regression checks.
 - Generate fallback `AC` scenario identifiers.
 - Render the exact Markdown hierarchy, landing-page URLs, per-case permissions, and numbering.
+- Render permission-change callouts and ensure every distinctly affected reachable page is represented.
 - Reference regression-applicable functional identifiers without repeating their full scenarios.
 - Render the explicit no-manual-QA result.
 - Preserve the last successful comment when generation or parsing fails.
