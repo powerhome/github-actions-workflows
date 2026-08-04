@@ -29,9 +29,10 @@ RSpec.describe AcceptanceCriteriaFormatter do
       "permissions" => {
         "required" => "yes",
         "roles" => ["User with Reminder Call History read access"],
+        "changes" => ["Added permission lookup: Reminder Calls — Read."],
         "subject_actions" => [
-          { "subject" => "ReminderCall", "action" => "read" },
-          { "subject" => "Project", "action" => "read" },
+          { "subject" => "Reminder Calls", "action" => "Read" },
+          { "subject" => "Projects", "action" => "Read" },
         ],
       },
       "feature_areas" => [
@@ -44,7 +45,7 @@ RSpec.describe AcceptanceCriteriaFormatter do
               "title" => "Page load/default results",
               "landing_page" => "/contact_center/reminder_calls",
               "permissions" => [
-                { "subject" => "ReminderCall", "action" => "read" },
+                { "subject" => "Reminder Calls", "action" => "Read" },
               ],
               "include_in_regression" => true,
               "steps" => [
@@ -56,8 +57,8 @@ RSpec.describe AcceptanceCriteriaFormatter do
               "title" => "Project filter",
               "landing_page" => "/contact_center/reminder_calls",
               "permissions" => [
-                { "subject" => "ReminderCall", "action" => "read" },
-                { "subject" => "Project", "action" => "read" },
+                { "subject" => "Reminder Calls", "action" => "Read" },
+                { "subject" => "Projects", "action" => "Read" },
               ],
               "include_in_regression" => false,
               "steps" => [
@@ -83,41 +84,45 @@ RSpec.describe AcceptanceCriteriaFormatter do
 
       ---
 
-      ### Permissions / Roles
+      ## Permissions / Roles
 
       - **Required Permissions:** Yes
+      - **Permission Changes in This PR:**
+        - Added permission lookup: Reminder Calls — Read.
       - **Roles to Test:**
         - User with Reminder Call History read access
       - **Permission Subjects / Actions:**
-        - **Subject:** `ReminderCall`; **Action:** `read`
-        - **Subject:** `Project`; **Action:** `read`
+        - Reminder Calls — Read
+        - Projects — Read
 
       ---
 
-      ### Functional / Features to Test
+      ## Functional / Features to Test
 
-      #### View and filter reminder call history — Contact Center
+      ### View and filter reminder call history — Contact Center
 
-      - **RCH-1 — Page load/default results**
-        - **Landing Page:** `/contact_center/reminder_calls`
-        - **Permissions:**
-          - **Subject:** `ReminderCall`; **Action:** `read`
-        - Open Reminder Call History.
-        - Verify the default results display.
+      #### RCH-1 — Page load/default results
 
-      - **RCH-2 — Project filter**
-        - **Landing Page:** `/contact_center/reminder_calls`
-        - **Permissions:**
-          - **Subject:** `ReminderCall`; **Action:** `read`
-          - **Subject:** `Project`; **Action:** `read`
-        - Filter by a project number prefix.
-        - Verify unrelated projects are removed.
+      **Landing Page:** /contact_center/reminder_calls#{'  '}
+      **Permissions:** Reminder Calls — Read
+
+      - Open Reminder Call History.
+      - Verify the default results display.
+
+      #### RCH-2 — Project filter
+
+      **Landing Page:** /contact_center/reminder_calls#{'  '}
+      **Permissions:** Reminder Calls — Read; Projects — Read
+
+      - Filter by a project number prefix.
+      - Verify unrelated projects are removed.
 
       ---
 
-      ### Regression Testing
+      ## Regression Testing
 
       - **Applicable Functional Cases:** RCH-1
+
       - Verify existing links still work.
         - Project links.
         - Recording links.
@@ -141,7 +146,7 @@ RSpec.describe AcceptanceCriteriaFormatter do
     }
     payload["feature_areas"] << second_area
 
-    expect(render(payload)).to include("**RCH-3 — Dashboard navigation**")
+    expect(render(payload)).to include("#### RCH-3 — Dashboard navigation")
   end
 
   it "renders explicit fallbacks when no manual QA is identified" do
@@ -149,6 +154,7 @@ RSpec.describe AcceptanceCriteriaFormatter do
       "permissions" => {
         "required" => "not_identified",
         "roles" => [],
+        "changes" => [],
         "subject_actions" => [],
       },
       "feature_areas" => [],
@@ -170,6 +176,7 @@ RSpec.describe AcceptanceCriteriaFormatter do
       "permissions" => {
         "required" => "no",
         "roles" => [],
+        "changes" => [],
         "subject_actions" => [],
       },
       "feature_areas" => [],
@@ -184,23 +191,75 @@ RSpec.describe AcceptanceCriteriaFormatter do
     )
   end
 
-  it "normalizes the PR title without linking the PR and removes backticks from identifiers" do
+  it "renders per-case permission fallbacks as standalone metadata" do
+    payload["feature_areas"].first["scenarios"].first["permissions"] = []
+
+    expect(render(payload)).to include(
+      "**Landing Page:** /contact_center/reminder_calls  \n**Permissions:** Not identified for this case.\n\n- Open Reminder Call History."
+    )
+
+    payload["permissions"]["required"] = "no"
+
+    expect(render(payload)).to include(
+      "**Permissions:** No special permission required.\n\n- Open Reminder Call History."
+    )
+  end
+
+  it "renders Consent permissions with the matching UI subject and titleized action" do
+    payload["permissions"]["subject_actions"] = [
+      { "subject" => "Project Items", "action" => "Edit Comments" },
+      { "subject" => "Projects", "action" => "Edit Items For Closed Project" },
+    ]
+    payload["feature_areas"].first["scenarios"].first["permissions"] = [
+      { "subject" => "Project Items", "action" => "Edit Comments" },
+    ]
+
+    output = render(payload)
+
+    expect(output).to include("- Project Items — Edit Comments")
+    expect(output).to include("- Projects — Edit Items For Closed Project")
+    expect(output).to include("**Permissions:** Project Items — Edit Comments")
+    expect(output).not_to include("ProjectItem")
+    expect(output).not_to include("edit_comments")
+  end
+
+  it "calls out permission changes and removes backticks from their text" do
+    payload["permissions"]["changes"] = [
+      "Added permission: `Project Items` — `Edit Comments`.",
+      "Modified permission lookup: Projects — Edit Items For Closed Project.",
+    ]
+
+    output = render(payload)
+
+    expect(output).to include(<<~MARKDOWN.chomp)
+      - **Permission Changes in This PR:**
+        - Added permission: Project Items — Edit Comments.
+        - Modified permission lookup: Projects — Edit Items For Closed Project.
+    MARKDOWN
+  end
+
+  it "normalizes the PR title and removes backticks from paths and permission labels" do
     payload["feature_areas"].first["scenarios"].first["landing_page"] = "/`unsafe`"
-    payload["permissions"]["subject_actions"].first["subject"] = "`ReminderCall`"
+    payload["permissions"]["subject_actions"].first["subject"] = "`Reminder Calls`"
+    payload["permissions"]["subject_actions"].first["action"] = "`Read`"
+    payload["feature_areas"].first["scenarios"].first["permissions"].first["subject"] = "`Reminder Calls`"
+    payload["feature_areas"].first["scenarios"].first["permissions"].first["action"] = "`Read`"
 
     output = render(payload, title: "  Search\nmigration  ")
 
     expect(output).to start_with("## ✅ Test Plan: Search migration")
     expect(output).not_to include("PR #")
-    expect(output).to include("`/unsafe`")
-    expect(output).to include("**Subject:** `ReminderCall`")
+    expect(output).to include("**Landing Page:** /unsafe")
+    expect(output).to include("- Reminder Calls — Read")
+    expect(output).to include("**Permissions:** Reminder Calls — Read")
+    expect(output).not_to include("`")
   end
 
   it "lists only functional identifiers when regressions are fully covered by functional cases" do
     payload["feature_areas"].first["scenarios"].last["include_in_regression"] = true
     payload["regression_tests"] = []
 
-    regression_section = render(payload).split("### Regression Testing", 2).last
+    regression_section = render(payload).split("## Regression Testing", 2).last
 
     expect(regression_section).to include("**Applicable Functional Cases:** RCH-1, RCH-2")
     expect(regression_section).not_to include("Page load/default results")

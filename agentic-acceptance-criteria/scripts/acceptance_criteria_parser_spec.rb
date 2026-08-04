@@ -18,8 +18,9 @@ RSpec.describe AcceptanceCriteriaParser do
       "permissions" => {
         "required" => "yes",
         "roles" => ["Dispatcher"],
+        "changes" => [],
         "subject_actions" => [
-          { "subject" => "ReminderCall", "action" => "read" },
+          { "subject" => "Reminder Calls", "action" => "Read" },
         ],
       },
       "feature_areas" => [],
@@ -28,14 +29,19 @@ RSpec.describe AcceptanceCriteriaParser do
   end
 
   describe "#permissions" do
-    it "normalizes permission values and deduplicates roles and Subject/Action pairs" do
+    it "normalizes and deduplicates permission values, changes, roles, and Subject/Action pairs" do
       raw = payload(
         "permissions" => {
           "required" => "Not Identified",
           "roles" => ["  Dispatcher\nwith access  ", "Dispatcher with access", "", nil],
+          "changes" => [
+            " Added permission lookup: Reminder Calls — Read. ",
+            "Added permission lookup: Reminder Calls — Read.",
+            "",
+          ],
           "subject_actions" => [
-            { "subject" => " ReminderCall ", "action" => " read " },
-            { "subject" => "ReminderCall", "action" => "read" },
+            { "subject" => " Reminder Calls ", "action" => " Read " },
+            { "subject" => "Reminder Calls", "action" => "Read" },
             { "subject" => "", "action" => "update" },
             "invalid",
           ],
@@ -47,8 +53,9 @@ RSpec.describe AcceptanceCriteriaParser do
       expect(parsed.permissions).to eq(
         "required" => "not_identified",
         "roles" => ["Dispatcher with access"],
+        "changes" => ["Added permission lookup: Reminder Calls — Read."],
         "subject_actions" => [
-          { "subject" => "ReminderCall", "action" => "read" },
+          { "subject" => "Reminder Calls", "action" => "Read" },
         ]
       )
     end
@@ -58,6 +65,7 @@ RSpec.describe AcceptanceCriteriaParser do
         "permissions" => {
           "required" => "maybe",
           "roles" => [],
+          "changes" => [],
           "subject_actions" => [],
         }
       )
@@ -78,8 +86,8 @@ RSpec.describe AcceptanceCriteriaParser do
                 "title" => " Page load ",
                 "landing_page" => " /contact_center/reminder_calls ",
                 "permissions" => [
-                  { "subject" => " ReminderCall ", "action" => " read " },
-                  { "subject" => "ReminderCall", "action" => "read" },
+                  { "subject" => " Reminder Calls ", "action" => " Read " },
+                  { "subject" => "Reminder Calls", "action" => "Read" },
                 ],
                 "include_in_regression" => true,
                 "steps" => [
@@ -114,7 +122,7 @@ RSpec.describe AcceptanceCriteriaParser do
                 "title" => "Page load",
                 "landing_page" => "/contact_center/reminder_calls",
                 "permissions" => [
-                  { "subject" => "ReminderCall", "action" => "read" },
+                  { "subject" => "Reminder Calls", "action" => "Read" },
                 ],
                 "include_in_regression" => true,
                 "steps" => ["Open the page.", "Verify default results."],
@@ -216,6 +224,16 @@ RSpec.describe AcceptanceCriteriaParser do
       expect { described_class.new(raw.to_json) }.to raise_error(
         RuntimeError,
         /subject_actions/
+      )
+    end
+
+    it "requires a top-level permission changes array" do
+      raw = payload
+      raw["permissions"].delete("changes")
+
+      expect { described_class.new(raw.to_json) }.to raise_error(
+        RuntimeError,
+        /changes/
       )
     end
 

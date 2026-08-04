@@ -41,10 +41,16 @@ private
 
   def permissions_section
     lines = [
-      "### Permissions / Roles",
+      "## Permissions / Roles",
       "",
       "- **Required Permissions:** #{PERMISSION_LABELS.fetch(@parsed.permissions.fetch("required"))}",
     ]
+
+    permission_changes = @parsed.permissions.fetch("changes")
+    unless permission_changes.empty?
+      lines << "- **Permission Changes in This PR:**"
+      permission_changes.each { |change| lines << "  - #{change.delete("`")}" }
+    end
 
     roles = @parsed.permissions.fetch("roles")
     if roles.empty?
@@ -61,14 +67,14 @@ private
       lines << "- **Permission Subjects / Actions:** #{subject_actions_message}"
     else
       lines << "- **Permission Subjects / Actions:**"
-      subject_actions.each { |permission| lines << permission_line(permission, "  ") }
+      subject_actions.each { |permission| lines << "  - #{permission_display(permission)}" }
     end
 
     lines.join("\n")
   end
 
   def features_section
-    lines = ["### Functional / Features to Test", ""]
+    lines = ["## Functional / Features to Test", ""]
 
     if @parsed.feature_areas.empty?
       lines << "- #{NO_MANUAL_QA_MESSAGE}"
@@ -83,10 +89,12 @@ private
       area.fetch("scenarios").each_with_index do |scenario, scenario_index|
         lines << "" unless scenario_index.zero?
         identifier = @case_identifiers.fetch(scenario.object_id)
-        lines << "- **#{identifier} — #{scenario.fetch("title")}**"
-        lines << "  - **Landing Page:** #{format_landing_page(scenario.fetch("landing_page"))}"
-        lines.concat(scenario_permission_lines(scenario))
-        scenario.fetch("steps").each { |step| lines << "  - #{step}" }
+        lines << "#### #{identifier} — #{scenario.fetch("title")}"
+        lines << ""
+        lines << "**Landing Page:** #{format_landing_page(scenario.fetch("landing_page"))}  "
+        lines << "**Permissions:** #{scenario_permissions(scenario)}"
+        lines << ""
+        scenario.fetch("steps").each { |step| lines << "- #{step}" }
       end
     end
 
@@ -96,11 +104,11 @@ private
   def feature_heading(area)
     domain = area.fetch("domain")
     suffix = domain.empty? ? "" : " — #{domain}"
-    "#### #{area.fetch("test_path")}#{suffix}"
+    "### #{area.fetch("test_path")}#{suffix}"
   end
 
   def regression_section
-    lines = ["### Regression Testing", ""]
+    lines = ["## Regression Testing", ""]
     applicable_cases = regression_case_identifiers
 
     if applicable_cases.empty? && @parsed.regression_tests.empty?
@@ -110,6 +118,7 @@ private
 
     unless applicable_cases.empty?
       lines << "- **Applicable Functional Cases:** #{applicable_cases.join(", ")}"
+      lines << "" unless @parsed.regression_tests.empty?
     end
 
     @parsed.regression_tests.each do |test|
@@ -140,28 +149,24 @@ private
     end
   end
 
-  def scenario_permission_lines(scenario)
+  def scenario_permissions(scenario)
     permissions = scenario.fetch("permissions")
     if permissions.empty?
-      message = @parsed.permissions.fetch("required") == "no" ? "No special permission required." : "Not identified for this case."
-      return ["  - **Permissions:** #{message}"]
+      return @parsed.permissions.fetch("required") == "no" ? "No special permission required." : "Not identified for this case."
     end
 
-    [
-      "  - **Permissions:**",
-      *permissions.map { |permission| permission_line(permission, "    ") },
-    ]
+    permissions.map { |permission| permission_display(permission) }.join("; ")
   end
 
-  def permission_line(permission, indentation)
+  def permission_display(permission)
     subject = permission.fetch("subject").delete("`")
     action = permission.fetch("action").delete("`")
-    "#{indentation}- **Subject:** `#{subject}`; **Action:** `#{action}`"
+    "#{subject} — #{action}"
   end
 
   def format_landing_page(value)
     landing_page = value.delete("`")
-    landing_page.empty? ? "Not identified from this change." : "`#{landing_page}`"
+    landing_page.empty? ? "Not identified from this change." : landing_page
   end
 
   def normalize_text(value)

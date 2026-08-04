@@ -58,6 +58,9 @@ private
     unless @payload.dig("permissions", "subject_actions").is_a?(Array)
       raise 'Acceptance-criteria permissions must include a "subject_actions" array'
     end
+    unless @payload.dig("permissions", "changes").is_a?(Array)
+      raise 'Acceptance-criteria permissions must include a "changes" array'
+    end
     raise 'Acceptance-criteria JSON must include a "feature_areas" array' unless @payload["feature_areas"].is_a?(Array)
     unless @payload["regression_tests"].is_a?(Array)
       raise 'Acceptance-criteria JSON must include a "regression_tests" array'
@@ -73,6 +76,7 @@ private
       "required" => required,
       "roles" => unique_strings(raw.fetch("roles")),
       "subject_actions" => permission_pairs(raw.fetch("subject_actions")),
+      "changes" => unique_strings(raw.fetch("changes")),
     }
   end
 

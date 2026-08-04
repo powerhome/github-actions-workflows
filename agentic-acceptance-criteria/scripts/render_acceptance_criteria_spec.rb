@@ -35,6 +35,7 @@ RSpec.describe "render_acceptance_criteria.rb" do
       "permissions" => {
         "required" => "no",
         "roles" => [],
+        "changes" => [],
         "subject_actions" => [],
       },
       "feature_areas" => [],
