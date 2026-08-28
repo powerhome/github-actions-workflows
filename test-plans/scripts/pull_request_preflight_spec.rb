@@ -26,7 +26,6 @@ RSpec.describe PullRequestPreflight do
         "baseRefOid" => "base",
         "headRefOid" => "head",
         "mergeable" => state,
-        "state" => "OPEN",
         "title" => "Example",
       }
     end

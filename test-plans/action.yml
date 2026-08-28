@@ -92,17 +92,6 @@ runs:
         mode: upsert
         file-path: ${{ github.workspace }}/test-plan-blocked-comment.md
 
-    - name: Clear previous failure comment for blocked plan
-      if: steps.pr_metadata.outputs.blocked == 'true'
-      continue-on-error: true
-      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
-      with:
-        github-token: ${{ github.token }}
-        pr-number: ${{ inputs.pull-request-number }}
-        comment-tag: ${{ steps.profile.outputs.failure_comment_tag }}
-        mode: delete
-        create-if-not-exists: false
-
     - name: Post in-progress status comment
       if: steps.pr_metadata.outputs.generate == 'true'
       uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
@@ -220,7 +209,10 @@ runs:
         file-path: ${{ github.workspace }}/test-plan-comment.md
 
     - name: Clear previous failure comment
-      if: steps.pr_metadata.outputs.generate == 'true'
+      # Both terminal paths -- a published plan and a blocked message -- supersede any
+      # failure comment left by an earlier run. A failed run never reaches this step,
+      # so its failure comment survives.
+      if: steps.pr_metadata.outputs.blocked == 'true' || steps.pr_metadata.outputs.generate == 'true'
       continue-on-error: true
       uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
       with:

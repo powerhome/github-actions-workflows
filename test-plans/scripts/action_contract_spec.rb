@@ -40,6 +40,15 @@ RSpec.describe "test-plans/action.yml" do
     end
   end
 
+  it "clears a stale failure comment on both terminal paths with one step" do
+    clearing = steps.select { |step| step.dig("with", "mode") == "delete" }
+    expect(clearing.length).to eq(1)
+
+    condition = clearing.first.fetch("if")
+    expect(condition).to include("pr_metadata.outputs.blocked == 'true'")
+    expect(condition).to include("pr_metadata.outputs.generate == 'true'")
+  end
+
   it "takes model selection only from the resolved profile" do
     provider_step = steps.find { |step| step.fetch("name") == "Run test-plan provider" }
     expect(provider_step.dig("env", "MODEL")).to eq("${{ steps.profile.outputs.model }}")

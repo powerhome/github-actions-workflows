@@ -968,9 +968,9 @@ class DependencyDeltaCommand
     manifest_path = ENV.fetch("DEPENDENCY_DELTA_MANIFEST_PATH")
     full_path = ENV.fetch("DEPENDENCY_DELTA_FULL_PATH")
     context_path = ENV.fetch("DEPENDENCY_DELTA_CONTEXT_PATH")
-    File.write(manifest_path, JSON.pretty_generate(result.fetch(:manifest)) + "\n")
-    File.write(full_path, result.fetch(:full))
-    File.write(context_path, result.fetch(:context))
+    File.write(manifest_path, JSON.pretty_generate(result.fetch(:manifest)) + "\n", encoding: Encoding::UTF_8)
+    File.write(full_path, result.fetch(:full), encoding: Encoding::UTF_8)
+    File.write(context_path, result.fetch(:context), encoding: Encoding::UTF_8)
 
     warning_count = result.dig(:manifest, "warning_count")
     write_outputs(changes.length, warning_count)

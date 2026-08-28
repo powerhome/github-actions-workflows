@@ -11,7 +11,6 @@ class GitHubPullRequestClient
           baseRefOid
           headRefOid
           mergeable
-          state
           title
         }
       }
