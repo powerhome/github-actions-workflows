@@ -143,6 +143,33 @@ RSpec.describe "dependency delta generation" do
       expect(changes.find { |change| change.name == "transitive-package" }.direct).to be(false)
     end
 
+    it "ignores decreases and removals" do
+      old_lock = <<~LOCK
+        downgraded@^2.0.0:
+          version "2.0.0"
+          resolved "https://registry.npmjs.org/downgraded/-/downgraded-2.0.0.tgz"
+
+        removed@^1.0.0:
+          version "1.0.0"
+          resolved "https://registry.npmjs.org/removed/-/removed-1.0.0.tgz"
+      LOCK
+      new_lock = <<~LOCK
+        downgraded@^1.0.0:
+          version "1.0.0"
+          resolved "https://registry.npmjs.org/downgraded/-/downgraded-1.0.0.tgz"
+      LOCK
+
+      changes = described_class.new.detect(
+        path: "yarn.lock",
+        old_content: old_lock,
+        new_content: new_lock,
+        direct_names: Set["downgraded", "removed"],
+        workspace_names: Set.new
+      )
+
+      expect(changes).to be_empty
+    end
+
     it "detects a Git revision change when the declared version is unchanged" do
       old_lock = <<~LOCK
         git-package@github:example/git-package#aaaaaaa:
@@ -761,6 +788,40 @@ RSpec.describe "dependency delta generation" do
         expect do
           described_class.new.extract_gzip(archive, File.join(directory, "target"))
         end.to raise_error(RuntimeError, /unsupported link or device entry/)
+      end
+    end
+
+    it "rejects an archive that expands past the size limit" do
+      stub_const("#{described_class}::MAX_EXTRACTED_BYTES", 512)
+
+      Dir.mktmpdir do |directory|
+        archive = File.join(directory, "bomb.tgz")
+        Zlib::GzipWriter.open(archive) do |gzip|
+          Gem::Package::TarWriter.new(gzip) do |tar|
+            tar.add_file_simple("package/big.bin", 0o644, 1024) { |file| file.write("z" * 1024) }
+          end
+        end
+
+        expect do
+          described_class.new.extract_gzip(archive, File.join(directory, "target"))
+        end.to raise_error(RuntimeError, /expands beyond/)
+      end
+    end
+
+    it "rejects an archive with more files than the limit" do
+      stub_const("#{described_class}::MAX_FILES", 2)
+
+      Dir.mktmpdir do |directory|
+        archive = File.join(directory, "many.tgz")
+        Zlib::GzipWriter.open(archive) do |gzip|
+          Gem::Package::TarWriter.new(gzip) do |tar|
+            3.times { |index| tar.add_file_simple("package/#{index}.txt", 0o644, 1) { |f| f.write("x") } }
+          end
+        end
+
+        expect do
+          described_class.new.extract_gzip(archive, File.join(directory, "target"))
+        end.to raise_error(RuntimeError, /more than 2 files/)
       end
     end
 
