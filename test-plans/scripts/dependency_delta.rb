@@ -14,6 +14,22 @@ require "tmpdir"
 require "uri"
 require "zlib"
 
+module GitLocator
+  module_function
+
+  # Accepts the several shapes a Git dependency is recorded in: a bundler GIT remote,
+  # a `git+https://.../repo.git#sha` yarn locator, and the codeload tarball URL yarn v1
+  # writes for `github:owner/repo#ref`.
+  def repository(locator)
+    value = locator.to_s
+    codeload = value.match(%r{codeload\.github\.com/([^/]+)/([^/]+)/(?:tar\.gz|zip)/})
+    return "#{codeload[1]}/#{codeload[2]}" if codeload
+
+    match = value.match(%r{github\.com[:/]([^/]+)/([^/#]+?)(?:\.git)?(?:#|\z)})
+    match && "#{match[1]}/#{match[2]}"
+  end
+end
+
 DependencyChange = Struct.new(
   :ecosystem,
   :name,
@@ -29,7 +45,20 @@ DependencyChange = Struct.new(
   keyword_init: true
 ) do
   def key
-    [ecosystem, name, old_version, new_version, source, old_locator, new_locator]
+    [ecosystem, name, old_version, new_version, source, *source_identity]
+  end
+
+  # Registry URLs are mirror detail, not identity: the same raise recorded through
+  # different remotes in different component lockfiles is still one raise, and keying on
+  # the raw URLs left it undeduplicated and downloaded twice. For Git the repository is
+  # identity, so keep it -- normalized, so equivalent spellings still collapse.
+  def source_identity
+    return [] unless source == "git"
+
+    [
+      GitLocator.repository(old_locator) || old_locator,
+      GitLocator.repository(new_locator) || new_locator,
+    ]
   end
 
   def to_h
@@ -805,12 +834,7 @@ private
   end
 
   def github_repository(locator)
-    value = locator.to_s
-    codeload = value.match(%r{codeload\.github\.com/([^/]+)/([^/]+)/(?:tar\.gz|zip)/})
-    return "#{codeload[1]}/#{codeload[2]}" if codeload
-
-    match = value.match(%r{github\.com[:/]([^/]+)/([^/#]+?)(?:\.git)?(?:#|\z)})
-    match && "#{match[1]}/#{match[2]}"
+    GitLocator.repository(locator)
   end
 
   def github_archive_url(repository, revision)

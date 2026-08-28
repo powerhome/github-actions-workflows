@@ -289,6 +289,57 @@ RSpec.describe "dependency delta generation" do
       expect(changes.first.lockfiles).to contain_exactly("one/Gemfile.lock", "two/Gemfile.lock")
     end
 
+    it "deduplicates a raise recorded through different registry remotes" do
+      lock = lambda do |remote, version|
+        <<~LOCK
+          GEM
+            remote: #{remote}
+            specs:
+              shared_gem (#{version})
+
+          DEPENDENCIES
+            shared_gem
+        LOCK
+      end
+      snapshot = FakeSnapshot.new(
+        "merge_base" => {
+          "one/Gemfile.lock" => lock.call("https://rubygems.org/", "1.0.0"),
+          "two/Gemfile.lock" => lock.call("https://rubygems.org", "1.0.0"),
+        },
+        "head" => {
+          "one/Gemfile.lock" => lock.call("https://rubygems.org/", "2.0.0"),
+          "two/Gemfile.lock" => lock.call("https://rubygems.org", "2.0.0"),
+        }
+      )
+      allow(snapshot).to receive(:changed_dependency_files).and_return(
+        ["one/Gemfile.lock", "two/Gemfile.lock"]
+      )
+
+      changes = described_class.new(snapshot).detect
+
+      expect(changes.length).to eq(1)
+      expect(changes.first.lockfiles).to contain_exactly("one/Gemfile.lock", "two/Gemfile.lock")
+    end
+
+    it "keeps Git raises from different repositories separate" do
+      same_repo = DependencyChange.new(
+        ecosystem: "yarn", name: "widget", old_version: "aaa", new_version: "bbb", source: "git",
+        old_locator: "git+https://github.com/example/widget.git#aaa",
+        new_locator: "https://codeload.github.com/example/widget/tar.gz/bbb",
+        direct: true, lockfiles: ["a/yarn.lock"]
+      )
+      equivalent = same_repo.dup.tap { |change| change.lockfiles = ["b/yarn.lock"] }
+      forked = DependencyChange.new(
+        ecosystem: "yarn", name: "widget", old_version: "aaa", new_version: "bbb", source: "git",
+        old_locator: "git+https://github.com/example/widget.git#aaa",
+        new_locator: "https://codeload.github.com/someone/widget-fork/tar.gz/bbb",
+        direct: true, lockfiles: ["c/yarn.lock"]
+      )
+
+      expect(same_repo.key).to eq(equivalent.key)
+      expect(same_repo.key).not_to eq(forked.key)
+    end
+
     it "compares against the merge base rather than the base tip" do
       lock = lambda do |version|
         <<~LOCK
