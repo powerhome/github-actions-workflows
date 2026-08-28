@@ -22,6 +22,8 @@ DependencyChange = Struct.new(
   :source,
   :old_locator,
   :new_locator,
+  :old_integrity,
+  :new_integrity,
   :direct,
   :lockfiles,
   keyword_init: true
@@ -185,7 +187,7 @@ private
   end
 end
 
-YarnRecord = Struct.new(:name, :version, :resolved, keyword_init: true)
+YarnRecord = Struct.new(:name, :version, :resolved, :integrity, keyword_init: true)
 
 class YarnLockParser
   def initialize(content)
@@ -197,10 +199,18 @@ class YarnLockParser
     selectors = []
     version = nil
     resolved = nil
+    integrity = nil
 
     flush = lambda do
       package_names(selectors).each do |name|
-        output << YarnRecord.new(name: name, version: version, resolved: resolved) if version
+        if version
+          output << YarnRecord.new(
+            name: name,
+            version: version,
+            resolved: resolved,
+            integrity: integrity
+          )
+        end
       end
     end
 
@@ -210,10 +220,13 @@ class YarnLockParser
         selectors = parse_selectors(line.rstrip.delete_suffix(":"))
         version = nil
         resolved = nil
+        integrity = nil
       elsif (match = line.match(/^  version\s+"([^"]+)"/))
         version = match[1]
       elsif (match = line.match(/^  resolved\s+"([^"]+)"/))
         resolved = match[1]
+      elsif (match = line.match(/^  integrity\s+(\S+)/))
+        integrity = match[1].delete('"')
       end
     end
     flush.call
@@ -278,6 +291,8 @@ private
         source: "npm",
         old_locator: old_record&.resolved,
         new_locator: new_record&.resolved,
+        old_integrity: old_record&.integrity,
+        new_integrity: new_record&.integrity,
         direct: direct,
         lockfiles: [path]
       )
@@ -532,16 +547,16 @@ class PublicDownloader
     destination
   end
 
-  def npm_tarball(name, version)
+  def npm_dist(name, version)
     encoded_name = URI.encode_www_form_component(name)
     metadata_url = "https://registry.npmjs.org/#{encoded_name}/#{URI.encode_www_form_component(version)}"
     Tempfile.create(["npm-metadata", ".json"]) do |metadata|
       download(metadata_url, metadata.path)
       payload = JSON.parse(File.read(metadata.path, encoding: Encoding::UTF_8))
-      tarball = payload.dig("dist", "tarball")
-      raise "npm metadata did not include a tarball for #{name}@#{version}" if tarball.to_s.empty?
+      dist = payload["dist"]
+      raise "npm metadata did not include a tarball for #{name}@#{version}" if dist.to_h["tarball"].to_s.empty?
 
-      tarball
+      dist
     end
   end
 end
@@ -678,6 +693,10 @@ private
 end
 
 class PublicDependencyRetriever
+  PUBLIC_RUBYGEMS_HOSTS = %w[rubygems.org].freeze
+  # registry.yarnpkg.com is an alias of registry.npmjs.org.
+  PUBLIC_NPM_HOSTS = %w[registry.npmjs.org registry.yarnpkg.com].freeze
+
   def initialize(downloader: PublicDownloader.new, extractor: SafeTarExtractor.new)
     @downloader = downloader
     @extractor = extractor
@@ -706,7 +725,17 @@ class PublicDependencyRetriever
 
 private
 
+  # A gem is only the public gem if the lockfile actually resolved it from rubygems.org.
+  # Gemfile.lock carries no checksum we could fall back on, so anything else is treated
+  # as a private source and reported rather than guessed at.
   def retrieve_gems(change, directory, old_root, new_root)
+    [change.old_locator, change.new_locator].each do |locator|
+      next if public_host?(locator, PUBLIC_RUBYGEMS_HOSTS)
+
+      raise "#{change.name} resolves to a non-public RubyGems source (#{locator.to_s.empty? ? "unknown" : locator}); " \
+        "private sources are not retrieved"
+    end
+
     old_archive = File.join(directory, "old.gem")
     new_archive = File.join(directory, "new.gem")
     @downloader.download(rubygem_url(change.name, change.old_version), old_archive)
@@ -716,12 +745,47 @@ private
   end
 
   def retrieve_npm(change, directory, old_root, new_root)
+    old_tarball = public_npm_tarball(change, change.old_version, change.old_locator, change.old_integrity)
+    new_tarball = public_npm_tarball(change, change.new_version, change.new_locator, change.new_integrity)
+
     old_archive = File.join(directory, "old.tgz")
     new_archive = File.join(directory, "new.tgz")
-    @downloader.download(@downloader.npm_tarball(change.name, change.old_version), old_archive)
-    @downloader.download(@downloader.npm_tarball(change.name, change.new_version), new_archive)
+    @downloader.download(old_tarball, old_archive)
+    @downloader.download(new_tarball, new_archive)
     @extractor.extract_gzip(old_archive, old_root)
     @extractor.extract_gzip(new_archive, new_root)
+  end
+
+  # Packages resolved straight from npm are public by definition. A package resolved
+  # through a private registry may still be a proxied copy of the public one, so accept
+  # it only when the lockfile's own checksum matches the public artifact -- otherwise we
+  # would hand the provider a same-named package's unrelated source.
+  def public_npm_tarball(change, version, locator, integrity)
+    dist = @downloader.npm_dist(change.name, version)
+    return dist.fetch("tarball") if public_host?(locator, PUBLIC_NPM_HOSTS)
+
+    unless checksum_matches?(dist, locator, integrity)
+      raise "#{change.name}@#{version} resolves to a non-public registry " \
+        "(#{locator.to_s.empty? ? "unknown" : URI.parse(locator).host}) and its lockfile checksum does not " \
+        "match the public package; private sources are not retrieved"
+    end
+
+    dist.fetch("tarball")
+  end
+
+  def checksum_matches?(dist, locator, integrity)
+    return true if !integrity.to_s.empty? && integrity == dist["integrity"]
+
+    # Older yarn v1 entries carry no integrity line and record a sha1 fragment instead.
+    fragment = locator.to_s.split("#", 2)[1].to_s
+    !fragment.empty? && fragment == dist["shasum"]
+  end
+
+  def public_host?(locator, hosts)
+    uri = URI.parse(locator.to_s)
+    uri.is_a?(URI::HTTPS) && hosts.include?(uri.host)
+  rescue URI::InvalidURIError
+    false
   end
 
   def retrieve_git(change, directory, old_root, new_root)

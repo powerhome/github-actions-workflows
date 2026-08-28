@@ -350,6 +350,110 @@ RSpec.describe "dependency delta generation" do
   end
 
   describe PublicDependencyRetriever do
+    class FakeDownloader
+      attr_reader :downloaded
+
+      def initialize(dists: {})
+        @dists = dists
+        @downloaded = []
+      end
+
+      def download(url, destination)
+        @downloaded << url
+        FileUtils.touch(destination)
+        destination
+      end
+
+      def npm_dist(name, version)
+        @dists.fetch([name, version])
+      end
+    end
+
+    class NullExtractor
+      def extract_gzip(_path, _destination) = nil
+      def extract_gem(_path, _destination) = nil
+    end
+
+    def retriever(downloader)
+      described_class.new(downloader: downloader, extractor: NullExtractor.new)
+    end
+
+    def npm_change(locator:, integrity:)
+      DependencyChange.new(
+        ecosystem: "yarn", name: "widget", old_version: "1.0.0", new_version: "2.0.0",
+        source: "npm", old_locator: locator.call("1.0.0"), new_locator: locator.call("2.0.0"),
+        old_integrity: integrity, new_integrity: integrity,
+        direct: true, lockfiles: ["yarn.lock"]
+      )
+    end
+
+    let(:private_locator) do
+      ->(version) { "https://npm.powerapp.cloud/widget/-/widget-#{version}.tgz" }
+    end
+
+    let(:public_dists) do
+      {
+        ["widget", "1.0.0"] => {
+          "tarball" => "https://registry.npmjs.org/widget/-/widget-1.0.0.tgz",
+          "integrity" => "sha512-matching==",
+          "shasum" => "aaa111",
+        },
+        ["widget", "2.0.0"] => {
+          "tarball" => "https://registry.npmjs.org/widget/-/widget-2.0.0.tgz",
+          "integrity" => "sha512-matching==",
+          "shasum" => "bbb222",
+        },
+      }
+    end
+
+    it "refuses gems that did not resolve from rubygems.org" do
+      downloader = FakeDownloader.new
+      change = DependencyChange.new(
+        ecosystem: "bundler", name: "internal_gem", old_version: "1.0.0", new_version: "2.0.0",
+        source: "rubygems", old_locator: "https://gems.powerapp.cloud/",
+        new_locator: "https://gems.powerapp.cloud/", direct: true, lockfiles: ["Gemfile.lock"]
+      )
+
+      expect { retriever(downloader).retrieve(change) }
+        .to raise_error(RuntimeError, /non-public RubyGems source/)
+      expect(downloader.downloaded).to be_empty
+    end
+
+    it "retrieves npm packages resolved directly from the public registry" do
+      downloader = FakeDownloader.new(dists: public_dists)
+      change = npm_change(
+        locator: ->(version) { "https://registry.yarnpkg.com/widget/-/widget-#{version}.tgz" },
+        integrity: nil
+      )
+
+      retriever(downloader).retrieve(change)
+
+      expect(downloader.downloaded).to eq(
+        [
+          "https://registry.npmjs.org/widget/-/widget-1.0.0.tgz",
+          "https://registry.npmjs.org/widget/-/widget-2.0.0.tgz",
+        ]
+      )
+    end
+
+    it "accepts a private-registry package whose lockfile checksum matches the public one" do
+      downloader = FakeDownloader.new(dists: public_dists)
+      change = npm_change(locator: private_locator, integrity: "sha512-matching==")
+
+      retriever(downloader).retrieve(change)
+
+      expect(downloader.downloaded.length).to eq(2)
+    end
+
+    it "refuses a private-registry package whose checksum does not match the public one" do
+      downloader = FakeDownloader.new(dists: public_dists)
+      change = npm_change(locator: private_locator, integrity: "sha512-something-else==")
+
+      expect { retriever(downloader).retrieve(change) }
+        .to raise_error(RuntimeError, /non-public registry .*checksum does not match/m)
+      expect(downloader.downloaded).to be_empty
+    end
+
     it "resolves the repository and revision from a yarn codeload locator" do
       retriever = described_class.new
       locator = "https://codeload.github.com/example/git-package/tar.gz/abc123"
