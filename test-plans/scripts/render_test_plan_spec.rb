@@ -53,8 +53,9 @@ RSpec.describe "render_test_plan.rb" do
       expect(status).to be_success
       expect(stdout).to be_empty
       expect(stderr).to include("[test_plan] Rendered")
-      expect(File.read(comment_path)).to include("## ✅ Cobra Test Plan: Search migration")
-      expect(File.read(comment_path)).to include("⚠️ A dependency delta was unavailable.")
+      rendered = File.read(comment_path, encoding: Encoding::UTF_8)
+      expect(rendered).to include("## ✅ Cobra Test Plan: Search migration")
+      expect(rendered).to include("⚠️ A dependency delta was unavailable.")
     end
   end
 
