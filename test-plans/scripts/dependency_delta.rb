@@ -754,7 +754,7 @@ class PublicDependencyRetriever
         raise "Unsupported public dependency source: #{change.source}"
       end
 
-      SourceDiffBuilder.new.build(content_root(old_root), content_root(new_root))
+      SourceDiffBuilder.new.build(*content_roots(change.source, old_root, new_root))
     end
   end
 
@@ -853,12 +853,28 @@ private
     "https://codeload.github.com/#{repository}/tar.gz/#{URI.encode_www_form_component(revision)}"
   end
 
-  def content_root(root)
+  # npm tarballs wrap their contents in "package/" and GitHub archives in
+  # "<repo>-<revision>/"; a gem's data archive has no wrapper at all. Descending
+  # whenever a root happened to hold a single directory meant a gem containing only
+  # "lib/" was entered, and -- worse -- one side could be entered while the other was
+  # not, offsetting the two roots so every file read as removed and re-added. Strip a
+  # wrapper only for the sources that have one, and only when both sides agree.
+  def content_roots(source, old_root, new_root)
+    return [old_root, new_root] if source == "rubygems"
+
+    old_wrapper = wrapper_directory(old_root)
+    new_wrapper = wrapper_directory(new_root)
+    return [old_root, new_root] unless old_wrapper && new_wrapper
+
+    [old_wrapper, new_wrapper]
+  end
+
+  def wrapper_directory(root)
     entries = Dir.children(root)
-    return root unless entries.length == 1
+    return unless entries.length == 1
 
     candidate = File.join(root, entries.first)
-    File.directory?(candidate) ? candidate : root
+    candidate if File.directory?(candidate)
   end
 end
 

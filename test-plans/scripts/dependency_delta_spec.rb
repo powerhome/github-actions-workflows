@@ -425,6 +425,27 @@ RSpec.describe "dependency delta generation" do
       def extract_gem(_path, _destination) = nil
     end
 
+    # Materializes a predetermined tree per call, old side first, so the wrapper
+    # handling can be checked through the diff paths it produces.
+    class LayoutExtractor
+      def initialize(layouts)
+        @layouts = layouts.dup
+      end
+
+      def extract_gzip(_path, destination) = write(@layouts.shift, destination)
+      def extract_gem(_path, destination) = write(@layouts.shift, destination)
+
+    private
+
+      def write(layout, destination)
+        layout.each do |path, content|
+          full = File.join(destination, path)
+          FileUtils.mkdir_p(File.dirname(full))
+          File.write(full, content)
+        end
+      end
+    end
+
     def retriever(downloader)
       described_class.new(downloader: downloader, extractor: NullExtractor.new)
     end
@@ -455,6 +476,62 @@ RSpec.describe "dependency delta generation" do
           "shasum" => "bbb222",
         },
       }
+    end
+
+    it "strips the npm wrapper directory from both sides" do
+      downloader = FakeDownloader.new(dists: public_dists)
+      extractor = LayoutExtractor.new(
+        [
+          { "package/lib/widget.js" => "old\n", "package/README.md" => "same\n" },
+          { "package/lib/widget.js" => "new\n", "package/README.md" => "same\n" },
+        ]
+      )
+      change = npm_change(
+        locator: ->(version) { "https://registry.npmjs.org/widget/-/widget-#{version}.tgz" },
+        integrity: nil
+      )
+
+      chunks = described_class.new(downloader: downloader, extractor: extractor).retrieve(change)
+
+      expect(chunks.length).to eq(1)
+      expect(chunks.first).to include("a/lib/widget.js", "b/lib/widget.js")
+    end
+
+    it "keeps both roots intact when only one side has a single directory" do
+      downloader = FakeDownloader.new(dists: public_dists)
+      extractor = LayoutExtractor.new(
+        [
+          { "lib/widget.js" => "old\n", "README.md" => "dropped\n" },
+          { "lib/widget.js" => "new\n" },
+        ]
+      )
+      change = npm_change(
+        locator: ->(version) { "https://registry.npmjs.org/widget/-/widget-#{version}.tgz" },
+        integrity: nil
+      )
+
+      chunks = described_class.new(downloader: downloader, extractor: extractor).retrieve(change)
+
+      # Descending into the new side's lone "lib/" would have offset the roots and
+      # reported every file as removed and re-added.
+      expect(chunks.length).to eq(2)
+      expect(chunks.join).to include("a/lib/widget.js", "b/lib/widget.js", "a/README.md")
+    end
+
+    it "never strips a wrapper for gems, whose data archives have none" do
+      downloader = FakeDownloader.new
+      extractor = LayoutExtractor.new(
+        [{ "lib/widget.rb" => "old\n" }, { "lib/widget.rb" => "new\n" }]
+      )
+      change = DependencyChange.new(
+        ecosystem: "bundler", name: "widget", old_version: "1.0.0", new_version: "2.0.0",
+        source: "rubygems", old_locator: "https://rubygems.org/",
+        new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+      )
+
+      chunks = described_class.new(downloader: downloader, extractor: extractor).retrieve(change)
+
+      expect(chunks.first).to include("a/lib/widget.rb", "b/lib/widget.rb")
     end
 
     it "refuses gems that did not resolve from rubygems.org" do
