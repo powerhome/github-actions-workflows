@@ -802,6 +802,39 @@ RSpec.describe "dependency delta generation" do
       expect(result.dig(:manifest, "warning_count")).to eq(1)
     end
 
+    it "does not mark a dependency truncated when only the shared artifact budget ran out" do
+      big = DependencyChange.new(
+        ecosystem: "bundler", name: "aaa-big", old_version: "1.0.0", new_version: "2.0.0",
+        source: "rubygems", old_locator: "https://rubygems.org/",
+        new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+      )
+      small = DependencyChange.new(
+        ecosystem: "bundler", name: "zzz-small", old_version: "1.0.0", new_version: "2.0.0",
+        source: "rubygems", old_locator: "https://rubygems.org/",
+        new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+      )
+      # 100 KiB chunks pack the 10 MiB artifact budget to within ~40 KiB, so the 50 KiB
+      # chunk that follows no longer fits the artifact -- while still fitting the
+      # 100 KiB per-dependency and 500 KiB total provider-context budgets.
+      retriever = double("retriever")
+      allow(retriever).to receive(:retrieve) do |change|
+        if change.name == "aaa-big"
+          Array.new(110) { "x" * (100 * 1024) }
+        else
+          ["y" * (50 * 1024)]
+        end
+      end
+
+      result = described_class.new(changes: [big, small], retriever: retriever).generate
+      entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
+        index[entry.fetch("name")] = entry
+      end
+
+      expect(entries.fetch("zzz-small").fetch("status")).to eq("retrieved")
+      expect(entries.fetch("zzz-small").fetch("warnings").join).to include("artifact only")
+      expect(result.dig(:manifest, "warning_count")).to eq(1)
+    end
+
     it "caps provider context and marks truncation" do
       retriever = double("retriever", retrieve: ["x" * (described_class::CONTEXT_PER_DEPENDENCY_LIMIT + 1)])
       result = described_class.new(changes: [change], retriever: retriever).generate

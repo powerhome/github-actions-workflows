@@ -898,10 +898,14 @@ class DependencyDeltaGenerator
       entry = change.to_h
       begin
         chunks = @retriever.retrieve(change)
-        entry["status"] = "retrieved"
         entry["changed_files"] = chunks.length
         entry["warnings"] = []
         header = dependency_header(change)
+
+        # The artifact and the provider context have separate budgets. Only the
+        # context affects the generated plan, so only it decides the status; the
+        # shared artifact budget being spent by earlier dependencies says nothing
+        # about this one's evidence.
         full_truncated = append_chunks(full, header, chunks, FULL_LIMIT)
         dependency_context = +""
         dependency_truncated = append_chunks(
@@ -911,10 +915,21 @@ class DependencyDeltaGenerator
           CONTEXT_PER_DEPENDENCY_LIMIT
         )
         total_truncated = append_text(context, dependency_context, CONTEXT_TOTAL_LIMIT)
-        if full_truncated || dependency_truncated || total_truncated
-          entry["status"] = "truncated"
-          entry["warnings"] << "The dependency delta exceeded a configured context or artifact limit."
+
+        if dependency_truncated
+          entry["warnings"] << "Provider context reached the #{kib(CONTEXT_PER_DEPENDENCY_LIMIT)} " \
+            "per-dependency limit; some file diffs were omitted."
         end
+        if total_truncated
+          entry["warnings"] << "Provider context reached the #{kib(CONTEXT_TOTAL_LIMIT)} total limit; " \
+            "this dependency's delta was omitted."
+        end
+        if full_truncated
+          entry["warnings"] << "The full-delta artifact reached its #{mib(FULL_LIMIT)} limit; this " \
+            "dependency is incomplete in the artifact only, not in the provider context."
+        end
+
+        entry["status"] = dependency_truncated || total_truncated ? "truncated" : "retrieved"
       rescue => e
         entry["status"] = "unavailable"
         entry["changed_files"] = 0
@@ -939,6 +954,14 @@ class DependencyDeltaGenerator
   end
 
 private
+
+  def kib(bytes)
+    "#{bytes / 1024} KiB"
+  end
+
+  def mib(bytes)
+    "#{bytes / 1024 / 1024} MiB"
+  end
 
   def dependency_header(change)
     "\n## #{change.ecosystem}: #{change.name} (#{change.old_version} -> #{change.new_version})\n\n"
