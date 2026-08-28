@@ -77,6 +77,15 @@ DependencyChange = Struct.new(
 end
 
 class GitSnapshot
+  DEPENDENCY_FILENAMES = %w[Gemfile.lock yarn.lock package.json].freeze
+
+  # A trailing-substring test also accepts "my-package.json" or "custom-Gemfile", which
+  # are unrelated files. Names have to match a whole path segment; ".gemspec" stays an
+  # extension match.
+  def self.matches?(path, name)
+    name.start_with?(".") ? File.extname(path) == name : File.basename(path) == name
+  end
+
   def initialize(workspace:, base_sha:, head_sha:)
     @workspace = workspace
     @base_sha = base_sha
@@ -95,13 +104,13 @@ class GitSnapshot
   def changed_dependency_files
     stdout = git("diff", "--name-only", "#{merge_base_sha}..#{head_sha}")
     stdout.lines.map(&:strip).select do |path|
-      path.end_with?("Gemfile.lock", "yarn.lock", "package.json")
+      DEPENDENCY_FILENAMES.any? { |name| self.class.matches?(path, name) }
     end
   end
 
-  def paths_at(ref, suffix)
+  def paths_at(ref, name)
     git("ls-tree", "-r", "--name-only", ref).lines.map(&:strip).select do |path|
-      path.end_with?(suffix)
+      self.class.matches?(path, name)
     end
   end
 
@@ -418,7 +427,7 @@ class DependencyChangeDetector
     ruby_direct_names = ruby_dependency_names
     changes = []
 
-    changed.grep(/Gemfile\.lock\z/).each do |path|
+    changed.grep(%r{(?:\A|/)Gemfile\.lock\z}).each do |path|
       changes.concat(
         detecting(path) do
           BundlerChangeDetector.new.detect(
@@ -431,7 +440,7 @@ class DependencyChangeDetector
       )
     end
 
-    changed.grep(/yarn\.lock\z/).each do |path|
+    changed.grep(%r{(?:\A|/)yarn\.lock\z}).each do |path|
       changes.concat(
         detecting(path) do
           YarnChangeDetector.new.detect(

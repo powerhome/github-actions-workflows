@@ -672,6 +672,36 @@ RSpec.describe "dependency delta generation" do
         expect(snapshot.changed_dependency_files).to eq(["Gemfile.lock"])
       end
     end
+
+    it "matches dependency files on whole path segments" do
+      Dir.mktmpdir do |directory|
+        git(directory, "init", "--initial-branch", "main", ".")
+        git(directory, "config", "user.email", "test@example.com")
+        git(directory, "config", "user.name", "Test")
+
+        {
+          "package.json" => "{}",
+          "components/widget/package.json" => "{}",
+          "docs/my-package.json" => "{}",
+          "config/custom-Gemfile" => "",
+          "Gemfile" => "",
+          "widget.gemspec" => "",
+        }.each do |path, content|
+          FileUtils.mkdir_p(File.join(directory, File.dirname(path)))
+          File.write(File.join(directory, path), content)
+        end
+        git(directory, "add", ".")
+        git(directory, "commit", "-m", "fixtures")
+        head_sha = git(directory, "rev-parse", "HEAD").strip
+
+        snapshot = described_class.new(workspace: directory, base_sha: head_sha, head_sha: head_sha)
+
+        expect(snapshot.paths_at(head_sha, "package.json"))
+          .to contain_exactly("package.json", "components/widget/package.json")
+        expect(snapshot.paths_at(head_sha, "Gemfile")).to eq(["Gemfile"])
+        expect(snapshot.paths_at(head_sha, ".gemspec")).to eq(["widget.gemspec"])
+      end
+    end
   end
 
   describe SafeTarExtractor do
