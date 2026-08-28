@@ -64,6 +64,18 @@ Retrieving genuinely private sources is deferred. Three approaches were consider
 
 Until one is chosen, private dependencies warn and generation continues.
 
+## Security Model
+
+The pull-request head is untrusted: anyone who can open a pull request controls its contents. The action treats it that way.
+
+- Agent-instruction surfaces are removed from the workspace after checkout and before any provider runs: `.cursor/` directories at any depth, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `AGENTS.md`. Without this a pull request could rewrite its own test plan, or use `.cursorignore` to hide the code it changed from the reviewer. The prompt is self-contained, so no legitimate context is lost.
+- The provider runs read-only. `config/cli-config.json` allows `Read(**)` and denies `Shell(*)`, `Write(**)`, and `Mcp(*:*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it.
+- Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published.
+- Model selection comes from the profile. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
+- Comments are authored with the calling workflow's `GITHUB_TOKEN` so action-authored comments do not retrigger workflows.
+
+Two residual risks are inherent rather than mitigated. Retrieved dependency source, including changelogs, is third-party text placed in the provider's context; it is supplied as evidence about a version change and the schema bounds what can come back, but it is not trusted input. And a pull request necessarily influences its own test plan through the code it changes — that is the feature. Treat a generated plan as a reviewed starting point, not an authority.
+
 ## Caller Workflow
 
 Test plans are activated only through labels. A consumer workflow should map each supported label directly to the matching profile and pin this action to an immutable commit SHA.
