@@ -290,9 +290,8 @@ private
     old_git = old_records.select { |record| git_locator?(record.resolved) }
     new_git = new_records.select { |record| git_locator?(record.resolved) }
 
-    new_git.filter_map do |new_record|
-      old_record = old_git.find { |candidate| candidate.version == new_record.version }
-      next unless old_record && old_record.resolved != new_record.resolved
+    pair_git_records(old_git, new_git).filter_map do |old_record, new_record|
+      next if old_record.resolved == new_record.resolved
 
       DependencyChange.new(
         ecosystem: "yarn",
@@ -308,6 +307,33 @@ private
     end
   end
 
+  # A Git dependency can move revision with or without changing its declared version,
+  # and version_changes deliberately ignores Git records. Match same-version records
+  # first, then pair whatever is left in version order so a simultaneous version and
+  # revision bump is still reported instead of dropped.
+  def pair_git_records(old_git, new_git)
+    remaining_old = old_git.dup
+    pairs = []
+    unmatched_new = []
+
+    new_git.each do |new_record|
+      index = remaining_old.index { |candidate| candidate.version == new_record.version }
+      if index
+        pairs << [remaining_old.delete_at(index), new_record]
+      else
+        unmatched_new << new_record
+      end
+    end
+
+    leftover_old = remaining_old.sort_by { |record| record.version.to_s }
+    unmatched_new.sort_by { |record| record.version.to_s }.each_with_index do |new_record, index|
+      old_record = leftover_old[index]
+      pairs << [old_record, new_record] if old_record
+    end
+
+    pairs
+  end
+
   def version(value)
     normalized = value.to_s.sub(/\Av/, "").split("+", 2).first
     Gem::Version.new(normalized)
@@ -318,7 +344,13 @@ private
   end
 
   def git_revision(value)
-    value.to_s.split("#", 2).last
+    locator = value.to_s
+    return locator.split("#", 2).last if locator.include?("#")
+
+    # yarn v1 resolves `github:owner/repo#ref` to a codeload tarball URL whose last
+    # path segment is the revision, with no fragment to split on.
+    match = locator.match(%r{codeload\.github\.com/[^/]+/[^/]+/(?:tar\.gz|zip)/(.+)\z})
+    match ? match[1] : locator
   end
 end
 
@@ -710,6 +742,9 @@ private
 
   def github_repository(locator)
     value = locator.to_s
+    codeload = value.match(%r{codeload\.github\.com/([^/]+)/([^/]+)/(?:tar\.gz|zip)/})
+    return "#{codeload[1]}/#{codeload[2]}" if codeload
+
     match = value.match(%r{github\.com[:/]([^/]+)/([^/#]+?)(?:\.git)?(?:#|\z)})
     match && "#{match[1]}/#{match[2]}"
   end

@@ -142,6 +142,62 @@ RSpec.describe "dependency delta generation" do
       expect(changes.find { |change| change.name == "direct-package" }.direct).to be(true)
       expect(changes.find { |change| change.name == "transitive-package" }.direct).to be(false)
     end
+
+    it "detects a Git revision change when the declared version is unchanged" do
+      old_lock = <<~LOCK
+        git-package@github:example/git-package#aaaaaaa:
+          version "1.0.0"
+          resolved "https://codeload.github.com/example/git-package/tar.gz/aaaaaaa"
+      LOCK
+      new_lock = <<~LOCK
+        git-package@github:example/git-package#bbbbbbb:
+          version "1.0.0"
+          resolved "https://codeload.github.com/example/git-package/tar.gz/bbbbbbb"
+      LOCK
+
+      changes = described_class.new.detect(
+        path: "yarn.lock",
+        old_content: old_lock,
+        new_content: new_lock,
+        direct_names: Set["git-package"],
+        workspace_names: Set.new
+      )
+
+      expect(changes.length).to eq(1)
+      expect(changes.first).to have_attributes(
+        source: "git",
+        old_version: "aaaaaaa",
+        new_version: "bbbbbbb"
+      )
+    end
+
+    it "detects a Git dependency that changes version and revision together" do
+      old_lock = <<~LOCK
+        git-package@github:example/git-package#aaaaaaa:
+          version "1.0.0"
+          resolved "https://codeload.github.com/example/git-package/tar.gz/aaaaaaa"
+      LOCK
+      new_lock = <<~LOCK
+        git-package@github:example/git-package#bbbbbbb:
+          version "2.0.0"
+          resolved "https://codeload.github.com/example/git-package/tar.gz/bbbbbbb"
+      LOCK
+
+      changes = described_class.new.detect(
+        path: "yarn.lock",
+        old_content: old_lock,
+        new_content: new_lock,
+        direct_names: Set["git-package"],
+        workspace_names: Set.new
+      )
+
+      expect(changes.length).to eq(1)
+      expect(changes.first).to have_attributes(
+        source: "git",
+        old_version: "aaaaaaa",
+        new_version: "bbbbbbb"
+      )
+    end
   end
 
   describe DependencyChangeDetector do
@@ -290,6 +346,22 @@ RSpec.describe "dependency delta generation" do
       expect(changes.map(&:name)).to eq(["good_gem"])
       expect(detector.problems.map(&:path)).to eq(["broken/Gemfile.lock"])
       expect(detector.problems.first.message).to include("Unable to parse broken/Gemfile.lock")
+    end
+  end
+
+  describe PublicDependencyRetriever do
+    it "resolves the repository and revision from a yarn codeload locator" do
+      retriever = described_class.new
+      locator = "https://codeload.github.com/example/git-package/tar.gz/abc123"
+
+      expect(retriever.send(:github_repository, locator)).to eq("example/git-package")
+    end
+
+    it "resolves the repository from a git+ssh style locator" do
+      retriever = described_class.new
+      locator = "git+https://github.com/example/git-package.git#abc123"
+
+      expect(retriever.send(:github_repository, locator)).to eq("example/git-package")
     end
   end
 
