@@ -113,11 +113,6 @@ runs:
         fetch-depth: 1
         token: ${{ steps.app_token.outputs.token }}
 
-    - name: Quarantine agent instructions
-      if: steps.pr_metadata.outputs.generate == 'true'
-      shell: bash
-      run: ruby "${{ github.action_path }}/scripts/quarantine_agent_instructions.rb"
-
     - name: Fetch base commit
       if: steps.pr_metadata.outputs.generate == 'true'
       shell: bash
@@ -156,6 +151,14 @@ runs:
       run: |
         set -euo pipefail
         ruby "${{ github.action_path }}/scripts/dependency_delta.rb"
+
+    - name: Reset agent instructions to the merge base
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
+      run: ruby "${{ github.action_path }}/scripts/trusted_agent_instructions.rb"
 
     - name: Run test-plan provider
       if: steps.pr_metadata.outputs.generate == 'true'

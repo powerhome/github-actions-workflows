@@ -31,7 +31,7 @@ RSpec.describe "test-plans/action.yml" do
 
   it "gates every generation step on the mergeability result" do
     generation_steps = steps.select do |step|
-      step.fetch("name").match?(/Check out|Quarantine|Fetch base|Fetch through|Compute PR diff|dependency delta|provider|Render test-plan|Upsert test-plan/)
+      step.fetch("name").match?(/Check out|agent instructions|Fetch base|Fetch through|Compute PR diff|dependency delta|provider|Render test-plan|Upsert test-plan/)
     end
 
     expect(generation_steps).not_to be_empty
@@ -49,12 +49,13 @@ RSpec.describe "test-plans/action.yml" do
     expect(condition).to include("pr_metadata.outputs.generate == 'true'")
   end
 
-  it "strips pull-request-supplied agent instructions before any provider reads them" do
+  it "resets pull-request-supplied agent instructions before any provider reads them" do
     names = steps.map { |step| step.fetch("name") }
-    quarantine_index = names.index("Quarantine agent instructions")
+    reset_index = names.index("Reset agent instructions to the merge base")
 
-    expect(quarantine_index).to be > names.index("Check out repository")
-    expect(quarantine_index).to be < names.index("Run test-plan provider")
+    # Needs the merge base, so it has to follow the merge-base fetch.
+    expect(reset_index).to be > names.index("Fetch through merge-base")
+    expect(reset_index).to be < names.index("Run test-plan provider")
   end
 
   it "takes model selection only from the resolved profile" do
