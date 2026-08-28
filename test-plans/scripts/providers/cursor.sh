@@ -2,15 +2,13 @@
 set -euo pipefail
 
 : "${GITHUB_WORKSPACE:?}"
-: "${ACCEPTANCE_CRITERIA_JSON_PATH:?}"
-: "${ACCEPTANCE_CRITERIA_PROMPT_PATH:?}"
+: "${TEST_PLAN_JSON_PATH:?}"
+: "${TEST_PLAN_PROMPT_PATH:?}"
 
 export PATH="${HOME}/.local/bin:${PATH}"
 
 if ! command -v agent >/dev/null 2>&1; then
-  # Cursor documents this installer as the supported CLI install path. We intentionally
-  # take the latest version here because the CLI does not currently expose a documented
-  # version-pinned install flow that we can rely on in CI.
+  # Cursor does not currently document a version-pinned CLI installer for CI.
   curl https://cursor.com/install -fsS | bash
   export PATH="${HOME}/.local/bin:${PATH}"
 fi
@@ -27,8 +25,8 @@ fi
 
 export CURSOR_API_KEY="${PROVIDER_API_KEY}"
 
-if [[ ! -f "${ACCEPTANCE_CRITERIA_PROMPT_PATH}" ]]; then
-  echo "Acceptance-criteria prompt not found: ${ACCEPTANCE_CRITERIA_PROMPT_PATH}" >&2
+if [[ ! -f "${TEST_PLAN_PROMPT_PATH}" ]]; then
+  echo "Test-plan prompt not found: ${TEST_PLAN_PROMPT_PATH}" >&2
   exit 1
 fi
 
@@ -41,16 +39,13 @@ cd "${GITHUB_WORKSPACE}"
 mkdir -p .cursor
 cp "${CLI_CONFIG_TEMPLATE}" .cursor/cli-config.json
 
-PROMPT="$(cat "${ACCEPTANCE_CRITERIA_PROMPT_PATH}")"
-if [[ -n "${ACCEPTANCE_CRITERIA_ADDITIONAL_INSTRUCTIONS:-}" ]]; then
-  PROMPT+=$'\n\n## Additional instructions from the PR comment\n\n'"${ACCEPTANCE_CRITERIA_ADDITIONAL_INSTRUCTIONS}"
-fi
+PROMPT="$(cat "${TEST_PLAN_PROMPT_PATH}")"
 
 MODEL_ARGS=()
 if [[ -n "${MODEL:-}" ]]; then
   MODEL_ARGS+=(--model "${MODEL}")
 fi
 
-# --trust is required: headless agent refuses to run unless the workspace is trusted.
+# --trust is required because the headless agent otherwise refuses the workspace.
 # Read-only CLI permissions are copied from config/cli-config.json.
-agent --print --trust --output-format text "${MODEL_ARGS[@]}" "${PROMPT}" >"${ACCEPTANCE_CRITERIA_JSON_PATH}"
+agent --print --trust --output-format text "${MODEL_ARGS[@]}" "${PROMPT}" >"${TEST_PLAN_JSON_PATH}"

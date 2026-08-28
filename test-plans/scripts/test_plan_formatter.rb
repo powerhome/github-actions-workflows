@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-class AcceptanceCriteriaFormatter
+class TestPlanFormatter
   NO_MANUAL_QA_MESSAGE = "No manual application QA was identified for this change."
   NO_REGRESSION_MESSAGE = "No targeted regression testing was identified for this change."
   NO_ROLES_MESSAGE = "Not identified from this change."
@@ -12,22 +12,27 @@ class AcceptanceCriteriaFormatter
     "not_identified" => "Not identified",
   }.freeze
 
-  def initialize(parsed:, pull_request_title:)
+  def initialize(parsed:, pull_request_title:, profile_name:, generation_warning: "")
     @parsed = parsed
     @pull_request_title = normalize_text(pull_request_title)
+    @profile_name = normalize_text(profile_name)
+    @generation_warning = normalize_text(generation_warning)
     @case_identifiers = build_case_identifiers
   end
 
   def render
-    sections = [
-      heading,
-      "---",
-      permissions_section,
-      "---",
-      features_section,
-      "---",
-      regression_section,
-    ]
+    sections = [heading]
+    sections << "> ⚠️ #{@generation_warning}" unless @generation_warning.empty?
+    sections.concat(
+      [
+        "---",
+        permissions_section,
+        "---",
+        features_section,
+        "---",
+        regression_section,
+      ]
+    )
 
     "#{sections.join("\n\n")}\n"
   end
@@ -35,8 +40,9 @@ class AcceptanceCriteriaFormatter
 private
 
   def heading
+    name = @profile_name.empty? ? "Test Plan" : @profile_name
     title_suffix = @pull_request_title.empty? ? "" : ": #{@pull_request_title}"
-    "## ✅ Test Plan#{title_suffix}"
+    "## ✅ #{name}#{title_suffix}"
   end
 
   def permissions_section

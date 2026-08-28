@@ -1,0 +1,10 @@
+{
+  "id": "cobra-test-plan",
+  "display_name": "Cobra Test Plan",
+  "prompt": "prompts/cobra_test_plan.md",
+  "model": "",
+  "comment_tag": "cobra-test-plan",
+  "status_comment_tag": "cobra-test-plan-status",
+  "failure_comment_tag": "cobra-test-plan-failure",
+  "artifact_name": "cobra-test-plan-artifacts"
+}

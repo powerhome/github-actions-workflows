@@ -2,7 +2,7 @@
 
 require "json"
 
-class AcceptanceCriteriaParser
+class TestPlanParser
   VALID_PERMISSION_REQUIREMENTS = %w[yes no not_identified].freeze
   DEFAULT_FEATURE_CODE = "AC"
   FEATURE_CODE_PATTERN = /\A[A-Z][A-Z0-9]{1,5}\z/
@@ -50,20 +50,20 @@ private
   end
 
   def validate_root!
-    raise "Acceptance-criteria JSON root must be a JSON object" unless @payload.is_a?(Hash)
-    raise 'Acceptance-criteria JSON must include a "permissions" object' unless @payload["permissions"].is_a?(Hash)
+    raise "Test-plan JSON root must be a JSON object" unless @payload.is_a?(Hash)
+    raise 'Test-plan JSON must include a "permissions" object' unless @payload["permissions"].is_a?(Hash)
     unless @payload.dig("permissions", "roles").is_a?(Array)
-      raise 'Acceptance-criteria permissions must include a "roles" array'
+      raise 'Test-plan permissions must include a "roles" array'
     end
     unless @payload.dig("permissions", "subject_actions").is_a?(Array)
-      raise 'Acceptance-criteria permissions must include a "subject_actions" array'
+      raise 'Test-plan permissions must include a "subject_actions" array'
     end
     unless @payload.dig("permissions", "changes").is_a?(Array)
-      raise 'Acceptance-criteria permissions must include a "changes" array'
+      raise 'Test-plan permissions must include a "changes" array'
     end
-    raise 'Acceptance-criteria JSON must include a "feature_areas" array' unless @payload["feature_areas"].is_a?(Array)
+    raise 'Test-plan JSON must include a "feature_areas" array' unless @payload["feature_areas"].is_a?(Array)
     unless @payload["regression_tests"].is_a?(Array)
-      raise 'Acceptance-criteria JSON must include a "regression_tests" array'
+      raise 'Test-plan JSON must include a "regression_tests" array'
     end
   end
 

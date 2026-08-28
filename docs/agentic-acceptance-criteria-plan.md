@@ -1,259 +1,244 @@
-# Agentic Acceptance Criteria Plan
+# Test Plan System Overhaul
 
 ## Summary
 
-Create a reusable `agentic-acceptance-criteria` composite action that turns a pull request's merge-base diff into a structured, non-technical manual QA plan. The action will post one updatable comment on the PR and will use the same GitHub App credentials and Cursor provider pool as `agentic-pr-review`.
+Replace `agentic-acceptance-criteria` with a scalable, profile-driven `test-plans` action. The first profiles will be:
 
-The initial consumer will be `nitro-web`, using a separate workflow that runs only when:
+- `cobra-test-plan`: the current CoBRA/Consent behavior, using Cursor's default model.
+- `enhanced-cobra-test-plan`: the same prompt, schema, and Markdown format, pinned to `claude-opus-5[effort=high]`.
 
-- The `agentic-acceptance-criteria` label is applied.
-- A new PR comment begins with `/agentic-acceptance-criteria`.
+Initially deploy both profiles only to `nitro-web`. Test plans will be label-triggered exclusively. The action will continue to publish generated PR comments, but it will no longer accept comment commands or user-supplied prompt text.
 
-It will never run automatically when a PR is opened, marked ready for review, or updated with new commits. Its comment command will not trigger the existing code-review workflow.
+Both profiles will also enrich the PR delta with source changes from raised public external dependencies. If a PR has merge conflicts, generation will stop before checkout or provider invocation and the profile's authoritative comment will explain how to unblock it.
 
-## Reusable Action
+## Shared Action and Profiles
 
-Add a self-contained `agentic-acceptance-criteria/` action alongside `agentic-pr-review/`.
+Create one shared engine at `test-plans/action.yml` with an allowlisted `profile` input. Centralize provider execution, PR metadata, merge-base handling, dependency preprocessing, parsing, rendering, artifact upload, and comment lifecycle behavior in that action.
 
-The public inputs will match the review action:
+Store profile definitions under `test-plans/profiles/`. Each definition will provide:
+
+- Profile identifier and display name.
+- Prompt path.
+- Model selection.
+- Artifact namespace.
+- Status, result, and failure comment tags.
+
+The initial model settings will be:
+
+- `cobra-test-plan`: omit `--model`, preserving the current Cursor-default behavior.
+- `enhanced-cobra-test-plan`: pass `--model 'claude-opus-5[effort=high]'`.
+
+Both profiles will use the same CoBRA/Consent prompt and strict JSON/Markdown output contract. Their only intentional generation difference will be model selection.
+
+Give each profile independent status, result, failure, and artifact tags so both can run on the same PR without overwriting one another. Use the same Markdown template with profile-specific headings, such as `Cobra Test Plan` and `Enhanced Cobra Test Plan`.
+
+Preserve the current behavior for:
+
+- GitHub App authentication.
+- Merge-base PR diffs.
+- Read-only Cursor access.
+- Strict JSON parsing and recovery.
+- Deterministic Markdown rendering.
+- Progress comments.
+- Failure handling that preserves the previous successful plan.
+- Raw JSON debugging artifacts.
+
+Remove the old `agentic-acceptance-criteria/` implementation after its behavior and tests have migrated. Consumers pinned to an earlier immutable SHA remain valid until their workflows are changed.
+
+### Public Action Interface
+
+The shared action will accept:
 
 | Input | Required | Purpose |
 | --- | --- | --- |
-| `app-id` | yes | Existing agentic-review GitHub App ID. |
-| `private-key` | yes | Existing GitHub App private key. |
-| `provider-api-key` | yes | Existing Cursor pool/API credential. |
-| `pull-request-number` | yes | PR to analyze and comment on. |
+| `profile` | yes | Allowlisted profile identifier, initially `cobra-test-plan` or `enhanced-cobra-test-plan`. |
+| `app-id` | yes | GitHub App ID used to create the installation token. |
+| `private-key` | yes | GitHub App private key. |
+| `provider-api-key` | yes | Credential for the selected test-plan provider. |
+| `pull-request-number` | yes | Pull request to inspect and comment on. |
 | `provider` | no | Provider implementation; default `cursor`. |
-| `deepen-length` | no | Merge-base history fetch increment; default `30`. |
-| `model` | no | Optional provider model override. |
-| `additional-prompt` | no | Full slash-command comment used as explicit generation guidance. |
+| `deepen-length` | no | Merge-base fetch increment; default `30`. |
 
-The action will:
+Unknown profiles must fail before posting progress or invoking a provider. Remove the public `additional-prompt` and caller-controlled `model` inputs so labels and profile definitions fully determine behavior.
 
-1. Create a short-lived installation token from the existing GitHub App secrets.
-2. Post a temporary, tagged “acceptance criteria in progress” comment.
-3. Fetch the current base and head SHAs for the PR.
-4. Check out the PR head and fetch through its merge base.
-5. Write the three-dot merge-base diff to `pr.diff`.
-6. Run Cursor with read-only repository permissions.
-7. Parse and validate Cursor's structured JSON response.
-8. Render the deterministic Markdown QA format described below.
-9. Upload the raw JSON as `agentic-acceptance-criteria-json`.
-10. Upsert one tagged acceptance-criteria PR comment.
+## Merge-Conflict Preflight
 
-The PR title may be fetched for deterministic display in the comment heading, but it and the PR description will not be included in Cursor's generation context. Generated content will come only from `pr.diff`, read-only repository context, and optional slash-command instructions.
+Run a profile-aware mergeability gate before posting an in-progress comment, checking out code, computing diffs, retrieving dependencies, or invoking Cursor.
 
-## Generation Contract
+Query the pull request's GraphQL `mergeable` state together with its base/head SHAs and title. Handle GitHub's states as follows:
 
-The prompt will instruct Cursor to:
+- `MERGEABLE`: continue with normal generation.
+- `CONFLICTING`: stop generation and publish a blocked message.
+- `UNKNOWN`: retry five times at two-second intervals because GitHub may still be calculating mergeability.
 
-- Write for non-technical manual QA testers.
-- Cover all changed application behavior and plausible adjacent regressions.
-- Identify roles and UI-facing permission Subject/Action pairs, along with validation paths, error behavior, state transitions, and differing access configurations, only when supported by the diff or repository.
-- In Consent applications, resolve the matching action with `Consent.find_action(subject_key, action_key)`, use `action.subject.label` for the Subject, and titleize the action key for the Action. Do not use the Ruby class constant or Consent's descriptive action label.
-- Call out permission definitions and direct permission lookups/checks added, removed, or modified by the diff.
-- Inventory every distinctly affected reachable page before adding depth; each page whose changed behavior is not uniform with the others must have functional coverage.
-- Group scenarios primarily by behaviorally uniform tester paths and secondarily by product domain.
-- Include the landing-page relative URL and applicable Subject/Action pairs on every functional case.
-- Mark functional cases that also provide regression coverage so Regression Testing can reference only their generated identifiers.
-- Express each scenario as executable tester actions followed by observable `Verify...` outcomes.
-- Avoid implementation details, code terminology, filenames, classes, migrations, and automated-test instructions.
-- Avoid inventing application behavior or access requirements.
-- Return “not identified” states when evidence is insufficient.
-- Return strict JSON without Markdown fences or surrounding prose.
+If mergeability remains `UNKNOWN`, stop without provider usage and publish a distinct message explaining that mergeability could not be determined and the label should be retried.
 
-The response schema will be:
-
-```json
-{
-  "permissions": {
-    "required": "yes | no | not_identified",
-    "roles": ["Role or access configuration"],
-    "changes": [
-      "Added permission lookup: Reminder Calls — Read."
-    ],
-    "subject_actions": [
-      {
-        "subject": "Reminder Calls",
-        "action": "Read"
-      }
-    ]
-  },
-  "feature_areas": [
-    {
-      "test_path": "View and filter reminder call history",
-      "domain": "Contact Center",
-      "code": "RCH",
-      "scenarios": [
-        {
-          "title": "Page load/default results",
-          "landing_page": "/contact_center/reminder_calls",
-          "permissions": [
-            {
-              "subject": "Reminder Calls",
-              "action": "Read"
-            }
-          ],
-          "include_in_regression": true,
-          "steps": [
-            "Open the feature.",
-            "Verify the page loads and displays the expected default results."
-          ]
-        }
-      ]
-    }
-  ],
-  "regression_tests": [
-    {
-      "text": "Verify existing related behavior remains unchanged.",
-      "details": ["Optional supporting check"]
-    }
-  ]
-}
-```
-
-The parser and formatter will:
-
-- Recover valid JSON when Cursor incorrectly adds prose or code fences.
-- Require the documented root object and arrays.
-- Normalize whitespace and discard empty entries.
-- Deduplicate identical roles, permission-change notes, Subject/Action pairs, steps, and regression checks while retaining their original order.
-- Validate feature codes as short uppercase identifiers; use `AC` when a supplied code is absent or invalid.
-- Assign scenario numbers deterministically in output order, such as `RCH-1` and `RCH-2`.
-- List generated identifiers for functional cases that also apply to Regression Testing without duplicating their full text.
-- Render an explicit no-QA result when no feature scenarios or regressions are found.
-
-## Generated PR Comment
-
-Only the example beginning at line 68 (`✅ Test Plan`) informs this format. The preceding system story, launch plan, and original acceptance-criteria prose are excluded.
+For `CONFLICTING`, upsert the affected profile's authoritative result comment with a message in this form:
 
 ```markdown
-## ✅ Test Plan: <PR title>
+## ⚠️ Cobra Test Plan unavailable
 
----
+This PR currently has merge conflicts with its base branch. Resolve the conflicts, then remove and reapply the `cobra-test-plan` label to generate a new test plan.
 
-## Permissions / Roles
-
-- **Required Permissions:** <Yes, No, or Not identified>
-- **Permission Changes in This PR:**
-  - <Added, removed, or modified permission definition or direct lookup/check>
-- **Roles to Test:**
-  - <Role, permission set, or access configuration>
-  - <Additional role when behavior varies by access>
-- **Permission Subjects / Actions:**
-  - <UI Subject label> — <titleized UI Action>
-
----
-
-## Functional / Features to Test
-
-### <Shared tester path> — <secondary product domain, when identifiable>
-
-#### <AREA>-1 — <Scenario name>
-
-**Landing Page:** /<relative URL>
-**Permissions:** <UI Subject label> — <titleized UI Action>; <additional permission when needed>
-
-- <Setup or action written for a non-technical tester>
-- <Next action>
-- Verify <observable result>.
-- Verify <relevant error, boundary, or alternate outcome>.
-
-#### <AREA>-2 — <Scenario name>
-
-**Landing Page:** /<relative URL>
-**Permissions:** <No special permission required or not identified>
-
-- <Setup or action>
-- Verify <observable result>.
-
----
-
-## Regression Testing
-
-- **Applicable Functional Cases:** <AREA>-1, <AREA>-2
-
-- Verify <existing related behavior remains unchanged>.
-- Verify <neighboring workflow or page still works>.
-- Verify <authorization or data visibility remains correct>.
-  - <Optional detail>
+[View workflow run](<workflow-run-url>)
 ```
 
-All three sections will remain present and in this order. When no manual application QA is identified, the functional section will contain:
+The enhanced profile will use its own display name and label in the same template.
 
-```markdown
-- No manual application QA was identified for this change.
-```
+Conflict handling will:
 
-The successful result will use the `agentic-acceptance-criteria` comment tag so every rerun updates one authoritative comment. A separate tagged failure comment will preserve the previous successful plan, link to the failed workflow run, and be removed after the next successful run.
+- Make no Cursor/provider call and consume no provider usage.
+- Skip checkout, PR diff creation, and dependency retrieval.
+- Replace a previously generated profile comment with the blocked message so testers do not follow a stale plan.
+- Add the same explanation to the GitHub Actions job summary.
+- Complete successfully because a merge conflict is an expected PR state rather than an infrastructure failure.
+- Replace the blocked message with a newly generated plan after conflicts are resolved and the matching label is removed and reapplied.
 
-## `nitro-web` Trigger Workflow
+## External Dependency Delta Enrichment
 
-Add a dedicated `.github/workflows/agentic-acceptance-criteria.yml` in `nitro-web`. Do not add the acceptance-criteria job to the existing review workflow.
+Add a preprocessing step after `pr.diff` is created. It will compare dependency manifests and lockfiles between the base and head revisions across the root application and component workspaces.
 
-The workflow will listen only for:
+The first release will support:
 
-```yaml
-on:
-  pull_request:
-    types: [labeled]
-  issue_comment:
-    types: [created]
-```
+- Bundler manifests and lockfiles.
+- `package.json` and Yarn v1 lockfiles.
 
-Its job-level gate will require either:
+Treat registry packages and Git dependencies outside local CoBRA components as external. Exclude:
 
-- A `pull_request/labeled` event where the newly applied label is exactly `agentic-acceptance-criteria`.
-- An `issue_comment/created` event attached to a PR where the body begins with `/agentic-acceptance-criteria`.
+- Bundler `PATH` sources rooted under `components`.
+- Yarn workspaces.
+- `file:` and `link:` dependencies.
 
-Additional behavior:
+Detect semantic version increases and Git revision/ref changes. Include direct and transitive upgrades, but deduplicate identical package/version pairs repeated across component lockfiles.
 
-- Require the PR to be open.
-- Allow any commenter with access to the private repository, matching the current review workflow.
-- Pass the complete slash-command comment through `additional-prompt`.
-- Use the existing `AGENTIC_REVIEW_GITHUB_APP_ID`, `AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY`, and `AGENTIC_REVIEW_PROVIDER_API_KEY` secrets.
-- Grant only `contents: read` and `pull-requests: write`.
-- Use a PR-specific acceptance-criteria concurrency group with `cancel-in-progress: true`; a newer request supersedes an older in-progress generation.
-- Do not consult or share the `agentic-review-opt-out` label because acceptance-criteria generation is explicitly invoked rather than automatic.
-- Do not alter the existing `@nitro-pr-review` trigger. The slash command contains no review-bot mention and therefore triggers only acceptance criteria.
+### Public Source Retrieval
 
-## Rollout
+Retrieve evidence only from public sources in the initial implementation:
 
-This requires two PRs, merged in order:
+- Download and safely unpack exact old/new RubyGem and npm package archives.
+- Compare old/new revisions for public Git dependencies.
+- When Ruby and JavaScript packages resolve to the same public repository and version range, group them into one source comparison where possible to avoid duplicate context, particularly for Playbook upgrades.
 
-1. Merge the reusable action into `github-actions-workflows`.
-2. Copy the resulting immutable commit SHA from `main`.
-3. Open the `nitro-web` PR adding its dedicated workflow and pin `uses:` to that SHA.
-4. Create the `agentic-acceptance-criteria` repository label if it does not already exist.
-5. After the workflow exists on `nitro-web`'s default branch, validate it on a separate open PR.
+Never execute downloaded package contents. Restrict retrieval to HTTPS, validate archive paths and symlinks, enforce download and extraction timeouts, and keep temporary content outside the checked-out repository.
 
-Merging the shared action first is the safest sequence. It prevents `nitro-web` from depending on an unmerged branch and ensures later shared-action changes cannot silently alter the pinned consumer.
+Produce three outputs:
+
+1. A machine-readable manifest listing every detected upgrade, whether it is direct or transitive, its source, retrieval status, and any warning.
+2. A complete retrieved delta artifact capped at 10 MiB.
+3. A provider-context delta capped at 100 KiB per dependency and 500 KiB total.
+
+Prioritize context in this order:
+
+1. Direct dependencies.
+2. Git-pinned dependencies.
+3. Transitive dependencies.
+
+Within each dependency, prioritize changelogs and release notes, runtime source, tests, documentation, and generated/vendor files in that order. Truncate only at file-diff boundaries and record every omission in the manifest.
+
+Continue generation when retrieval fails or is truncated. In that case:
+
+- Add a concise warning beneath the generated plan heading.
+- Emit a GitHub Actions warning.
+- Add full details to the job summary.
+- Upload the dependency manifest and available delta artifacts.
+
+### Prompt Changes
+
+Update the shared CoBRA prompt to:
+
+- Treat `pr.diff` as the primary scope of the PR.
+- Read the dependency manifest and bounded dependency delta when present.
+- Correlate relevant external dependency behavior changes with the application changes.
+- Add functional or regression coverage only when supported by the combined evidence.
+- Avoid inventing effects from unrelated dependency internals.
+- Keep dependency filenames, implementation details, and source terminology out of the rendered manual test plan.
+
+### Deferred Private-Source Options
+
+Private sources are intentionally deferred from the initial release.
+
+Possible follow-up approaches are:
+
+- **Owner-scoped token from the existing GitHub App:** quickest to implement and can be restricted to `contents: read`, but the token can read every repository included in that installation.
+- **Dedicated dependency-reader GitHub App:** provides tighter repository-level access, but requires separate app installation, credentials, and maintenance.
+- **Read-only `npm.powerapp.cloud` token:** enables exact private package archive retrieval, but introduces another secret, permission boundary, and rotation requirement.
+
+Until a private-source approach is selected, private Git or registry dependencies will produce the visible warning and generation will continue. Public Playbook packages and repositories remain covered.
+
+## Nitro Workflow and Rollout
+
+1. Merge the shared engine, profile definitions, mergeability gate, and dependency preprocessing into `github-actions-workflows`.
+2. Create a Nitro GitHub Actions secret named `TEST_PLAN_PROVIDER_API_KEY` containing the new Cursor key.
+3. Continue using the existing GitHub App ID and private-key secrets. Do not change `agentic-pr-review` or its provider API key.
+4. Replace Nitro's current workflow with a label-only `pull_request: [labeled]` workflow:
+   - `cobra-test-plan` maps to the standard profile.
+   - `enhanced-cobra-test-plan` maps to the enhanced profile.
+   - Remove `issue_comment` entirely.
+   - Pass no comment body or additional instructions.
+   - Use profile-specific PR concurrency groups so the two variants do not block or overwrite one another.
+5. Pin Nitro to the resulting immutable shared-repository commit SHA.
+6. Create both new labels with descriptions explaining their model and cost distinction.
+7. Smoke-test both profiles, then delete the old `agentic-acceptance-criteria` label. Leave historical comments untouched unless a new profile run replaces its own authoritative comment.
+8. Do not deploy the pair to Tempo or the five non-CoBRA repositories in this rollout. Existing pending legacy workflow PRs should be closed or revised later because they use the obsolete generic/comment-trigger design.
 
 ## Tests and Acceptance
 
-### Reusable action tests
+### Shared Engine and Output
 
-- Parse valid structured output.
-- Recover JSON from fenced or prefixed output.
-- Reject malformed roots and invalid field types.
-- Normalize and deduplicate roles, permission-change notes, Subject/Action pairs, steps, and regression checks.
-- Generate fallback `AC` scenario identifiers.
-- Render the exact Markdown hierarchy, landing-page URLs, per-case permissions, and numbering.
-- Render permission-change callouts and ensure every distinctly affected reachable page is represented.
-- Reference regression-applicable functional identifiers without repeating their full scenarios.
-- Render the explicit no-manual-QA result.
-- Preserve the last successful comment when generation or parsing fails.
+- Preserve and relocate all existing parser, formatter, rendering, permission-resolution, no-manual-QA, and comment-lifecycle specs.
+- Resolve both valid profiles and reject unknown or path-traversal profile values.
+- Verify the standard profile omits `--model`.
+- Verify the enhanced profile passes exactly `claude-opus-5[effort=high]`.
+- Verify the two profiles use independent comment and artifact namespaces.
+- Verify there is no `additional-prompt` input or comment-text prompt path.
+- Confirm both variants retain the same JSON schema and Markdown hierarchy.
 
-### Workflow validation
+### Mergeability
 
-- Applying `agentic-acceptance-criteria` to an open PR runs only the acceptance-criteria action.
-- `/agentic-acceptance-criteria` runs only the acceptance-criteria action.
-- Text after the slash command reaches Cursor as additional guidance.
-- `@nitro-pr-review` continues to run only code review.
-- Opening a PR, marking it ready, and pushing commits do not trigger acceptance criteria.
-- Ordinary comments, comments on issues, and triggers against closed PRs are ignored.
-- Repeated runs update one comment instead of adding duplicate QA plans.
-- A newer trigger cancels an older acceptance-criteria run for the same PR.
-- The GitHub App authors the progress, result, and failure comments.
+- `MERGEABLE` proceeds through the normal generation pipeline.
+- `CONFLICTING` skips checkout, diff construction, dependency retrieval, and provider invocation.
+- `UNKNOWN` retries and proceeds if GitHub later reports `MERGEABLE`.
+- Persistent `UNKNOWN` posts the distinct retry message and makes no provider call.
+- Standard and enhanced conflict runs update only their respective authoritative comments.
+- A conflict message replaces a previous plan for that profile.
+- A successful rerun replaces the conflict message with the new plan.
+- Conflict handling completes successfully and records the reason in the job summary.
 
-Run the standalone Ruby specs, validate the action and workflow YAML, and complete one label-triggered and one slash-command smoke test in `nitro-web`.
+### Dependency Detection and Retrieval
+
+- Detect direct and transitive Bundler upgrades.
+- Detect direct and transitive Yarn v1 upgrades.
+- Deduplicate upgrades repeated across component lockfiles.
+- Exclude local Bundler PATH components and Yarn workspaces/file/link dependencies.
+- Ignore version decreases and removals as dependency raises.
+- Detect changed Git revisions even when the package version is unchanged.
+- Retrieve public RubyGem, npm, and Git fixtures successfully.
+- Continue with warnings for private, missing, timed-out, or malformed sources.
+- Reject path traversal, unsafe symlinks, oversized archives, and other unsafe extraction inputs.
+- Apply deterministic prioritization and file-boundary truncation.
+- Include dependency context only when a qualifying raise is detected.
+
+### Nitro Smoke Tests
+
+- Applying `cobra-test-plan` runs only the standard profile.
+- Applying `enhanced-cobra-test-plan` runs only the enhanced profile.
+- Applying both produces two independent, updatable comments.
+- Enhanced logs confirm `claude-opus-5[effort=high]`.
+- A public Playbook upgrade retrieves and uses its version delta.
+- Missing, private, or truncated deltas visibly warn but still produce a plan.
+- A conflicted PR produces the blocked message and consumes no provider usage.
+- Resolving the conflict and reapplying the label replaces the blocked message with a plan.
+- Ordinary PR comments and the former slash command trigger nothing.
+- The new key's usage appears in the test-plan Cursor bucket, while Nitro PR review usage remains on its existing key.
+- Repeated runs update only the matching profile comment.
+- Provider or parsing failures preserve the previous successful plan.
+
+## Assumptions
+
+- Generated PR comments remain required; only user-authored comment triggers and prompt injection are removed.
+- Both profiles receive the dependency-aware prompt enhancement.
+- `claude-opus-5[effort=high]` is enabled for the Cursor account associated with the new key.
+- External means anything not supplied by the local CoBRA `components` workspace, including transitive packages.
+- Initial dependency retrieval is limited to public sources.
+- The new provider key is stored only as a GitHub Actions secret and is shared by the two test-plan profiles, separate from `nitro-pr-review`.
+- Conflict resolution does not trigger generation automatically; the user must remove and reapply the desired label.
