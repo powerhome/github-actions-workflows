@@ -7,6 +7,7 @@ gemfile do
 end
 
 require "fileutils"
+require "open3"
 require "rspec/autorun"
 require "stringio"
 require "tmpdir"
@@ -145,11 +146,12 @@ RSpec.describe "dependency delta generation" do
 
   describe DependencyChangeDetector do
     class FakeSnapshot
-      attr_reader :base_sha, :head_sha
+      attr_reader :base_sha, :merge_base_sha, :head_sha
 
       def initialize(files)
         @files = files
-        @base_sha = "base"
+        @base_sha = "base_tip"
+        @merge_base_sha = "merge_base"
         @head_sha = "head"
       end
 
@@ -179,7 +181,7 @@ RSpec.describe "dependency delta generation" do
       LOCK
       new_lock = old_lock.gsub('version "1.0.0"', 'version "2.0.0"')
       snapshot = FakeSnapshot.new(
-        "base" => { "yarn.lock" => old_lock },
+        "merge_base" => { "yarn.lock" => old_lock },
         "head" => {
           "yarn.lock" => new_lock,
           "package.json" => JSON.generate(
@@ -213,7 +215,7 @@ RSpec.describe "dependency delta generation" do
         LOCK
       end
       snapshot = FakeSnapshot.new(
-        "base" => {
+        "merge_base" => {
           "one/Gemfile.lock" => lock.call("1.0.0"),
           "two/Gemfile.lock" => lock.call("1.0.0"),
         },
@@ -231,6 +233,33 @@ RSpec.describe "dependency delta generation" do
       expect(changes.first.lockfiles).to contain_exactly("one/Gemfile.lock", "two/Gemfile.lock")
     end
 
+    it "compares against the merge base rather than the base tip" do
+      lock = lambda do |version|
+        <<~LOCK
+          GEM
+            remote: https://rubygems.org/
+            specs:
+              shared_gem (#{version})
+
+          DEPENDENCIES
+            shared_gem
+        LOCK
+      end
+      snapshot = FakeSnapshot.new(
+        "merge_base" => { "Gemfile.lock" => lock.call("1.0.0") },
+        # The base branch raised the gem further after this PR forked. That raise
+        # belongs to the base branch, not to this PR.
+        "base_tip" => { "Gemfile.lock" => lock.call("3.0.0") },
+        "head" => { "Gemfile.lock" => lock.call("2.0.0") }
+      )
+      allow(snapshot).to receive(:changed_dependency_files).and_return(["Gemfile.lock"])
+
+      changes = described_class.new(snapshot).detect
+
+      expect(changes.length).to eq(1)
+      expect(changes.first).to have_attributes(old_version: "1.0.0", new_version: "2.0.0")
+    end
+
     it "records an unreadable lockfile as a problem and keeps analyzing the others" do
       readable = <<~LOCK
         GEM
@@ -242,7 +271,7 @@ RSpec.describe "dependency delta generation" do
           good_gem
       LOCK
       snapshot = FakeSnapshot.new(
-        "base" => {
+        "merge_base" => {
           "broken/Gemfile.lock" => "GEM\n  remote: https://rubygems.org/\n  specs:\n    bad_gem (not-a-version)\n",
           "good/Gemfile.lock" => readable.sub("VERSION", "1.0.0"),
         },
@@ -261,6 +290,44 @@ RSpec.describe "dependency delta generation" do
       expect(changes.map(&:name)).to eq(["good_gem"])
       expect(detector.problems.map(&:path)).to eq(["broken/Gemfile.lock"])
       expect(detector.problems.first.message).to include("Unable to parse broken/Gemfile.lock")
+    end
+  end
+
+  describe GitSnapshot do
+    def git(directory, *args)
+      stdout, stderr, status = Open3.capture3("git", *args, chdir: directory)
+      raise "git #{args.join(" ")} failed: #{stderr}" unless status.success?
+
+      stdout
+    end
+
+    it "resolves the merge base and reads the old side from it" do
+      Dir.mktmpdir do |directory|
+        git(directory, "init", "--initial-branch", "main", ".")
+        git(directory, "config", "user.email", "test@example.com")
+        git(directory, "config", "user.name", "Test")
+
+        File.write(File.join(directory, "Gemfile.lock"), "fork point\n")
+        git(directory, "add", ".")
+        git(directory, "commit", "-m", "fork point")
+        fork_point = git(directory, "rev-parse", "HEAD").strip
+
+        git(directory, "checkout", "-b", "feature")
+        File.write(File.join(directory, "Gemfile.lock"), "head\n")
+        git(directory, "commit", "-am", "head")
+        head_sha = git(directory, "rev-parse", "HEAD").strip
+
+        git(directory, "checkout", "main")
+        File.write(File.join(directory, "Gemfile.lock"), "base tip\n")
+        git(directory, "commit", "-am", "base tip")
+        base_sha = git(directory, "rev-parse", "HEAD").strip
+
+        snapshot = described_class.new(workspace: directory, base_sha: base_sha, head_sha: head_sha)
+
+        expect(snapshot.merge_base_sha).to eq(fork_point)
+        expect(snapshot.read(snapshot.merge_base_sha, "Gemfile.lock")).to eq("fork point\n")
+        expect(snapshot.changed_dependency_files).to eq(["Gemfile.lock"])
+      end
     end
   end
 

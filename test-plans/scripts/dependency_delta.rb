@@ -54,8 +54,15 @@ class GitSnapshot
 
   attr_reader :base_sha, :head_sha
 
+  # pr.diff is a merge-base diff, so dependency evidence has to compare against the
+  # merge base too. Reading the base tip instead would attribute changes made on the
+  # base branch after the PR forked to the PR itself.
+  def merge_base_sha
+    @merge_base_sha ||= git("merge-base", base_sha, head_sha).strip
+  end
+
   def changed_dependency_files
-    stdout = git("diff", "--name-only", "#{base_sha}...#{head_sha}")
+    stdout = git("diff", "--name-only", "#{merge_base_sha}..#{head_sha}")
     stdout.lines.map(&:strip).select do |path|
       path.end_with?("Gemfile.lock", "yarn.lock", "package.json")
     end
@@ -340,7 +347,7 @@ class DependencyChangeDetector
         detecting(path) do
           BundlerChangeDetector.new.detect(
             path: path,
-            old_content: @snapshot.read(@snapshot.base_sha, path),
+            old_content: @snapshot.read(@snapshot.merge_base_sha, path),
             new_content: @snapshot.read(@snapshot.head_sha, path),
             direct_names: ruby_direct_names
           )
@@ -353,7 +360,7 @@ class DependencyChangeDetector
         detecting(path) do
           YarnChangeDetector.new.detect(
             path: path,
-            old_content: @snapshot.read(@snapshot.base_sha, path),
+            old_content: @snapshot.read(@snapshot.merge_base_sha, path),
             new_content: @snapshot.read(@snapshot.head_sha, path),
             direct_names: direct_names,
             workspace_names: workspace_names
