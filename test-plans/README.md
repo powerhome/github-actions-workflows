@@ -48,7 +48,7 @@ Artifacts include:
 - `dependency-deltas-full.diff` (maximum 10 MiB)
 - `dependency-deltas-context.diff` (maximum 100 KiB per dependency and 500 KiB total)
 
-Missing private sources, failed downloads, and truncation do not fail the plan. They produce a warning in the PR comment, workflow annotation, job summary, and dependency manifest.
+Unreadable lockfiles, missing private sources, failed downloads, and truncation do not fail the plan. A lockfile the action cannot parse is skipped and reported; the remaining lockfiles are still analyzed. Every such case produces a warning in the PR comment, workflow annotation, job summary, and dependency manifest.
 
 ## Caller Workflow
 

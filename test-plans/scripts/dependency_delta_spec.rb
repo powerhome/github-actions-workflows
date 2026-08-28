@@ -230,6 +230,38 @@ RSpec.describe "dependency delta generation" do
       expect(changes.length).to eq(1)
       expect(changes.first.lockfiles).to contain_exactly("one/Gemfile.lock", "two/Gemfile.lock")
     end
+
+    it "records an unreadable lockfile as a problem and keeps analyzing the others" do
+      readable = <<~LOCK
+        GEM
+          remote: https://rubygems.org/
+          specs:
+            good_gem (VERSION)
+
+        DEPENDENCIES
+          good_gem
+      LOCK
+      snapshot = FakeSnapshot.new(
+        "base" => {
+          "broken/Gemfile.lock" => "GEM\n  remote: https://rubygems.org/\n  specs:\n    bad_gem (not-a-version)\n",
+          "good/Gemfile.lock" => readable.sub("VERSION", "1.0.0"),
+        },
+        "head" => {
+          "broken/Gemfile.lock" => "GEM\n  remote: https://rubygems.org/\n  specs:\n    bad_gem (also-bad)\n",
+          "good/Gemfile.lock" => readable.sub("VERSION", "2.0.0"),
+        }
+      )
+      allow(snapshot).to receive(:changed_dependency_files).and_return(
+        ["broken/Gemfile.lock", "good/Gemfile.lock"]
+      )
+
+      detector = described_class.new(snapshot)
+      changes = detector.detect
+
+      expect(changes.map(&:name)).to eq(["good_gem"])
+      expect(detector.problems.map(&:path)).to eq(["broken/Gemfile.lock"])
+      expect(detector.problems.first.message).to include("Unable to parse broken/Gemfile.lock")
+    end
   end
 
   describe SafeTarExtractor do
@@ -304,6 +336,20 @@ RSpec.describe "dependency delta generation" do
       result = described_class.new(changes: [change], retriever: retriever).generate
       entry = result.dig(:manifest, "dependencies", 0)
       expect(entry).to include("status" => "unavailable", "warnings" => ["not public"])
+      expect(result.dig(:manifest, "warning_count")).to eq(1)
+    end
+
+    it "reports lockfiles it could not analyze without failing generation" do
+      problem = DependencyChangeDetector::LockfileProblem.new(
+        path: "components/broken/Gemfile.lock",
+        message: "Unable to parse components/broken/Gemfile.lock: boom"
+      )
+
+      result = described_class.new(changes: [], problems: [problem]).generate
+
+      expect(result.dig(:manifest, "lockfile_warnings")).to eq(
+        [{ "lockfile" => "components/broken/Gemfile.lock", "warning" => problem.message }]
+      )
       expect(result.dig(:manifest, "warning_count")).to eq(1)
     end
 

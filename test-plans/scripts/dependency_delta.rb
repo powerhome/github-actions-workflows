@@ -109,7 +109,7 @@ class BundlerChangeDetector
         direct: direct_names.include?(name)
       )
     end
-  rescue Bundler::LockfileError, ArgumentError => e
+  rescue Bundler::BundlerError, ArgumentError => e
     raise "Unable to parse #{path}: #{e.message}"
   end
 
@@ -316,8 +316,17 @@ private
 end
 
 class DependencyChangeDetector
+  LockfileProblem = Struct.new(:path, :message, keyword_init: true) do
+    def to_h
+      { "lockfile" => path, "warning" => message }
+    end
+  end
+
+  attr_reader :problems
+
   def initialize(snapshot)
     @snapshot = snapshot
+    @problems = []
   end
 
   def detect
@@ -328,24 +337,28 @@ class DependencyChangeDetector
 
     changed.grep(/Gemfile\.lock\z/).each do |path|
       changes.concat(
-        BundlerChangeDetector.new.detect(
-          path: path,
-          old_content: @snapshot.read(@snapshot.base_sha, path),
-          new_content: @snapshot.read(@snapshot.head_sha, path),
-          direct_names: ruby_direct_names
-        )
+        detecting(path) do
+          BundlerChangeDetector.new.detect(
+            path: path,
+            old_content: @snapshot.read(@snapshot.base_sha, path),
+            new_content: @snapshot.read(@snapshot.head_sha, path),
+            direct_names: ruby_direct_names
+          )
+        end
       )
     end
 
     changed.grep(/yarn\.lock\z/).each do |path|
       changes.concat(
-        YarnChangeDetector.new.detect(
-          path: path,
-          old_content: @snapshot.read(@snapshot.base_sha, path),
-          new_content: @snapshot.read(@snapshot.head_sha, path),
-          direct_names: direct_names,
-          workspace_names: workspace_names
-        )
+        detecting(path) do
+          YarnChangeDetector.new.detect(
+            path: path,
+            old_content: @snapshot.read(@snapshot.base_sha, path),
+            new_content: @snapshot.read(@snapshot.head_sha, path),
+            direct_names: direct_names,
+            workspace_names: workspace_names
+          )
+        end
       )
     end
 
@@ -353,6 +366,15 @@ class DependencyChangeDetector
   end
 
 private
+
+  # An unreadable lockfile costs us evidence for that file only. Recording it as a
+  # warning keeps the rest of the delta, and the test plan itself, intact.
+  def detecting(path)
+    yield
+  rescue => e
+    @problems << LockfileProblem.new(path: path, message: e.message)
+    []
+  end
 
   def package_names
     direct = Set.new
@@ -364,7 +386,7 @@ private
       next unless content
 
       package = JSON.parse(content)
-      packages << [path, package]
+      packages << [path, package] if package.is_a?(Hash)
     rescue JSON::ParserError
       next
     end
@@ -376,7 +398,10 @@ private
       end
 
       %w[dependencies devDependencies optionalDependencies peerDependencies].each do |field|
-        package.fetch(field, {}).each do |name, requirement|
+        requirements = package[field]
+        next unless requirements.is_a?(Hash)
+
+        requirements.each do |name, requirement|
           direct << name
           local << name if local_requirement?(requirement)
         end
@@ -700,9 +725,10 @@ class DependencyDeltaGenerator
   CONTEXT_PER_DEPENDENCY_LIMIT = 100 * 1024
   CONTEXT_TOTAL_LIMIT = 500 * 1024
 
-  def initialize(changes:, retriever: PublicDependencyRetriever.new)
+  def initialize(changes:, retriever: PublicDependencyRetriever.new, problems: [])
     @changes = changes.sort_by { |change| [change.direct ? 0 : 1, change.source == "git" ? 0 : 1, change.name] }
     @retriever = retriever
+    @problems = problems
   end
 
   def generate
@@ -739,11 +765,15 @@ class DependencyDeltaGenerator
       entries << entry
     end
 
+    lockfile_warnings = @problems.map(&:to_h)
+
     {
       manifest: {
         "version" => 1,
         "dependencies" => entries,
-        "warning_count" => entries.count { |entry| entry.fetch("status") != "retrieved" },
+        "lockfile_warnings" => lockfile_warnings,
+        "warning_count" => entries.count { |entry| entry.fetch("status") != "retrieved" } +
+          lockfile_warnings.length,
       },
       full: full,
       context: context,
@@ -780,7 +810,7 @@ private
 end
 
 class DependencyDeltaCommand
-  WARNING_MESSAGE = "Some external dependency source deltas could not be retrieved completely; see the workflow run and dependency manifest."
+  WARNING_MESSAGE = "Some external dependency evidence could not be collected completely; see the workflow run and dependency manifest."
 
   def run
     workspace = ENV.fetch("GITHUB_WORKSPACE")
@@ -789,8 +819,9 @@ class DependencyDeltaCommand
       base_sha: ENV.fetch("BASE_SHA"),
       head_sha: ENV.fetch("HEAD_SHA")
     )
-    changes = DependencyChangeDetector.new(snapshot).detect
-    result = DependencyDeltaGenerator.new(changes: changes).generate
+    detector = DependencyChangeDetector.new(snapshot)
+    changes = detector.detect
+    result = DependencyDeltaGenerator.new(changes: changes, problems: detector.problems).generate
 
     manifest_path = ENV.fetch("DEPENDENCY_DELTA_MANIFEST_PATH")
     full_path = ENV.fetch("DEPENDENCY_DELTA_FULL_PATH")
@@ -820,6 +851,7 @@ private
     return if summary_path.to_s.empty?
 
     dependencies = manifest.fetch("dependencies")
+    lockfile_warnings = manifest.fetch("lockfile_warnings")
     File.open(summary_path, "a", encoding: Encoding::UTF_8) do |summary|
       summary.puts("## External dependency delta")
       if dependencies.empty?
@@ -829,6 +861,11 @@ private
           summary.puts("- `#{entry.fetch("name")}`: #{entry.fetch("old_version")} -> #{entry.fetch("new_version")} (#{entry.fetch("status")})")
           entry.fetch("warnings").each { |warning| summary.puts("  - #{warning}") }
         end
+      end
+
+      lockfile_warnings.each do |warning|
+        summary.puts("- `#{warning.fetch("lockfile")}`: not analyzed")
+        summary.puts("  - #{warning.fetch("warning")}")
       end
     end
   end
