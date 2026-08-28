@@ -593,6 +593,10 @@ end
 class SafeTarExtractor
   MAX_EXTRACTED_BYTES = 100 * 1024 * 1024
   MAX_FILES = 20_000
+  # pax extended headers carry metadata about the *next* entry, not content of their
+  # own. GitHub's codeload tarballs open with a global one, so refusing them refuses
+  # every Git dependency archive.
+  PAX_HEADER_TYPEFLAGS = %w[g x].freeze
 
   def extract_gzip(path, destination)
     Zlib::GzipReader.open(path) do |gzip|
@@ -624,6 +628,8 @@ private
     root = File.expand_path(destination)
 
     tar.each do |entry|
+      next if PAX_HEADER_TYPEFLAGS.include?(entry.header.typeflag)
+
       relative = safe_relative_path(entry.full_name)
       next if relative == "."
 
