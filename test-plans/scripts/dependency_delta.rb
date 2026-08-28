@@ -817,14 +817,20 @@ private
     false
   end
 
+  # Each revision has to come from the repository that actually recorded it. When a
+  # dependency moves to a fork or a transferred repository, fetching the old revision
+  # from the new repository 404s and loses a delta that is public on both sides.
   def retrieve_git(change, directory, old_root, new_root)
-    repository = github_repository(change.new_locator) || github_repository(change.old_locator)
-    raise "Git dependency is not a public GitHub repository" unless repository
+    old_repository = github_repository(change.old_locator) || github_repository(change.new_locator)
+    new_repository = github_repository(change.new_locator) || github_repository(change.old_locator)
+    unless old_repository && new_repository
+      raise "Git dependency is not a public GitHub repository"
+    end
 
     old_archive = File.join(directory, "old.tgz")
     new_archive = File.join(directory, "new.tgz")
-    @downloader.download(github_archive_url(repository, change.old_version), old_archive)
-    @downloader.download(github_archive_url(repository, change.new_version), new_archive)
+    @downloader.download(github_archive_url(old_repository, change.old_version), old_archive)
+    @downloader.download(github_archive_url(new_repository, change.new_version), new_archive)
     @extractor.extract_gzip(old_archive, old_root)
     @extractor.extract_gzip(new_archive, new_root)
   end

@@ -505,6 +505,45 @@ RSpec.describe "dependency delta generation" do
       expect(downloader.downloaded).to be_empty
     end
 
+    it "fetches each Git revision from the repository that recorded it" do
+      downloader = FakeDownloader.new
+      change = DependencyChange.new(
+        ecosystem: "yarn", name: "widget", old_version: "aaa111", new_version: "bbb222",
+        source: "git",
+        old_locator: "git+https://github.com/example/widget.git#aaa111",
+        new_locator: "git+https://github.com/someone/widget-fork.git#bbb222",
+        direct: true, lockfiles: ["yarn.lock"]
+      )
+
+      retriever(downloader).retrieve(change)
+
+      expect(downloader.downloaded).to eq(
+        [
+          "https://codeload.github.com/example/widget/tar.gz/aaa111",
+          "https://codeload.github.com/someone/widget-fork/tar.gz/bbb222",
+        ]
+      )
+    end
+
+    it "falls back to the other locator when one side records no repository" do
+      downloader = FakeDownloader.new
+      change = DependencyChange.new(
+        ecosystem: "bundler", name: "widget", old_version: "aaa111", new_version: "bbb222",
+        source: "git", old_locator: nil,
+        new_locator: "https://github.com/example/widget.git",
+        direct: true, lockfiles: ["Gemfile.lock"]
+      )
+
+      retriever(downloader).retrieve(change)
+
+      expect(downloader.downloaded).to eq(
+        [
+          "https://codeload.github.com/example/widget/tar.gz/aaa111",
+          "https://codeload.github.com/example/widget/tar.gz/bbb222",
+        ]
+      )
+    end
+
     it "resolves the repository and revision from a yarn codeload locator" do
       retriever = described_class.new
       locator = "https://codeload.github.com/example/git-package/tar.gz/abc123"
