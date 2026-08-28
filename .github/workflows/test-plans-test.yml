@@ -1,0 +1,31 @@
+name: test-plans
+
+on:
+  push:
+    paths:
+      - 'test-plans/**'
+      - '.github/workflows/test-plans-test.yml'
+
+jobs:
+  specs:
+    runs-on: ubuntu-latest
+    name: Ruby specs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Run test-plan specs
+        shell: bash
+        # No setup-ruby: the action itself runs on the runner's preinstalled Ruby,
+        # so the specs should exercise that same interpreter.
+        run: |
+          set -euo pipefail
+
+          ruby --version
+
+          status=0
+          for spec in test-plans/scripts/*_spec.rb; do
+            echo "::group::${spec}"
+            ruby "${spec}" || status=1
+            echo "::endgroup::"
+          done
+
+          exit "${status}"
