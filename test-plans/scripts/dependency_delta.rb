@@ -902,6 +902,7 @@ class DependencyDeltaGenerator
     @changes = changes.sort_by { |change| [change.direct ? 0 : 1, change.source == "git" ? 0 : 1, change.name] }
     @retriever = retriever
     @problems = problems
+    @related = build_related(@changes)
   end
 
   def generate
@@ -944,12 +945,14 @@ class DependencyDeltaGenerator
             "from the provider context."
         end
 
+        entry["related"] = related_for(change)
         entry["context_files"] = diffs.length - omitted_from_context.length
         entry["omitted_from_context"] = omitted_from_context.sort
         entry["omitted_from_artifact"] = omitted_from_artifact.sort
         entry["status"] = omitted_from_context.any? ? "truncated" : "retrieved"
       rescue => e
         entry["status"] = "unavailable"
+        entry["related"] = related_for(change)
         entry["changed_files"] = 0
         entry["context_files"] = 0
         entry["omitted_from_context"] = []
@@ -984,8 +987,39 @@ private
     "#{bytes / 1024 / 1024} MiB"
   end
 
+  # A gem and an npm package released in lockstep from one upstream project -- Playbook
+  # is the case this exists for -- are one release, not two independent upgrades. Their
+  # published artifacts genuinely differ (Rails kits versus compiled components), so
+  # both deltas are kept; the link only stops the provider reading them as two
+  # unrelated changes and writing coverage twice.
+  def build_related(changes)
+    changes
+      .group_by { |change| [release_name(change), change.old_version, change.new_version] }
+      .each_with_object({}) do |(_release, group), related|
+        next if group.map(&:ecosystem).uniq.length < 2
+
+        group.each do |change|
+          related[change.key] = (group - [change])
+            .map { |other| "#{other.ecosystem}:#{other.name}" }
+            .sort
+        end
+      end
+  end
+
+  def release_name(change)
+    change.name.to_s.sub(%r{\A@[^/]+/}, "").downcase.tr("_", "-")
+  end
+
+  def related_for(change)
+    @related.fetch(change.key, [])
+  end
+
   def dependency_header(change)
-    "\n## #{change.ecosystem}: #{change.name} (#{change.old_version} -> #{change.new_version})\n\n"
+    related = related_for(change)
+    heading = "\n## #{change.ecosystem}: #{change.name} (#{change.old_version} -> #{change.new_version})\n"
+    return "#{heading}\n" if related.empty?
+
+    "#{heading}Same upstream release as #{related.join(", ")}.\n\n"
   end
 
   # Returns the paths that did not fit, so every omission can be named in the manifest.

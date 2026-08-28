@@ -37,7 +37,7 @@ A blocked run completes successfully, consumes no provider usage, and replaces t
 
 ## Dependency Evidence
 
-The action detects raised Bundler and Yarn v1 dependencies across root and component lockfiles, comparing the merge base against the head so it sees the same range as `pr.diff`. Local CoBRA PATH components and Yarn workspace/file/link packages are excluded. Duplicate raises are collapsed across lockfiles.
+The action detects raised Bundler and Yarn v1 dependencies across root and component lockfiles, comparing the merge base against the head so it sees the same range as `pr.diff`. Local CoBRA PATH components and Yarn workspace/file/link packages are excluded. Duplicate raises are collapsed across lockfiles. A gem and an npm package that move through identical versions together — Playbook, in practice — are linked as one upstream release in the manifest and in the provider context, so the same change is not covered twice. Both deltas are still retrieved, because the published gem and package differ.
 
 For public sources, the action downloads old/new RubyGem or npm archives, or public GitHub revision archives, and creates a deterministic source diff without executing package contents. Retrieval is allowlisted to public HTTPS hosts and enforces archive traversal, link, file-count, expanded-size, download-size, and timeout controls.
 
