@@ -672,6 +672,12 @@ private
   end
 end
 
+SourceDiff = Struct.new(:path, :diff, keyword_init: true) do
+  def bytesize
+    diff.bytesize
+  end
+end
+
 class SourceDiffBuilder
   CHANGELOG_PATTERN = %r{(?:^|/)(?:change(?:log|s)?|history|release(?:s|_notes)?|upgrade(?:_guide)?)(?:\.|/|$)}i
   TEST_PATTERN = %r{(?:^|/)(?:test|tests|spec|specs|__tests__)(?:/|$)}i
@@ -732,7 +738,7 @@ private
     )
     raise "diff failed for #{relative}: #{stderr.strip}" unless [0, 1].include?(status.exitstatus)
 
-    stdout.empty? ? nil : stdout
+    stdout.empty? ? nil : SourceDiff.new(path: relative, diff: stdout)
   end
 end
 
@@ -906,8 +912,8 @@ class DependencyDeltaGenerator
     @changes.each do |change|
       entry = change.to_h
       begin
-        chunks = @retriever.retrieve(change)
-        entry["changed_files"] = chunks.length
+        diffs = @retriever.retrieve(change)
+        entry["changed_files"] = diffs.length
         entry["warnings"] = []
         header = dependency_header(change)
 
@@ -915,33 +921,39 @@ class DependencyDeltaGenerator
         # context affects the generated plan, so only it decides the status; the
         # shared artifact budget being spent by earlier dependencies says nothing
         # about this one's evidence.
-        full_truncated = append_chunks(full, header, chunks, FULL_LIMIT)
+        omitted_from_artifact = append_chunks(full, header, diffs, FULL_LIMIT)
         dependency_context = +""
-        dependency_truncated = append_chunks(
+        omitted_from_context = append_chunks(
           dependency_context,
           header,
-          chunks,
+          diffs,
           CONTEXT_PER_DEPENDENCY_LIMIT
         )
-        total_truncated = append_text(context, dependency_context, CONTEXT_TOTAL_LIMIT)
-
-        if dependency_truncated
-          entry["warnings"] << "Provider context reached the #{kib(CONTEXT_PER_DEPENDENCY_LIMIT)} " \
-            "per-dependency limit; some file diffs were omitted."
-        end
-        if total_truncated
+        if append_text(context, dependency_context, CONTEXT_TOTAL_LIMIT)
+          omitted_from_context = diffs.map(&:path)
           entry["warnings"] << "Provider context reached the #{kib(CONTEXT_TOTAL_LIMIT)} total limit; " \
             "this dependency's delta was omitted."
-        end
-        if full_truncated
-          entry["warnings"] << "The full-delta artifact reached its #{mib(FULL_LIMIT)} limit; this " \
-            "dependency is incomplete in the artifact only, not in the provider context."
+        elsif omitted_from_context.any?
+          entry["warnings"] << "Provider context reached the #{kib(CONTEXT_PER_DEPENDENCY_LIMIT)} " \
+            "per-dependency limit; #{omitted_from_context.length} file diffs were omitted."
         end
 
-        entry["status"] = dependency_truncated || total_truncated ? "truncated" : "retrieved"
+        if omitted_from_artifact.any?
+          entry["warnings"] << "The full-delta artifact reached its #{mib(FULL_LIMIT)} limit; " \
+            "#{omitted_from_artifact.length} file diffs are missing from the artifact only, not " \
+            "from the provider context."
+        end
+
+        entry["context_files"] = diffs.length - omitted_from_context.length
+        entry["omitted_from_context"] = omitted_from_context.sort
+        entry["omitted_from_artifact"] = omitted_from_artifact.sort
+        entry["status"] = omitted_from_context.any? ? "truncated" : "retrieved"
       rescue => e
         entry["status"] = "unavailable"
         entry["changed_files"] = 0
+        entry["context_files"] = 0
+        entry["omitted_from_context"] = []
+        entry["omitted_from_artifact"] = []
         entry["warnings"] = [e.message]
       end
       entries << entry
@@ -976,19 +988,20 @@ private
     "\n## #{change.ecosystem}: #{change.name} (#{change.old_version} -> #{change.new_version})\n\n"
   end
 
-  def append_chunks(target, header, chunks, limit)
-    truncated = false
-    return true if target.bytesize + header.bytesize > limit
+  # Returns the paths that did not fit, so every omission can be named in the manifest.
+  def append_chunks(target, header, diffs, limit)
+    return diffs.map(&:path) if target.bytesize + header.bytesize > limit
 
+    omitted = []
     target << header
-    chunks.each do |chunk|
-      if target.bytesize + chunk.bytesize > limit
-        truncated = true
+    diffs.each do |source_diff|
+      if target.bytesize + source_diff.bytesize > limit
+        omitted << source_diff.path
         next
       end
-      target << chunk << "\n"
+      target << source_diff.diff << "\n"
     end
-    truncated
+    omitted
   end
 
   def append_text(target, text, limit)
@@ -1050,6 +1063,7 @@ private
         dependencies.each do |entry|
           summary.puts("- `#{entry.fetch("name")}`: #{entry.fetch("old_version")} -> #{entry.fetch("new_version")} (#{entry.fetch("status")})")
           entry.fetch("warnings").each { |warning| summary.puts("  - #{warning}") }
+          entry.fetch("omitted_from_context", []).each { |path| summary.puts("  - omitted from context: `#{path}`") }
         end
       end
 

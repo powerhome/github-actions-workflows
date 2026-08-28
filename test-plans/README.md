@@ -41,7 +41,7 @@ The action detects raised Bundler and Yarn v1 dependencies across root and compo
 
 For public sources, the action downloads old/new RubyGem or npm archives, or public GitHub revision archives, and creates a deterministic source diff without executing package contents. Retrieval is allowlisted to public HTTPS hosts and enforces archive traversal, link, file-count, expanded-size, download-size, and timeout controls.
 
-Context is prioritized across dependencies as direct, then Git-pinned, then transitive; and within each dependency as changelogs and release notes, runtime source, tests, documentation, and finally generated or vendored files. Truncation happens only at file-diff boundaries.
+Context is prioritized across dependencies as direct, then Git-pinned, then transitive; and within each dependency as changelogs and release notes, runtime source, tests, documentation, and finally generated or vendored files. Truncation happens only at file-diff boundaries, and the manifest names every file it dropped in `omitted_from_context` and `omitted_from_artifact`.
 
 Artifacts include:
 

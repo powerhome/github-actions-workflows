@@ -493,8 +493,8 @@ RSpec.describe "dependency delta generation" do
 
       chunks = described_class.new(downloader: downloader, extractor: extractor).retrieve(change)
 
-      expect(chunks.length).to eq(1)
-      expect(chunks.first).to include("a/lib/widget.js", "b/lib/widget.js")
+      expect(chunks.map(&:path)).to eq(["lib/widget.js"])
+      expect(chunks.first.diff).to include("a/lib/widget.js", "b/lib/widget.js")
     end
 
     it "keeps both roots intact when only one side has a single directory" do
@@ -514,8 +514,8 @@ RSpec.describe "dependency delta generation" do
 
       # Descending into the new side's lone "lib/" would have offset the roots and
       # reported every file as removed and re-added.
-      expect(chunks.length).to eq(2)
-      expect(chunks.join).to include("a/lib/widget.js", "b/lib/widget.js", "a/README.md")
+      expect(chunks.map(&:path)).to contain_exactly("lib/widget.js", "README.md")
+      expect(chunks.map(&:diff).join).to include("a/lib/widget.js", "b/lib/widget.js", "a/README.md")
     end
 
     it "never strips a wrapper for gems, whose data archives have none" do
@@ -531,7 +531,8 @@ RSpec.describe "dependency delta generation" do
 
       chunks = described_class.new(downloader: downloader, extractor: extractor).retrieve(change)
 
-      expect(chunks.first).to include("a/lib/widget.rb", "b/lib/widget.rb")
+      expect(chunks.map(&:path)).to eq(["lib/widget.rb"])
+      expect(chunks.first.diff).to include("a/lib/widget.rb", "b/lib/widget.rb")
     end
 
     it "refuses gems that did not resolve from rubygems.org" do
@@ -787,8 +788,8 @@ RSpec.describe "dependency delta generation" do
         File.write(File.join(new_root, "lib/example.rb"), "new\n")
 
         chunks = described_class.new.build(old_root, new_root)
-        expect(chunks.first).to include("a/CHANGELOG.md", "b/CHANGELOG.md")
-        expect(chunks.last).to include("a/lib/example.rb", "b/lib/example.rb")
+        expect(chunks.map(&:path)).to eq(["CHANGELOG.md", "lib/example.rb"])
+        expect(chunks.first.diff).to include("a/CHANGELOG.md", "b/CHANGELOG.md")
       end
     end
   end
@@ -849,9 +850,9 @@ RSpec.describe "dependency delta generation" do
       retriever = double("retriever")
       allow(retriever).to receive(:retrieve) do |change|
         if change.name == "aaa-big"
-          Array.new(110) { "x" * (100 * 1024) }
+          Array.new(110) { |index| SourceDiff.new(path: "big/#{index}.rb", diff: "x" * (100 * 1024)) }
         else
-          ["y" * (50 * 1024)]
+          [SourceDiff.new(path: "small.rb", diff: "y" * (50 * 1024))]
         end
       end
 
@@ -865,8 +866,69 @@ RSpec.describe "dependency delta generation" do
       expect(result.dig(:manifest, "warning_count")).to eq(1)
     end
 
+    it "names every file it omitted from the provider context" do
+      diffs = [
+        SourceDiff.new(path: "CHANGELOG.md", diff: "c" * 1024),
+        SourceDiff.new(path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_PER_DEPENDENCY_LIMIT + 1)),
+        SourceDiff.new(path: "lib/small.rb", diff: "s" * 1024),
+      ]
+      result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
+      entry = result.dig(:manifest, "dependencies", 0)
+
+      expect(entry).to include(
+        "status" => "truncated",
+        "changed_files" => 3,
+        "context_files" => 2,
+        "omitted_from_context" => ["lib/huge.rb"]
+      )
+      expect(entry.fetch("warnings").join).to include("1 file diffs were omitted")
+    end
+
+    it "records the whole file list when the total context budget drops a dependency" do
+      # 60 KiB fits the per-dependency budget but not the sliver left in the total.
+      diffs = [
+        SourceDiff.new(path: "a.rb", diff: "a" * (30 * 1024)),
+        SourceDiff.new(path: "b.rb", diff: "b" * (30 * 1024)),
+      ]
+      # Each filler contributes ~99 KiB, just under the per-dependency cap, so six of
+      # them exhaust the 500 KiB total before the dependency under test is reached.
+      fillers = Array.new(6) do |index|
+        DependencyChange.new(
+          ecosystem: "bundler", name: "aaa-filler-#{index}", old_version: "1.0.0",
+          new_version: "2.0.0", source: "rubygems", old_locator: "https://rubygems.org/",
+          new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+        )
+      end
+      retriever = double("retriever")
+      allow(retriever).to receive(:retrieve) do |candidate|
+        if candidate.name.start_with?("aaa-filler")
+          [SourceDiff.new(path: "filler.rb", diff: "f" * (99 * 1024))]
+        else
+          diffs
+        end
+      end
+
+      result = described_class.new(changes: fillers + [change], retriever: retriever).generate
+      entry = result.dig(:manifest, "dependencies").find { |candidate| candidate.fetch("name") == "example" }
+
+      expect(entry).to include(
+        "status" => "truncated",
+        "context_files" => 0,
+        "omitted_from_context" => ["a.rb", "b.rb"]
+      )
+      expect(entry.fetch("warnings").join).to include("total limit")
+    end
+
     it "caps provider context and marks truncation" do
-      retriever = double("retriever", retrieve: ["x" * (described_class::CONTEXT_PER_DEPENDENCY_LIMIT + 1)])
+      retriever = double(
+        "retriever",
+        retrieve: [
+          SourceDiff.new(
+            path: "oversized.rb",
+            diff: "x" * (described_class::CONTEXT_PER_DEPENDENCY_LIMIT + 1)
+          ),
+        ]
+      )
       result = described_class.new(changes: [change], retriever: retriever).generate
       expect(result.dig(:manifest, "dependencies", 0, "status")).to eq("truncated")
       expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
