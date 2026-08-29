@@ -28,11 +28,4 @@ jobs:
           ruby --version
           export PATH="${GEM_HOME}/bin:${PATH}"
 
-          status=0
-          for spec in test-plans/scripts/*_spec.rb; do
-            echo "::group::${spec}"
-            ruby "${spec}" || status=1
-            echo "::endgroup::"
-          done
-
-          exit "${status}"
+          ruby test-plans/spec/run_all.rb

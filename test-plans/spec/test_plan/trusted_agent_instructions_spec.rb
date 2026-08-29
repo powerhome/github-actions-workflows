@@ -1,19 +1,11 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
-
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
+require_relative "../spec_helper"
+require "test_plan/trusted_agent_instructions"
 
 require "fileutils"
 require "open3"
-require "rspec/autorun"
 require "tmpdir"
 
-require_relative "trusted_agent_instructions"
-
-RSpec.describe TrustedAgentInstructions do
+RSpec.describe TestPlan::TrustedAgentInstructions do
   def git(directory, *args)
     stdout, stderr, status = Open3.capture3("git", *args, chdir: directory)
     raise "git #{args.join(" ")} failed: #{stderr}" unless status.success?

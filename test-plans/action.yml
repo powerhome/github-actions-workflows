@@ -35,7 +35,7 @@ runs:
       env:
         TEST_PLAN_ACTION_ROOT: ${{ github.action_path }}
         TEST_PLAN_PROFILE: ${{ inputs.profile }}
-      run: ruby "${{ github.action_path }}/scripts/resolve_profile.rb"
+      run: ruby "${{ github.action_path }}/bin/resolve_profile.rb"
 
     - name: Create GitHub App token
       id: app_token
@@ -50,7 +50,7 @@ runs:
       env:
         GH_TOKEN: ${{ steps.app_token.outputs.token }}
         PR_NUMBER: ${{ inputs.pull-request-number }}
-      run: ruby "${{ github.action_path }}/scripts/pull_request_preflight.rb"
+      run: ruby "${{ github.action_path }}/bin/pull_request_preflight.rb"
 
     - name: Render blocked test-plan message
       if: steps.pr_metadata.outputs.blocked == 'true'
@@ -150,7 +150,7 @@ runs:
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
       run: |
         set -euo pipefail
-        ruby "${{ github.action_path }}/scripts/dependency_delta.rb"
+        ruby "${{ github.action_path }}/bin/dependency_delta.rb"
 
     - name: Reset agent instructions to the merge base
       if: steps.pr_metadata.outputs.generate == 'true'
@@ -158,7 +158,7 @@ runs:
       env:
         BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
         HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
-      run: ruby "${{ github.action_path }}/scripts/trusted_agent_instructions.rb"
+      run: ruby "${{ github.action_path }}/bin/trusted_agent_instructions.rb"
 
     - name: Run test-plan provider
       if: steps.pr_metadata.outputs.generate == 'true'
@@ -173,7 +173,7 @@ runs:
         set -euo pipefail
 
         provider="${PROVIDER:-cursor}"
-        provider_script="${{ github.action_path }}/scripts/providers/${provider}.sh"
+        provider_script="${{ github.action_path }}/providers/${provider}.sh"
 
         if [[ ! -f "${provider_script}" ]]; then
           echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
@@ -203,7 +203,7 @@ runs:
         TEST_PLAN_PROFILE_NAME: ${{ steps.profile.outputs.display_name }}
         TEST_PLAN_GENERATION_WARNING: ${{ steps.dependency_delta.outputs.generation_warning }}
         PULL_REQUEST_TITLE: ${{ steps.pr_metadata.outputs.title }}
-      run: ruby "${{ github.action_path }}/scripts/render_test_plan.rb"
+      run: ruby "${{ github.action_path }}/bin/render_test_plan.rb"
 
     - name: Upsert test-plan comment
       id: test_plan_comment

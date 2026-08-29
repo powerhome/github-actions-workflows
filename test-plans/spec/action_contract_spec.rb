@@ -1,16 +1,9 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
+require_relative "spec_helper"
 
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
-
-require "rspec/autorun"
 require "yaml"
 
 RSpec.describe "test-plans/action.yml" do
-  let(:action_path) { File.expand_path("../action.yml", __dir__) }
+  let(:action_path) { File.join(ACTION_ROOT, "action.yml") }
   let(:action) { YAML.safe_load_file(action_path, aliases: true) }
   let(:steps) { action.fetch("runs").fetch("steps") }
 

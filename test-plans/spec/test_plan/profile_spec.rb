@@ -1,19 +1,11 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
-
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
+require_relative "../spec_helper"
+require "test_plan/profile"
 
 require "json"
-require "rspec/autorun"
 require "tmpdir"
 
-require_relative "test_plan_profile"
-
-RSpec.describe TestPlanProfile do
-  let(:action_root) { File.expand_path("..", __dir__) }
+RSpec.describe TestPlan::Profile do
+  let(:action_root) { ACTION_ROOT }
 
   it "loads the standard Cobra profile without a model override" do
     profile = described_class.load(

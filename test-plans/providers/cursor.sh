@@ -31,7 +31,7 @@ if [[ ! -f "${TEST_PLAN_PROMPT_PATH}" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ACTION_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CLI_CONFIG_TEMPLATE="${ACTION_ROOT}/config/cli-config.json"
 
 cd "${GITHUB_WORKSPACE}"

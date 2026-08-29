@@ -1,22 +1,14 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
-
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
+require_relative "../spec_helper"
+require "test_plan/dependency_delta"
 
 require "fileutils"
 require "open3"
-require "rspec/autorun"
 require "stringio"
 require "tmpdir"
 require "zlib"
 
-require_relative "dependency_delta"
-
 RSpec.describe "dependency delta generation" do
-  describe BundlerChangeDetector do
+  describe TestPlan::DependencyDelta::BundlerChangeDetector do
     let(:old_lock) do
       <<~LOCK
         GIT
@@ -96,7 +88,7 @@ RSpec.describe "dependency delta generation" do
     end
   end
 
-  describe YarnChangeDetector do
+  describe TestPlan::DependencyDelta::YarnChangeDetector do
     let(:old_lock) do
       <<~LOCK
         # yarn lockfile v1
@@ -227,7 +219,7 @@ RSpec.describe "dependency delta generation" do
     end
   end
 
-  describe DependencyChangeDetector do
+  describe TestPlan::DependencyDelta::ChangeDetector do
     class FakeSnapshot
       attr_reader :base_sha, :merge_base_sha, :head_sha
 
@@ -349,14 +341,14 @@ RSpec.describe "dependency delta generation" do
     end
 
     it "keeps Git raises from different repositories separate" do
-      same_repo = DependencyChange.new(
+      same_repo = TestPlan::DependencyDelta::Change.new(
         ecosystem: "yarn", name: "widget", old_version: "aaa", new_version: "bbb", source: "git",
         old_locator: "git+https://github.com/example/widget.git#aaa",
         new_locator: "https://codeload.github.com/example/widget/tar.gz/bbb",
         direct: true, lockfiles: ["a/yarn.lock"]
       )
       equivalent = same_repo.dup.tap { |change| change.lockfiles = ["b/yarn.lock"] }
-      forked = DependencyChange.new(
+      forked = TestPlan::DependencyDelta::Change.new(
         ecosystem: "yarn", name: "widget", old_version: "aaa", new_version: "bbb", source: "git",
         old_locator: "git+https://github.com/example/widget.git#aaa",
         new_locator: "https://codeload.github.com/someone/widget-fork/tar.gz/bbb",
@@ -427,7 +419,7 @@ RSpec.describe "dependency delta generation" do
     end
   end
 
-  describe PublicDependencyRetriever do
+  describe TestPlan::DependencyDelta::PublicRetriever do
     class FakeDownloader
       attr_reader :downloaded
 
@@ -478,7 +470,7 @@ RSpec.describe "dependency delta generation" do
     end
 
     def npm_change(locator:, integrity:)
-      DependencyChange.new(
+      TestPlan::DependencyDelta::Change.new(
         ecosystem: "yarn", name: "widget", old_version: "1.0.0", new_version: "2.0.0",
         source: "npm", old_locator: locator.call("1.0.0"), new_locator: locator.call("2.0.0"),
         old_integrity: integrity, new_integrity: integrity,
@@ -550,7 +542,7 @@ RSpec.describe "dependency delta generation" do
       extractor = LayoutExtractor.new(
         [{ "lib/widget.rb" => "old\n" }, { "lib/widget.rb" => "new\n" }]
       )
-      change = DependencyChange.new(
+      change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "widget", old_version: "1.0.0", new_version: "2.0.0",
         source: "rubygems", old_locator: "https://rubygems.org/",
         new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
@@ -564,7 +556,7 @@ RSpec.describe "dependency delta generation" do
 
     it "refuses gems that did not resolve from rubygems.org" do
       downloader = FakeDownloader.new
-      change = DependencyChange.new(
+      change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "internal_gem", old_version: "1.0.0", new_version: "2.0.0",
         source: "rubygems", old_locator: "https://gems.powerapp.cloud/",
         new_locator: "https://gems.powerapp.cloud/", direct: true, lockfiles: ["Gemfile.lock"]
@@ -612,7 +604,7 @@ RSpec.describe "dependency delta generation" do
 
     it "fetches each Git revision from the repository that recorded it" do
       downloader = FakeDownloader.new
-      change = DependencyChange.new(
+      change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "yarn", name: "widget", old_version: "aaa111", new_version: "bbb222",
         source: "git",
         old_locator: "git+https://github.com/example/widget.git#aaa111",
@@ -632,7 +624,7 @@ RSpec.describe "dependency delta generation" do
 
     it "falls back to the other locator when one side records no repository" do
       downloader = FakeDownloader.new
-      change = DependencyChange.new(
+      change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "widget", old_version: "aaa111", new_version: "bbb222",
         source: "git", old_locator: nil,
         new_locator: "https://github.com/example/widget.git",
@@ -664,7 +656,7 @@ RSpec.describe "dependency delta generation" do
     end
   end
 
-  describe GitSnapshot do
+  describe TestPlan::DependencyDelta::GitSnapshot do
     def git(directory, *args)
       stdout, stderr, status = Open3.capture3("git", *args, chdir: directory)
       raise "git #{args.join(" ")} failed: #{stderr}" unless status.success?
@@ -732,7 +724,7 @@ RSpec.describe "dependency delta generation" do
     end
   end
 
-  describe SafeTarExtractor do
+  describe TestPlan::DependencyDelta::SafeTarExtractor do
     def build_tar_gz(path, entry_name)
       Zlib::GzipWriter.open(path) do |gzip|
         Gem::Package::TarWriter.new(gzip) do |tar|
@@ -837,7 +829,7 @@ RSpec.describe "dependency delta generation" do
     end
   end
 
-  describe SourceDiffBuilder do
+  describe TestPlan::DependencyDelta::SourceDiffBuilder do
     it "ranks colocated test files below runtime source" do
       builder = described_class.new
       ranked = lambda { |path| builder.send(:priority, path) }
@@ -885,9 +877,9 @@ RSpec.describe "dependency delta generation" do
     end
   end
 
-  describe DependencyDeltaGenerator do
+  describe TestPlan::DependencyDelta::Generator do
     let(:change) do
-      DependencyChange.new(
+      TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler",
         name: "example",
         old_version: "1.0.0",
@@ -911,7 +903,7 @@ RSpec.describe "dependency delta generation" do
     end
 
     it "reports lockfiles it could not analyze without failing generation" do
-      problem = DependencyChangeDetector::LockfileProblem.new(
+      problem = TestPlan::DependencyDelta::ChangeDetector::LockfileProblem.new(
         path: "components/broken/Gemfile.lock",
         message: "Unable to parse components/broken/Gemfile.lock: boom"
       )
@@ -925,12 +917,12 @@ RSpec.describe "dependency delta generation" do
     end
 
     it "does not mark a dependency truncated when only the shared artifact budget ran out" do
-      big = DependencyChange.new(
+      big = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "aaa-big", old_version: "1.0.0", new_version: "2.0.0",
         source: "rubygems", old_locator: "https://rubygems.org/",
         new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
       )
-      small = DependencyChange.new(
+      small = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "zzz-small", old_version: "1.0.0", new_version: "2.0.0",
         source: "rubygems", old_locator: "https://rubygems.org/",
         new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
@@ -941,9 +933,9 @@ RSpec.describe "dependency delta generation" do
       retriever = double("retriever")
       allow(retriever).to receive(:retrieve) do |change|
         if change.name == "aaa-big"
-          Array.new(110) { |index| SourceDiff.new(path: "big/#{index}.rb", diff: "x" * (100 * 1024)) }
+          Array.new(110) { |index| TestPlan::DependencyDelta::SourceDiff.new(path: "big/#{index}.rb", diff: "x" * (100 * 1024)) }
         else
-          [SourceDiff.new(path: "small.rb", diff: "y" * (50 * 1024))]
+          [TestPlan::DependencyDelta::SourceDiff.new(path: "small.rb", diff: "y" * (50 * 1024))]
         end
       end
 
@@ -958,18 +950,18 @@ RSpec.describe "dependency delta generation" do
     end
 
     it "links a gem and an npm package released together as one upstream release" do
-      gem_change = DependencyChange.new(
+      gem_change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "playbook_ui", old_version: "14.10.0", new_version: "14.11.0",
         source: "rubygems", old_locator: "https://rubygems.org/",
         new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
       )
-      npm_change = DependencyChange.new(
+      npm_change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "yarn", name: "playbook-ui", old_version: "14.10.0", new_version: "14.11.0",
         source: "npm", old_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-14.10.0.tgz",
         new_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-14.11.0.tgz",
         direct: true, lockfiles: ["yarn.lock"]
       )
-      retriever = double("retriever", retrieve: [SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+      retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
 
       result = described_class.new(changes: [gem_change, npm_change], retriever: retriever).generate
       entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
@@ -984,18 +976,18 @@ RSpec.describe "dependency delta generation" do
     end
 
     it "does not link packages whose versions moved differently" do
-      gem_change = DependencyChange.new(
+      gem_change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "widget", old_version: "1.0.0", new_version: "2.0.0",
         source: "rubygems", old_locator: "https://rubygems.org/",
         new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
       )
-      npm_change = DependencyChange.new(
+      npm_change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "yarn", name: "widget", old_version: "1.0.0", new_version: "3.0.0",
         source: "npm", old_locator: "https://registry.npmjs.org/widget/-/widget-1.0.0.tgz",
         new_locator: "https://registry.npmjs.org/widget/-/widget-3.0.0.tgz",
         direct: true, lockfiles: ["yarn.lock"]
       )
-      retriever = double("retriever", retrieve: [SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+      retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
 
       result = described_class.new(changes: [gem_change, npm_change], retriever: retriever).generate
 
@@ -1004,9 +996,9 @@ RSpec.describe "dependency delta generation" do
 
     it "names every file it omitted from the provider context" do
       diffs = [
-        SourceDiff.new(path: "CHANGELOG.md", diff: "c" * 1024),
-        SourceDiff.new(path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1)),
-        SourceDiff.new(path: "lib/small.rb", diff: "s" * 1024),
+        TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "c" * 1024),
+        TestPlan::DependencyDelta::SourceDiff.new(path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1)),
+        TestPlan::DependencyDelta::SourceDiff.new(path: "lib/small.rb", diff: "s" * 1024),
       ]
       result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
       entry = result.dig(:manifest, "dependencies", 0)
@@ -1022,7 +1014,7 @@ RSpec.describe "dependency delta generation" do
 
     it "gives a lone dependency the whole context budget" do
       # 400 KiB would have been cut to 100 KiB under a fixed per-dependency cap.
-      diffs = Array.new(8) { |index| SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }
+      diffs = Array.new(8) { |index| TestPlan::DependencyDelta::SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }
 
       result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
       entry = result.dig(:manifest, "dependencies", 0)
@@ -1032,7 +1024,7 @@ RSpec.describe "dependency delta generation" do
     end
 
     it "hands an early dependency's unused budget to a later one" do
-      small = DependencyChange.new(
+      small = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "aaa-small", old_version: "1.0.0", new_version: "2.0.0",
         source: "rubygems", old_locator: "https://rubygems.org/",
         new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
@@ -1040,10 +1032,10 @@ RSpec.describe "dependency delta generation" do
       retriever = double("retriever")
       allow(retriever).to receive(:retrieve) do |candidate|
         if candidate.name == "aaa-small"
-          [SourceDiff.new(path: "tiny.rb", diff: "t" * 1024)]
+          [TestPlan::DependencyDelta::SourceDiff.new(path: "tiny.rb", diff: "t" * 1024)]
         else
           # 400 KiB: more than an even two-way split would allow.
-          Array.new(8) { |index| SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }
+          Array.new(8) { |index| TestPlan::DependencyDelta::SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }
         end
       end
 
@@ -1055,7 +1047,7 @@ RSpec.describe "dependency delta generation" do
 
     it "spends the budget on the dependencies sorted first and drops the tail" do
       changes = Array.new(30) do |index|
-        DependencyChange.new(
+        TestPlan::DependencyDelta::Change.new(
           ecosystem: "bundler", name: format("gem-%02d", index), old_version: "1.0.0",
           new_version: "2.0.0", source: "rubygems", old_locator: "https://rubygems.org/",
           new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
@@ -1063,7 +1055,7 @@ RSpec.describe "dependency delta generation" do
       end
       retriever = double("retriever")
       allow(retriever).to receive(:retrieve) do |candidate|
-        [SourceDiff.new(path: "#{candidate.name}.rb", diff: "x" * (24 * 1024))]
+        [TestPlan::DependencyDelta::SourceDiff.new(path: "#{candidate.name}.rb", diff: "x" * (24 * 1024))]
       end
 
       result = described_class.new(changes: changes, retriever: retriever).generate
@@ -1075,20 +1067,20 @@ RSpec.describe "dependency delta generation" do
     end
 
     it "keeps the build output of a linked release out of the provider context" do
-      gem_change = DependencyChange.new(
+      gem_change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: "playbook_ui", old_version: "17.0.0", new_version: "17.1.0",
         source: "rubygems", old_locator: "https://rubygems.org/",
         new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
       )
-      npm_change = DependencyChange.new(
+      npm_change = TestPlan::DependencyDelta::Change.new(
         ecosystem: "yarn", name: "playbook-ui", old_version: "17.0.0", new_version: "17.1.0",
         source: "npm", old_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-17.0.0.tgz",
         new_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-17.1.0.tgz",
         direct: true, lockfiles: ["yarn.lock"]
       )
-      builder = SourceDiffBuilder.new
+      builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
       source_diff = lambda do |path|
-        SourceDiff.new(
+        TestPlan::DependencyDelta::SourceDiff.new(
           path: path,
           diff: "--- a/#{path}\n+++ b/#{path}\n#{"x" * 512}\n",
           priority: builder.send(:priority, path)
@@ -1129,9 +1121,9 @@ RSpec.describe "dependency delta generation" do
     end
 
     it "still sends build output for a dependency that has no linked source half" do
-      builder = SourceDiffBuilder.new
+      builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
       diffs = [
-        SourceDiff.new(path: "dist/thing.js", diff: "x" * 2048,
+        TestPlan::DependencyDelta::SourceDiff.new(path: "dist/thing.js", diff: "x" * 2048,
                        priority: builder.send(:priority, "dist/thing.js")),
       ]
 

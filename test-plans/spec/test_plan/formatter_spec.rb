@@ -1,18 +1,10 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
-
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
+require_relative "../spec_helper"
+require "test_plan/formatter"
+require "test_plan/parser"
 
 require "json"
-require "rspec/autorun"
 
-require_relative "test_plan_formatter"
-require_relative "test_plan_parser"
-
-RSpec.describe TestPlanFormatter do
+RSpec.describe TestPlan::Formatter do
   let(:payload) do
     {
       "permissions" => {
@@ -43,7 +35,7 @@ RSpec.describe TestPlanFormatter do
 
   def render(profile: "Cobra Test Plan", warning: "")
     described_class.new(
-      parsed: TestPlanParser.new(payload.to_json),
+      parsed: TestPlan::Parser.new(payload.to_json),
       pull_request_title: "Reminder Calls migration",
       profile_name: profile,
       generation_warning: warning

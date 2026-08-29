@@ -1,16 +1,7 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
+require_relative "../../spec_helper"
+require "test_plan/pull_request/preflight"
 
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
-
-require "rspec/autorun"
-
-require_relative "pull_request_preflight"
-
-RSpec.describe PullRequestPreflight do
+RSpec.describe TestPlan::PullRequest::Preflight do
   class FakePullRequestClient
     attr_reader :calls
 

@@ -1,18 +1,10 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
-
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
+require_relative "../spec_helper"
+require "test_plan/parser"
 
 require "json"
-require "rspec/autorun"
 require "tempfile"
 
-require_relative "test_plan_parser"
-
-RSpec.describe TestPlanParser do
+RSpec.describe TestPlan::Parser do
   def payload(overrides = {})
     {
       "permissions" => {

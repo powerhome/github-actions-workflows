@@ -120,12 +120,30 @@ jobs:
 
 Do not add `issue_comment` triggers or pass PR comment bodies to the action.
 
+## Layout
+
+```
+test-plans/
+  action.yml          composite action definition
+  bin/                entry points the action steps invoke
+  lib/test_plan/      library code, namespaced under TestPlan
+  spec/               specs, mirroring lib/
+  profiles/           allowlisted profile definitions
+  prompts/            provider prompts
+  providers/          per-provider shell adapters
+  config/             provider CLI permissions
+```
+
 ## Local Tests
 
-Run every standalone Ruby spec:
+Run the whole suite in one process:
 
 ```bash
-for spec in test-plans/scripts/*_spec.rb; do
-  ruby "$spec"
-done
+ruby test-plans/spec/run_all.rb
+```
+
+A single file works the same way, since each spec loads the shared helper:
+
+```bash
+ruby test-plans/spec/test_plan/dependency_delta_spec.rb
 ```
