@@ -11,7 +11,7 @@ Generates structured, non-technical manual QA plans from pull-request merge-base
 
 Both profiles use the same prompt, JSON schema, Markdown renderer, and dependency evidence.
 
-Each scenario names the audience it belongs to when an application serves more than one from different hostnames. Tempo's umbrella routes mount two engines at `/` behind subdomain constraints, so a relative path alone does not identify the page; nitro-web has no such constraint and its plans carry no audience line. Their result, status, failure, and artifact namespaces are independent, so both can run against the same PR.
+Each scenario names the audience it belongs to when an application serves more than one from different hostnames — where the umbrella routes mount two engines at the same prefix behind subdomain constraints, a relative path alone does not identify the page. Applications with no such constraint produce plans with no audience line. Their result, status, failure, and artifact namespaces are independent, so both can run against the same PR.
 
 ## Inputs
 
@@ -61,9 +61,9 @@ Artifacts include:
 
 ### Playbook Kit Usage
 
-A Playbook version bump often changes no application code at all — nitro-web's 17.1.0 bump touched 143 files, every one a lockfile — so `pr.diff` cannot say which pages to test. When the upgrade is Playbook, the action reads the changed kits from the gem's own diff paths (`app/pb_kits/playbook/pb_<kit>/`, which is exact, where matching release-note headings is guesswork) and searches the repository for where each is used, in Rails templates and React alike.
+A Playbook version bump often changes no application code at all — every file in the diff is a lockfile — so `pr.diff` cannot say which pages to test. When the upgrade is Playbook, the action reads the changed kits from the gem's own diff paths (`app/pb_kits/playbook/pb_<kit>/`, which is exact, where matching release-note headings is guesswork) and searches the repository for where each is used, in Rails templates and React alike.
 
-The result is `dependency-kit-usage.md`, listing the files that use each changed kit. A kit used in more than 25 files is reported as a count instead, since a list that long stops naming pages to visit. On the real 17.0.0 → 17.1.0 upgrade this identifies 22 changed kits, six of them narrow enough to enumerate — including the two form inputs that release converted from React-rendered kits to enhanced elements.
+The result is `dependency-kit-usage.md`, listing the files that use each changed kit. A kit used in more than 25 files is reported as a count instead, since a list that long stops naming pages to visit. A single upgrade typically identifies a couple of dozen changed kits, a handful of them narrow enough to enumerate.
 
 Unreadable lockfiles, missing private sources, failed downloads, and truncation do not fail the plan. A lockfile the action cannot parse is skipped and reported; the remaining lockfiles are still analyzed. Every such case produces a warning in the PR comment, workflow annotation, job summary, and dependency manifest.
 

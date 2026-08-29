@@ -3,18 +3,18 @@ require "open3"
 module TestPlan
   module DependencyDelta
     # A Playbook version bump is the PR shape this whole delta exists for, and it is the
-    # one where pr.diff says least: nitro-web's 17.1.0 bump changed 143 files, every one
-    # a lockfile. The changelog now tells the model which kits moved, but not the only
-    # thing a tester needs -- which pages to open.
+    # one where pr.diff says least: every file in such a bump is a lockfile. The
+    # changelog tells the model which kits moved, but not the only thing a tester needs
+    # -- which pages to open.
     #
-    # Answering that means resolving a kit across 32,000 pb_rails call sites. The agent
-    # could search for them, but at that scale it is slow and unreliable, so the search
-    # happens here and the answer is handed over as evidence.
+    # Answering that means resolving a kit across every call site in a large
+    # application. The agent could search for them, but at that scale it is slow and
+    # unreliable, so the search happens here and the answer is handed over as evidence.
     #
     # The kits are taken from the gem's own changed file paths rather than the changelog
     # prose: every kit lives in app/pb_kits/playbook/pb_<kit>/, which is exact, where
     # matching release-note headings is guesswork. On the 17.0.0 -> 17.1.0 delta the
-    # paths yield 22 kits against the prose's 12.
+    # paths yield materially more kits than the prose does.
     class PlaybookKitUsage
       PACKAGE_NAMES = %w[playbook_ui playbook-ui].freeze
       KIT_PATH = %r{(?:\A|/)app/pb_kits/playbook/pb_([a-z0-9_]+)/}
