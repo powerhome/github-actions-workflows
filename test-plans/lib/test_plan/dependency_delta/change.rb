@@ -1,3 +1,5 @@
+require "uri"
+
 require_relative "./git_locator"
 
 module TestPlan
@@ -21,16 +23,36 @@ module TestPlan
       end
 
       # Registry URLs are mirror detail, not identity: the same raise recorded through
-      # different remotes in different component lockfiles is still one raise, and keying on
-      # the raw URLs left it undeduplicated and downloaded twice. For Git the repository is
-      # identity, so keep it -- normalized, so equivalent spellings still collapse.
+      # different remotes in different component lockfiles is still one raise, and keying
+      # on the raw URLs left it undeduplicated and downloaded twice.
+      #
+      # What is identity is the artifact. A checksum settles it outright, and mirrors of
+      # one package share theirs, so proxied copies still collapse. Without a checksum
+      # the registry host is the best evidence there is -- enough to keep a private
+      # package from collapsing into a public one of the same name and version, which
+      # would have applied whichever entry came first to both.
+      #
+      # For Git the repository is identity, normalized so equivalent spellings collapse.
       def source_identity
-        return [] unless source == "git"
+        if source == "git"
+          return [
+            GitLocator.repository(old_locator) || old_locator,
+            GitLocator.repository(new_locator) || new_locator,
+          ]
+        end
 
         [
-          GitLocator.repository(old_locator) || old_locator,
-          GitLocator.repository(new_locator) || new_locator,
+          artifact_identity(old_locator, old_integrity),
+          artifact_identity(new_locator, new_integrity),
         ]
+      end
+
+      def artifact_identity(locator, integrity)
+        return integrity unless integrity.to_s.empty?
+
+        URI.parse(locator.to_s).host || locator.to_s
+      rescue URI::InvalidURIError
+        locator.to_s
       end
 
       def to_h

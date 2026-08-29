@@ -155,6 +155,40 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     expect(changes.first.lockfiles).to contain_exactly("one/Gemfile.lock", "two/Gemfile.lock")
   end
 
+  it "keeps a private package separate from a public one of the same name" do
+    public_change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "yarn", name: "widget", old_version: "1.0.0", new_version: "2.0.0",
+      source: "npm", old_locator: "https://registry.npmjs.org/widget/-/widget-1.0.0.tgz",
+      new_locator: "https://registry.npmjs.org/widget/-/widget-2.0.0.tgz",
+      direct: true, lockfiles: ["a/yarn.lock"]
+    )
+    private_change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "yarn", name: "widget", old_version: "1.0.0", new_version: "2.0.0",
+      source: "npm", old_locator: "https://npm.internal.example/widget/-/widget-1.0.0.tgz",
+      new_locator: "https://npm.internal.example/widget/-/widget-2.0.0.tgz",
+      direct: true, lockfiles: ["b/yarn.lock"]
+    )
+
+    # Collapsing these would apply one entry's provenance to both, either feeding the
+    # private dependency unrelated public source or suppressing valid public evidence.
+    expect(public_change.key).not_to eq(private_change.key)
+  end
+
+  it "collapses mirrors of one package that share a checksum" do
+    through = lambda do |host, lockfile|
+      TestPlan::DependencyDelta::Change.new(
+        ecosystem: "yarn", name: "widget", old_version: "1.0.0", new_version: "2.0.0",
+        source: "npm", old_locator: "https://#{host}/widget-1.0.0.tgz",
+        new_locator: "https://#{host}/widget-2.0.0.tgz",
+        old_integrity: "sha512-old==", new_integrity: "sha512-new==",
+        direct: true, lockfiles: [lockfile]
+      )
+    end
+
+    expect(through.call("registry.npmjs.org", "a/yarn.lock").key)
+      .to eq(through.call("npm.mirror.example", "b/yarn.lock").key)
+  end
+
   it "keeps Git raises from different repositories separate" do
     same_repo = TestPlan::DependencyDelta::Change.new(
       ecosystem: "yarn", name: "widget", old_version: "aaa", new_version: "bbb", source: "git",
