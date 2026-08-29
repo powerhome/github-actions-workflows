@@ -41,6 +41,34 @@ RSpec.describe TestPlan::Parser do
     )
   end
 
+  it "carries a scenario's audience and defaults it to empty" do
+    parsed = described_class.new(
+      payload(
+        "feature_areas" => [
+          {
+            "test_path" => "Applicant onboarding",
+            "code" => "APP",
+            "scenarios" => [
+              {
+                "title" => "Submits an application",
+                "audience" => "  Applicant   Portal ",
+                "steps" => ["Open the form.", "Verify it submits."],
+              },
+              {
+                "title" => "Internal review",
+                "steps" => ["Open the queue.", "Verify it lists the application."],
+              },
+            ],
+          },
+        ]
+      ).to_json
+    )
+    scenarios = parsed.feature_areas.first.fetch("scenarios")
+
+    expect(scenarios[0].fetch("audience")).to eq("Applicant Portal")
+    expect(scenarios[1].fetch("audience")).to eq("")
+  end
+
   it "normalizes feature areas, scenarios, codes, and regression tests" do
     raw = payload(
       "feature_areas" => [

@@ -97,6 +97,11 @@ module TestPlan
           lines << "#### #{identifier} — #{scenario.fetch("title")}"
           lines << ""
           lines << "**Landing Page:** #{format_landing_page(scenario.fetch("landing_page"))}  "
+          audience = scenario.fetch("audience").delete("`")
+          # Only rendered where the application actually serves more than one audience;
+          # a single-audience application would otherwise carry a "not identified" line
+          # on every case.
+          lines << "**Audience:** #{audience}  " unless audience.empty?
           lines << "**Permissions:** #{scenario_permissions(scenario)}"
           lines << ""
           scenario.fetch("steps").each { |step| lines << "- #{step}" }

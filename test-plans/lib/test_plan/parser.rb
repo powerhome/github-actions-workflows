@@ -110,6 +110,7 @@ module TestPlan
       {
         "title" => title,
         "landing_page" => normalize_text(entry["landing_page"]),
+        "audience" => normalize_text(entry["audience"]),
         "permissions" => permission_pairs(Array(entry["permissions"])),
         "include_in_regression" => entry["include_in_regression"] == true,
         "steps" => steps,

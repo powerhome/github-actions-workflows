@@ -9,7 +9,9 @@ Generates structured, non-technical manual QA plans from pull-request merge-base
 | `cobra-test-plan` | Cursor default | Standard CoBRA/Consent test plan. |
 | `enhanced-cobra-test-plan` | `claude-opus-5-high` | Higher-effort CoBRA/Consent test plan. |
 
-Both profiles use the same prompt, JSON schema, Markdown renderer, and dependency evidence. Their result, status, failure, and artifact namespaces are independent, so both can run against the same PR.
+Both profiles use the same prompt, JSON schema, Markdown renderer, and dependency evidence.
+
+Each scenario names the audience it belongs to when an application serves more than one from different hostnames. Tempo's umbrella routes mount two engines at `/` behind subdomain constraints, so a relative path alone does not identify the page; nitro-web has no such constraint and its plans carry no audience line. Their result, status, failure, and artifact namespaces are independent, so both can run against the same PR.
 
 ## Inputs
 

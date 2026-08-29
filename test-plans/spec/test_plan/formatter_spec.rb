@@ -52,6 +52,36 @@ RSpec.describe TestPlan::Formatter do
     expect(output).to include("**Applicable Functional Cases:** RCH-1")
   end
 
+  it "names the audience between the landing page and the permissions" do
+    payload["feature_areas"][0]["scenarios"][0]["audience"] = "Applicant Portal"
+
+    expect(render).to include(
+      "**Landing Page:** /contact_center/reminder_calls  \n" \
+      "**Audience:** Applicant Portal  \n" \
+      "**Permissions:** Reminder Calls — Read"
+    )
+  end
+
+  it "omits the audience line for a single-audience application" do
+    output = render
+
+    expect(output).not_to include("**Audience:**")
+    expect(output).to include("**Landing Page:** /contact_center/reminder_calls  \n**Permissions:**")
+  end
+
+  it "keeps an audience while reporting that no permission is required" do
+    payload["permissions"]["required"] = "no"
+    payload["permissions"]["subject_actions"] = []
+    payload["feature_areas"][0]["scenarios"][0]["permissions"] = []
+    payload["feature_areas"][0]["scenarios"][0]["audience"] = "Customer Portal"
+
+    output = render
+
+    # An external customer has no Consent subject; the audience still has to be stated.
+    expect(output).to include("**Audience:** Customer Portal")
+    expect(output).to include("**Permissions:** No special permission required.")
+  end
+
   it "renders dependency warnings directly below the heading" do
     output = render(warning: "Some dependency deltas were unavailable.")
     expect(output).to start_with(<<~MARKDOWN.chomp)

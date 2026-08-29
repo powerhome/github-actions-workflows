@@ -57,6 +57,10 @@ Organize functional cases by the tester's path through the application, not prim
 
 Each scenario must identify the relative URL of the landing page where its test begins. Use a path beginning with `/` and omit the scheme and host. Use an empty string only when the repository does not provide enough evidence to identify the route.
 
+Some applications serve different audiences from different hostnames. Where the umbrella `config/routes.rb` wraps mounts in a subdomain constraint, such as `constraints(->(request) { request.subdomain.include?("portal") })`, the same relative path can belong to more than one audience and a tester cannot reach the right page from the path alone. Set `audience` to the product-facing name of that portal, and leave it as an empty string when the application serves a single audience.
+
+An audience is not the same thing as a permission. An external applicant or customer usually has no Consent subject at all, so a scenario can legitimately carry an audience while `permissions.required` is `no`. Say who the tester must be signed in as either way.
+
 Component routes are not reachable at the paths their own route file declares. A component defines routes in `components/<component>/config/routes.rb`, and the application mounts that component's engine under a prefix in the umbrella `config/routes.rb`, as in `mount Support::Engine, at: "/support"`. Compose the mount prefix with the component route to get the real URL. A path taken from the component route file alone will not resolve.
 
 Mark `include_in_regression` as `true` when that functional case also verifies existing behavior that should remain correct. The formatter will list the generated case identifier in Regression Testing, so do not repeat the full functional case as a regression test. Put only additional regression checks that are not already covered by functional cases in `regression_tests`.
@@ -90,6 +94,7 @@ Use exactly this shape:
         {
           "title": "Concise scenario name",
           "landing_page": "/relative/path/where/testing/begins",
+          "audience": "Portal or audience the page belongs to; use an empty string when the application serves one audience",
           "permissions": [
             {
               "subject": "Permission Subject label shown in the UI for this case",
@@ -118,8 +123,9 @@ Rules for the JSON:
 - `permissions`, `feature_areas`, and `regression_tests` are required.
 - `permissions.required` must be exactly `yes`, `no`, or `not_identified`.
 - `permissions.roles`, `permissions.changes`, and `permissions.subject_actions` are required arrays.
-- Every `test_path`, `domain`, `code`, `title`, `landing_page`, step, role, UI-facing permission Subject, UI-facing permission Action, regression text, and detail must be a string.
-- Every scenario must include a `permissions` array and a boolean `include_in_regression`.
+- Every `test_path`, `domain`, `code`, `title`, `landing_page`, `audience`, step, role, UI-facing permission Subject, UI-facing permission Action, regression text, and detail must be a string.
+- Every scenario must include a `permissions` array, an `audience` string, and a boolean `include_in_regression`.
+- Set `audience` whenever the landing page sits behind a subdomain constraint. A scenario reached only on a portal hostname is unreachable without it.
 - Include every Subject/Action pair used by the plan in `permissions.subject_actions`, and repeat the applicable pair or pairs in each scenario's `permissions`.
 - Include a concise `permissions.changes` entry for every permission definition or direct permission lookup/check added, removed, or modified by the PR. Do not list unchanged permissions there.
 - Before returning JSON, verify that every distinctly affected reachable page or tester path is represented by at least one scenario.
