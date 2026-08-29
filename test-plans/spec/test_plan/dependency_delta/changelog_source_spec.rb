@@ -101,13 +101,19 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     downloader = FakeChangelogDownloader.new(
       npm_metadata
         .merge(raw("17.0.0", "# 16.12.0\n"))
-        .merge(raw("17.1.0", "# 17.0.0\n\n# 16.12.0\n"))
-        .merge(raw("HEAD", "# 17.1.0\nthe upgrade\n\n# 17.0.0\n\n# 16.12.0\n"))
+        .merge(raw("17.1.0", "# 17.0.0\n17.0.0 notes\n\n# 16.12.0\n"))
+        .merge(raw("HEAD", "# 17.1.0\nthe upgrade\n\n# 17.0.0\n17.0.0 notes\n\n# 16.12.0\n"))
     )
 
     diff = described_class.new(downloader: downloader).diffs_for(npm_change).first.diff
 
-    expect(diff).to include("+the upgrade")
+    added = diff.lines.select { |line| line.start_with?("+") }.join
+
+    expect(added).to include("the upgrade")
+    # The upgraded-to tag holds everything up to but not including its own release, so
+    # it is the baseline; reading from the upgraded-from tag would have added 17.0.0's
+    # notes, which describe behaviour already installed. They remain as diff context.
+    expect(added).not_to include("17.0.0 notes")
     # The default branch can carry later releases too, so the notes say so.
     expect(diff).to start_with("[These notes were read from the default branch")
     expect(diff).to include("later than 17.1.0")

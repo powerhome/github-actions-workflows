@@ -52,10 +52,10 @@ module TestPlan
         old_body, path = fetch_any(repository, candidates, old_ref)
         return [] unless old_body
 
-        new_body, bounded = new_side(change, repository, path)
-        return [] unless new_body && new_body != old_body
+        baseline, new_body, bounded = compare(change, repository, path, old_body)
+        return [] unless baseline && new_body && baseline != new_body
 
-        diff = unified_diff(path, old_body, new_body)
+        diff = unified_diff(path, baseline, new_body)
         return [] if diff.nil?
 
         diff = unbounded_notice(change) + diff unless bounded
@@ -75,23 +75,36 @@ module TestPlan
 
     private
 
-      # Returns the new side of the comparison and whether it is bounded by the upgrade.
+      # Returns the baseline, the new side, and whether the pair is bounded by the
+      # upgrade. Both ends matter: notes for the version already installed are as much
+      # noise as notes for a version that is not.
       #
-      # A Git-pinned dependency names its revision, so that is the new side outright.
+      # A Git-pinned dependency names both revisions, so it brackets itself.
       #
-      # For a registry release, the upgraded-to tag is preferred: where a project
-      # commits its changelog before tagging, that file already describes the release
-      # and the diff stops there. Where the changelog is committed after tagging, the
-      # tag predates its own notes and only the default branch carries them -- at the
-      # cost of also carrying anything released since, which the notice then says.
-      def new_side(change, repository, path)
-        return [fetch(repository, change.new_version.to_s, path), true] if change.source == "git"
+      # For a registry release the upgraded-to tag decides which pattern the project
+      # follows, and the answer differs for each:
+      #
+      #   Changelog committed before tagging -- the tag already describes its own
+      #   release, so the two tags bracket the upgrade exactly.
+      #
+      #   Committed after tagging -- the tag holds everything up to but not including
+      #   its own release, which makes it the right *baseline*, not the new side.
+      #   Reading from the upgraded-from tag instead would carry the old release's own
+      #   notes, describing behaviour already installed. The default branch supplies the
+      #   notes themselves, along with anything released since, which the notice says.
+      def compare(change, repository, path, old_body)
+        if change.source == "git"
+          return [old_body, fetch(repository, change.new_version.to_s, path), true]
+        end
 
-        tagged = resolve_tag(repository, [path], change.new_version)
-        body = tagged && fetch(repository, tagged, path)
-        return [body, true] if body && body.include?(change.new_version.to_s)
+        target_ref = resolve_tag(repository, [path], change.new_version)
+        target = target_ref && fetch(repository, target_ref, path)
+        return [old_body, target, true] if target && target.include?(change.new_version.to_s)
 
-        [fetch(repository, DEFAULT_REF, path), false]
+        head = fetch(repository, DEFAULT_REF, path)
+        return [target, head, false] if target
+
+        [old_body, head, false]
       end
 
       def unbounded_notice(change)
