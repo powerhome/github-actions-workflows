@@ -33,6 +33,7 @@ module TestPlan
           entry = change.to_h
           entry["related"] = related_for(change)
           entry["warnings"] = []
+          entry["degraded"] = false
           begin
             diffs = retrieve_diffs(change, entry)
             @kit_usage.observe(change, diffs)
@@ -43,7 +44,7 @@ module TestPlan
             # context affects the generated plan, so only it decides the status; the
             # shared artifact budget being spent by earlier dependencies says nothing
             # about this one's evidence.
-            omitted_from_artifact = append_chunks(full, header, diffs, FULL_LIMIT)
+            omitted_from_artifact = append_chunks(full, header, diffs, FULL_LIMIT, :artifact_text)
 
             candidates = context_candidates(entry.fetch("related"), diffs)
             excluded = diffs - candidates
@@ -52,7 +53,8 @@ module TestPlan
             if candidates.any?
               budget = context_budget(remaining_context, remaining_changes)
               dependency_context = +""
-              omitted_from_context = append_chunks(dependency_context, header, candidates, budget)
+              omitted_from_context =
+                append_chunks(dependency_context, header, candidates, budget, :context_text)
               context << dependency_context
               remaining_context -= dependency_context.bytesize
 
@@ -82,6 +84,7 @@ module TestPlan
             entry["omitted_from_artifact"] = omitted_from_artifact.sort
           rescue => e
             entry["status"] = "unavailable"
+            entry["degraded"] = true
             entry["warnings"] = [e.message]
             entry["changed_files"] = 0
             entry["context_files"] = 0
@@ -100,7 +103,11 @@ module TestPlan
             "version" => 1,
             "dependencies" => entries,
             "lockfile_warnings" => lockfile_warnings,
-            "warning_count" => entries.count { |entry| entry.fetch("status") != "retrieved" } +
+            # Counts anything that cost evidence, which is not the same as anything
+            # that produced a warning: build output kept out of a linked release, and
+            # an artifact that ran out of room while the provider context did not, are
+            # both expected and neither degrades the plan.
+            "warning_count" => entries.count { |entry| incomplete?(entry) } +
               lockfile_warnings.length,
           },
           full: full,
@@ -123,8 +130,13 @@ module TestPlan
           raise if changelog.empty?
 
           entry["warnings"] << "#{e.message}. The changelog was still read from the repository."
+          entry["degraded"] = true
           changelog
         end
+      end
+
+      def incomplete?(entry)
+        entry.fetch("status") != "retrieved" || entry.fetch("degraded", false)
       end
 
       # Share what is left among the dependencies still to come, so a lone dependency --
@@ -193,18 +205,25 @@ module TestPlan
         "#{heading}Same upstream release as #{related.join(", ")}.\n\n"
       end
 
-      # Returns the paths that did not fit, so every omission can be named in the manifest.
-      def append_chunks(target, header, diffs, limit)
+      SEPARATOR = "\n".freeze
+
+      # Returns the paths that did not fit, so every omission can be named in the
+      # manifest. `text` selects what a diff contributes: the artifact records the whole
+      # thing, while the provider may be shown a capped form of it.
+      def append_chunks(target, header, diffs, limit, text)
         return diffs.map(&:path) if target.bytesize + header.bytesize > limit
 
         omitted = []
         target << header
         diffs.each do |source_diff|
-          if target.bytesize + source_diff.bytesize > limit
+          body = source_diff.public_send(text)
+          # The separator counts against the limit too; without it the advertised cap
+          # was exceeded by a byte for every diff included.
+          if target.bytesize + body.bytesize + SEPARATOR.bytesize > limit
             omitted << source_diff.path
             next
           end
-          target << source_diff.diff << "\n"
+          target << body << SEPARATOR
         end
         omitted
       end

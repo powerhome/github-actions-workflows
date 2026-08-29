@@ -55,6 +55,79 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(result.fetch(:context)).to include("fixed the widget")
   end
 
+  it "counts a dependency whose source was lost even though the changelog survived" do
+    changelog = TestPlan::DependencyDelta::SourceDiff.new(
+      path: "CHANGELOG.md", diff: "+notes\n",
+      priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_CHANGELOG
+    )
+    retriever = double("retriever")
+    allow(retriever).to receive(:retrieve).and_raise("resolves to a non-public registry")
+
+    result = described_class.new(
+      changes: [change], retriever: retriever,
+      changelog: double("changelog", diffs_for: [changelog])
+    ).generate
+
+    # The plan is still generated, but evidence was lost, so the run has to say so.
+    expect(result.dig(:manifest, "dependencies", 0, "status")).to eq("retrieved")
+    expect(result.dig(:manifest, "warning_count")).to eq(1)
+  end
+
+  it "does not count build output deliberately kept out of a linked release" do
+    builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
+    diff = lambda do |path|
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: path, diff: "x" * 512, priority: builder.send(:priority, path)
+      )
+    end
+    gem_change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "widget_ui", old_version: "1.0.0", new_version: "2.0.0",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+    npm_change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "yarn", name: "widget-ui", old_version: "1.0.0", new_version: "2.0.0",
+      source: "npm", old_locator: "https://registry.npmjs.org/a.tgz",
+      new_locator: "https://registry.npmjs.org/b.tgz", direct: true, lockfiles: ["yarn.lock"]
+    )
+    retriever = double("retriever")
+    allow(retriever).to receive(:retrieve) do |candidate|
+      candidate.ecosystem == "bundler" ? [diff.call("lib/widget.rb")] : [diff.call("dist/widget.js")]
+    end
+
+    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+
+    expect(result.dig(:manifest, "warning_count")).to eq(0)
+  end
+
+  it "keeps both budgets inside their advertised limits" do
+    # Each diff used to cost its own size plus an uncounted separator byte.
+    diffs = Array.new(40) do |index|
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "lib/#{index}.rb", diff: "x" * 12_800, priority: 1
+      )
+    end
+
+    result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
+
+    expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
+    expect(result.fetch(:full).bytesize).to be <= described_class::FULL_LIMIT
+  end
+
+  it "shows the provider a capped diff while the artifact keeps all of it" do
+    long = "y" * 4096
+    source_diff = TestPlan::DependencyDelta::SourceDiff.new(
+      path: "CHANGELOG.md", diff: long, context_diff: "y" * 128,
+      priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_CHANGELOG
+    )
+
+    result = generator(changes: [change], retriever: double("r", retrieve: [source_diff])).generate
+
+    expect(result.fetch(:context)).to include("y" * 128)
+    expect(result.fetch(:context)).not_to include(long)
+    expect(result.fetch(:full)).to include(long)
+  end
+
   it "reports the dependency unavailable when neither package nor changelog resolves" do
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve).and_raise("not public")

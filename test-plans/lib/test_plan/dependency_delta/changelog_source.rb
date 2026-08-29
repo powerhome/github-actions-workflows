@@ -29,9 +29,10 @@ module TestPlan
     class ChangelogSource
       FILENAMES = %w[CHANGELOG.md CHANGELOG.markdown CHANGELOG CHANGES.md HISTORY.md].freeze
       DEFAULT_REF = "HEAD".freeze
-      # A single diff larger than a dependency's context budget is dropped whole, so
-      # cap it here instead and keep the head, which is the newest release in the
-      # newest-first layout nearly every changelog uses.
+      # A single diff larger than a dependency's context budget is dropped whole, so cap
+      # what the provider sees and keep the head, which is the newest release in the
+      # newest-first layout nearly every changelog uses. The artifact keeps the whole
+      # diff, so the notice below points somewhere the content actually is.
       MAX_DIFF_BYTES = 64 * 1024
       TRUNCATION_NOTICE = "\n[The changelog diff was truncated here; see the full-delta artifact.]\n".freeze
 
@@ -57,7 +58,14 @@ module TestPlan
         diff = unified_diff(path, old_body, new_body)
         return [] if diff.nil?
 
-        [SourceDiff.new(path: path, diff: diff, priority: SourceDiffBuilder::PRIORITY_CHANGELOG)]
+        [
+          SourceDiff.new(
+            path: path,
+            diff: diff,
+            context_diff: truncate(diff),
+            priority: SourceDiffBuilder::PRIORITY_CHANGELOG
+          ),
+        ]
       rescue => e
         warn "[test_plan] Changelog lookup skipped for #{change.name}: #{e.message}"
         []
@@ -181,13 +189,12 @@ module TestPlan
             )
             raise "diff failed for #{path}: #{stderr.strip}" unless [0, 1].include?(status.exitstatus)
 
-            truncate(stdout)
+            stdout.empty? ? nil : stdout
           end
         end
       end
 
       def truncate(diff)
-        return nil if diff.empty?
         return diff if diff.bytesize <= MAX_DIFF_BYTES
 
         diff.byteslice(0, MAX_DIFF_BYTES).scrub + TRUNCATION_NOTICE

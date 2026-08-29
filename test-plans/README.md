@@ -49,14 +49,16 @@ Context is prioritized across dependencies as direct, then Git-pinned, then tran
 
 Where a gem and an npm package are linked as one upstream release, the build output in either half is kept out of the provider context — it is compiled from source that reaches the model through the other half — while non-generated files such as `package.json` still go through. Everything stays in the full-delta artifact regardless.
 
-Truncation happens only at file-diff boundaries, and the manifest names every file it dropped in `omitted_from_context`, `excluded_generated`, and `omitted_from_artifact`.
+Truncation happens only at file-diff boundaries, and the manifest names every file it dropped in `omitted_from_context`, `excluded_generated`, and `omitted_from_artifact`. An oversized changelog is capped for the provider only; the artifact keeps the whole diff.
+
+A dependency is counted as a warning when the run lost evidence for it — it could not be retrieved, its provider context was truncated, or its source was refused and only the changelog survived. Build output deliberately kept out of a linked release, and an artifact that ran out of room while the provider context did not, are expected and are not counted.
 
 Artifacts include:
 
 - `test-plan-agent.json`
 - `dependency-delta-manifest.json`
 - `dependency-deltas-full.diff` (maximum 10 MiB)
-- `dependency-deltas-context.diff` (maximum 100 KiB per dependency and 500 KiB total)
+- `dependency-deltas-context.diff` (500 KiB in total, shared out among the dependencies that changed)
 - `dependency-kit-usage.md`
 
 ### Playbook Kit Usage

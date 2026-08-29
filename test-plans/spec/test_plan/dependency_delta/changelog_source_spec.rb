@@ -214,10 +214,15 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
         .merge(raw("HEAD", Array.new(20_000) { |i| "line #{i}" }.join("\n")))
     )
 
-    diff = described_class.new(downloader: downloader).diffs_for(npm_change).first.diff
+    source_diff = described_class.new(downloader: downloader).diffs_for(npm_change).first
 
-    expect(diff.bytesize).to be <= described_class::MAX_DIFF_BYTES + described_class::TRUNCATION_NOTICE.bytesize
-    expect(diff).to end_with(described_class::TRUNCATION_NOTICE)
+    # The provider sees a capped diff; the artifact keeps the whole thing, so the
+    # notice's pointer to the artifact is true.
+    expect(source_diff.context_text.bytesize)
+      .to be <= described_class::MAX_DIFF_BYTES + described_class::TRUNCATION_NOTICE.bytesize
+    expect(source_diff.context_text).to end_with(described_class::TRUNCATION_NOTICE)
+    expect(source_diff.artifact_text.bytesize).to be > described_class::MAX_DIFF_BYTES
+    expect(source_diff.artifact_text).not_to include(described_class::TRUNCATION_NOTICE)
   end
 
   it "never raises when the registry itself is unreachable" do
