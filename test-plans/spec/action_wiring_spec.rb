@@ -38,12 +38,18 @@ module ActionWiring
 
   # Follows require_relative from an entry point, so each step is checked against the
   # environment its own code reads rather than the union of every script's.
+  #
+  # Paths are resolved against ACTION_ROOT rather than the working directory: these
+  # specs run both from the repository root and from test-plans/, and resolving
+  # relatively would quietly find nothing from one of them, leaving every check here
+  # passing against an empty set.
   def sources(entry, seen = [])
     return seen if seen.include?(entry)
 
     seen << entry
+    directory = File.dirname(File.join(ACTION_ROOT, entry))
     read(entry).scan(/require_relative "([^"]+)"/).flatten.each do |target|
-      resolved = File.expand_path(target, File.dirname(entry)).delete_prefix("#{ACTION_ROOT}/")
+      resolved = File.expand_path(target, directory).delete_prefix("#{ACTION_ROOT}/")
       resolved = "#{resolved}.rb" unless resolved.end_with?(".rb")
       sources(resolved, seen) if File.exist?(File.join(ACTION_ROOT, resolved))
     end
@@ -101,6 +107,15 @@ RSpec.describe "action.yml wiring" do
 
         provided = step.fetch("env", {}).keys + ActionWiring::AMBIENT
         expect(ActionWiring.ruby_env_reads(entry) - provided).to be_empty
+      end
+    end
+
+    # Guards the checks above from passing against an empty set: every entry point is a
+    # thin wrapper that requires its library code, so resolving one source means
+    # resolution is broken and nothing below is really being checked.
+    ActionWiring.entry_points.each do |entry|
+      it "resolves the library code behind #{entry}" do
+        expect(ActionWiring.sources(entry).length).to be > 1
       end
     end
 
