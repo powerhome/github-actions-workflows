@@ -2,7 +2,7 @@
   "id": "enhanced-cobra-test-plan",
   "display_name": "Enhanced Cobra Test Plan",
   "prompt": "prompts/cobra_test_plan.md",
-  "model": "claude-opus-5[effort=high]",
+  "model": "claude-opus-5-high",
   "comment_tag": "enhanced-cobra-test-plan",
   "status_comment_tag": "enhanced-cobra-test-plan-status",
   "failure_comment_tag": "enhanced-cobra-test-plan-failure",

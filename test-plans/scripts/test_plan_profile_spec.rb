@@ -27,13 +27,17 @@ RSpec.describe TestPlanProfile do
     expect(profile.prompt_path).to end_with("prompts/cobra_test_plan.md")
   end
 
+  # Cursor bakes the effort tier into the model name; it has no bracketed-option
+  # syntax, and rejects an unknown name outright. This spec can only prove the profile
+  # says what we meant it to say -- that the name is one Cursor accepts has to be
+  # checked against the CLI.
   it "pins the enhanced Cobra profile to Claude Opus 5 at high effort" do
     profile = described_class.load(
       action_root: action_root,
       profile_id: "enhanced-cobra-test-plan"
     )
 
-    expect(profile.model).to eq("claude-opus-5[effort=high]")
+    expect(profile.model).to eq("claude-opus-5-high")
     expect(profile.comment_tag).to eq("enhanced-cobra-test-plan")
   end
 

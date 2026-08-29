@@ -7,7 +7,7 @@ Generates structured, non-technical manual QA plans from pull-request merge-base
 | Profile | Model | Intended use |
 | --- | --- | --- |
 | `cobra-test-plan` | Cursor default | Standard CoBRA/Consent test plan. |
-| `enhanced-cobra-test-plan` | `claude-opus-5[effort=high]` | Higher-effort CoBRA/Consent test plan. |
+| `enhanced-cobra-test-plan` | `claude-opus-5-high` | Higher-effort CoBRA/Consent test plan. |
 
 Both profiles use the same prompt, JSON schema, Markdown renderer, and dependency evidence. Their result, status, failure, and artifact namespaces are independent, so both can run against the same PR.
 
