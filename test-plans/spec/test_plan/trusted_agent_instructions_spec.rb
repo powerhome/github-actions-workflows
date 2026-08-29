@@ -226,6 +226,39 @@ RSpec.describe TestPlan::TrustedAgentInstructions do
     end
   end
 
+  it "removes a regular file committed at a reserved directory name" do
+    repository(base: {}, head: { ".cursor" => "not a directory\n" }) do |root, guard|
+      # Left in place, the provider fails at `mkdir -p .cursor` and no plan is produced.
+      expect(guard.run.removed).to eq([".cursor"])
+      expect(File.exist?(File.join(root, ".cursor"))).to be(false)
+    end
+  end
+
+  it "replaces a directory the pull request put where a file belongs" do
+    repository(
+      base: { "AGENTS.md" => "Real project harness.\n" },
+      head: { "AGENTS.md" => nil, "AGENTS.md/decoy.txt" => "x\n" }
+    ) do |root, guard|
+      # File.binwrite cannot write to a directory; unhandled this raised and cost the run.
+      expect { guard.run }.not_to raise_error
+      expect(File.read(File.join(root, "AGENTS.md"))).to eq("Real project harness.\n")
+    end
+  end
+
+  it "replaces a file the pull request put where a parent directory belongs" do
+    repository(
+      base: { ".cursor/rules/house-style.mdc" => "Follow the house style.\n" },
+      head: { ".cursor" => nil }
+    ) do |root, guard|
+      File.write(File.join(root, ".cursor"), "not a directory\n")
+
+      # mkdir_p cannot descend through a regular file.
+      expect { guard.run }.not_to raise_error
+      expect(File.read(File.join(root, ".cursor/rules/house-style.mdc")))
+        .to eq("Follow the house style.\n")
+    end
+  end
+
   it "compares against the merge base, not the base branch tip" do
     Dir.mktmpdir do |root|
       git(root, "init", "--initial-branch", "main", ".")

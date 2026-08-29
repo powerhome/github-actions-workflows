@@ -13,6 +13,10 @@ module TestPlan
     def self.instruction_path?(relative)
       segments = relative.split("/")
       return true if segments[0..-2].any? { |segment| DIRECTORY_NAMES.include?(segment) }
+      # The reserved name itself counts: a pull request can commit a regular file called
+      # .cursor, which survives a reset that only looks inside such a directory and then
+      # makes the provider fail at `mkdir -p .cursor` instead of producing a plan.
+      return true if DIRECTORY_NAMES.include?(segments.last)
 
       FILE_NAMES.include?(segments.last)
     end
@@ -96,14 +100,25 @@ module TestPlan
       File.file?(absolute) && File.binread(absolute) == trusted
     end
 
-    # A pull request can replace an instruction file, or any directory above it, with a
-    # symlink. Writing through one would put merge-base content wherever the link
-    # points, outside the workspace entirely. Every symlinked component is removed
-    # first -- the same answer the rest of this class gives, since a link the pull
-    # request introduced is not what the merge base holds. FileUtils.rm_rf unlinks a
-    # symlink rather than following it.
+    # A pull request can put something other than the expected file at any point along
+    # the path: a symlink, whose target the write would land in rather than the
+    # workspace; a directory where the file belongs, which File.binwrite cannot write
+    # to; or a regular file where a parent directory belongs, which mkdir_p cannot
+    # descend. The last two raise and fail the whole run before a plan is generated.
+    #
+    # Whatever stands in the way is removed first, which is the answer this class gives
+    # everywhere else: what the pull request put there is not what the merge base holds.
+    # FileUtils.rm_rf unlinks a symlink rather than following it.
     def write_trusted(absolute, trusted)
-      each_component(absolute) { |path| FileUtils.rm_rf(path) if File.symlink?(path) }
+      components = each_component(absolute).to_a
+
+      components[0..-2].each do |path|
+        FileUtils.rm_rf(path) if File.symlink?(path) || (File.exist?(path) && !File.directory?(path))
+      end
+
+      leaf = components.last
+      FileUtils.rm_rf(leaf) if File.symlink?(leaf) || (File.exist?(leaf) && !File.file?(leaf))
+
       FileUtils.mkdir_p(File.dirname(absolute))
       File.binwrite(absolute, trusted)
     end
