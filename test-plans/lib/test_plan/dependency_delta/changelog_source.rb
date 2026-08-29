@@ -41,16 +41,16 @@ module TestPlan
       # Never raises: a missing repository, tag, or changelog is an absence of evidence,
       # not a failure of the run.
       def diffs_for(change)
-        repository, directory = resolve_repository(change)
-        return [] unless repository
+        repository, candidates = resolve_source(change)
+        return [] if repository.nil? || candidates.empty?
 
-        old_ref = resolve_tag(repository, directory, change.old_version)
+        old_ref = resolve_tag(repository, candidates, change.old_version)
         return [] unless old_ref
 
-        old_body, path = fetch_any(repository, directory, old_ref)
+        old_body, path = fetch_any(repository, candidates, old_ref)
         return [] unless old_body
 
-        new_body = fetch(repository, directory, DEFAULT_REF, File.basename(path))
+        new_body = fetch(repository, DEFAULT_REF, path)
         return [] unless new_body && new_body != old_body
 
         diff = unified_diff(path, old_body, new_body)
@@ -64,18 +64,32 @@ module TestPlan
 
     private
 
+      # Returns the repository and the changelog paths worth trying, in order.
+      #
       # npm records the repository, and a monorepo's subdirectory with it. RubyGems
-      # exposes it only when a gem sets source_code_uri or changelog_uri -- playbook_ui
-      # sets neither, which is why the gem half relies on its npm counterpart being
-      # linked to the same release.
-      def resolve_repository(change)
+      # exposes it only when a gem sets source_code_uri or changelog_uri; a
+      # changelog_uri is better still, because it names the file rather than leaving us
+      # to guess that it sits at the repository root -- playbook keeps its under
+      # playbook/.
+      def resolve_source(change)
         case change.source
-        when "npm" then npm_repository(change)
-        when "rubygems" then [rubygems_repository(change), nil]
-        when "git" then [GitLocator.repository(change.new_locator) ||
-          GitLocator.repository(change.old_locator), nil]
-        else [nil, nil]
+        when "npm"
+          repository, directory = npm_repository(change)
+          [repository, candidate_paths(directory)]
+        when "rubygems"
+          repository, path = rubygems_repository(change)
+          [repository, [path, *candidate_paths(nil)].compact.uniq]
+        when "git"
+          repository = GitLocator.repository(change.new_locator) ||
+            GitLocator.repository(change.old_locator)
+          [repository, candidate_paths(nil)]
+        else
+          [nil, []]
         end
+      end
+
+      def candidate_paths(directory)
+        FILENAMES.map { |name| directory ? "#{directory}/#{name}" : name }
       end
 
       def npm_repository(change)
@@ -93,32 +107,37 @@ module TestPlan
         payload = fetch_json(
           "https://rubygems.org/api/v1/gems/#{URI.encode_www_form_component(change.name)}.json"
         )
+
+        # A changelog_uri pointing at a blob gives the path as well as the repository.
+        blob = payload["changelog_uri"].to_s
+          .match(%r{github\.com/([^/]+)/([^/]+)/blob/[^/]+/(.+)\z})
+        return ["#{blob[1]}/#{blob[2]}", blob[3]] if blob
+
         %w[source_code_uri changelog_uri homepage_uri].each do |field|
           repository = GitLocator.repository(payload[field])
-          return repository if repository
-        end
-        nil
-      end
-
-      # Tag conventions vary even within one project; playbook publishes 17.0.0 and
-      # v17.1.0-rc.4 side by side.
-      def resolve_tag(repository, directory, version)
-        ["#{version}", "v#{version}"].find do |candidate|
-          FILENAMES.any? { |name| fetch(repository, directory, candidate, name) }
-        end
-      end
-
-      def fetch_any(repository, directory, ref)
-        FILENAMES.each do |name|
-          body = fetch(repository, directory, ref, name)
-          return [body, join(directory, name)] if body
+          return [repository, nil] if repository
         end
         [nil, nil]
       end
 
-      def fetch(repository, directory, ref, name)
-        url = "https://raw.githubusercontent.com/#{repository}/#{URI.encode_www_form_component(ref)}/" \
-          "#{join(directory, name)}"
+      # Tag conventions vary even within one project; playbook publishes 17.0.0 and
+      # v17.1.0-rc.4 side by side.
+      def resolve_tag(repository, candidates, version)
+        ["#{version}", "v#{version}"].find do |ref|
+          candidates.any? { |path| fetch(repository, ref, path) }
+        end
+      end
+
+      def fetch_any(repository, candidates, ref)
+        candidates.each do |path|
+          body = fetch(repository, ref, path)
+          return [body, path] if body
+        end
+        [nil, nil]
+      end
+
+      def fetch(repository, ref, path)
+        url = "https://raw.githubusercontent.com/#{repository}/#{URI.encode_www_form_component(ref)}/#{path}"
         Tempfile.create(["changelog", ".md"]) do |file|
           @downloader.download(url, file.path)
           body = File.read(file.path, encoding: Encoding::UTF_8)
@@ -158,10 +177,6 @@ module TestPlan
         return diff if diff.bytesize <= MAX_DIFF_BYTES
 
         diff.byteslice(0, MAX_DIFF_BYTES).scrub + TRUNCATION_NOTICE
-      end
-
-      def join(directory, name)
-        directory ? "#{directory}/#{name}" : name
       end
 
       def presence(value)

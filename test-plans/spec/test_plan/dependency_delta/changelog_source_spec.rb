@@ -112,6 +112,33 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     expect(diffs.first.path).to eq("CHANGELOG.md")
   end
 
+  it "takes both repository and path from a gem's changelog_uri" do
+    # playbook_ui keeps its changelog under playbook/, not at the repository root, so
+    # the URI has to supply the path as well.
+    downloader = FakeChangelogDownloader.new(
+      {
+        "https://rubygems.org/api/v1/gems/playbook_ui.json" => JSON.generate(
+          "source_code_uri" => "https://github.com/powerhome/playbook",
+          "changelog_uri" => "https://github.com/powerhome/playbook/blob/master/playbook/CHANGELOG.md"
+        ),
+      }
+        .merge(raw("17.0.0", "old\n"))
+        .merge(raw("HEAD", "new\n"))
+    )
+    change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "playbook_ui", old_version: "17.0.0", new_version: "17.1.0",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+
+    diffs = described_class.new(downloader: downloader).diffs_for(change)
+
+    expect(diffs.first.path).to eq("playbook/CHANGELOG.md")
+    expect(downloader.requested).not_to include(
+      "https://raw.githubusercontent.com/powerhome/playbook/17.0.0/CHANGELOG.md"
+    )
+  end
+
   it "returns nothing when the package records no repository" do
     downloader = FakeChangelogDownloader.new(
       "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate("name" => "playbook-ui")
