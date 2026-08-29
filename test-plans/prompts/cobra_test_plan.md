@@ -29,6 +29,7 @@ Create a complete, risk-based manual QA plan for the application behavior change
   - Using the matched action is important because one subject key can have multiple `Consent.define` blocks with different labels. Do not use the Ruby class constant as the Subject or Consent's descriptive `action.label` as the Action.
 - Call out permission changes in `permissions.changes` when the PR adds a permission definition, or directly adds, removes, or modifies a permission lookup or authorization check. Describe the change concisely with UI-facing Subject and Action labels, such as `Added permission lookup: Project Items — Edit Comments.` Use an empty array when the diff contains no such permission change.
 - Express scenarios as concrete tester actions followed by observable outcomes beginning with `Verify`.
+- When the changed path enqueues background work, the result the tester sees arrives after that work finishes, not on the action itself. Say so in the step. A verification written as though the result appears immediately will fail for a tester even though the behavior is correct.
 - Use product-facing names and navigation locations when they can be identified confidently.
 - Do not mention source files, dependency names, classes, methods, migrations, code architecture, automated tests, or implementation details.
 - UI-facing permission Subject and Action labels are allowed and required; do not replace them with implementation explanations.
@@ -41,12 +42,16 @@ Create a complete, risk-based manual QA plan for the application behavior change
 Organize functional cases by the tester's path through the application, not primarily by product domain.
 
 1. Inventory every reachable application page and tester path whose behavior is changed by the available evidence before adding detailed edge cases.
-2. Every reachable page that is altered in a way that is not behaviorally uniform with the other affected pages must appear in at least one functional scenario. Coverage of shared underlying code or a similar page does not substitute for that page.
-3. Establish breadth first: include concise baseline coverage for every distinctly affected page or path before expanding any one area with variants, boundary cases, or regressions.
-4. Put cases with identical or substantially similar setup, navigation, actions, and observable behavior in the same `feature_areas` entry, even when they touch more than one product domain. Do not group pages whose resulting behavior differs.
-5. Split cases when the tester follows a materially different path or must verify page-specific behavior.
-6. Use `domain` only as a secondary classification for a test-path group.
-7. Order test-path groups so identical or similar paths remain adjacent. Use domain only to order groups whose test paths are otherwise unrelated.
+2. A changed file is often not a page. Trace each one to the pages a tester can actually reach before deciding what is affected.
+   - Shared code — a ViewComponent, a rendered partial, a helper, a concern, a Playbook kit — appears in the diff as a definition, and the diff never shows its reach. Search the repository for what renders or calls it, and cover each distinct page it reaches rather than the component once.
+   - In components served through GraphQL, a changed type, field, or resolver is not user-visible by itself. Find the client query or React component that consumes it, and cover the page that renders it.
+   - When a changed path is reached from several pages whose resulting behavior is the same, group them; when the behavior differs by page, cover each.
+3. Every reachable page that is altered in a way that is not behaviorally uniform with the other affected pages must appear in at least one functional scenario. Coverage of shared underlying code or a similar page does not substitute for that page.
+4. Establish breadth first: include concise baseline coverage for every distinctly affected page or path before expanding any one area with variants, boundary cases, or regressions.
+5. Put cases with identical or substantially similar setup, navigation, actions, and observable behavior in the same `feature_areas` entry, even when they touch more than one product domain. Do not group pages whose resulting behavior differs.
+6. Split cases when the tester follows a materially different path or must verify page-specific behavior.
+7. Use `domain` only as a secondary classification for a test-path group.
+8. Order test-path groups so identical or similar paths remain adjacent. Use domain only to order groups whose test paths are otherwise unrelated.
 
 Each scenario must identify the relative URL of the landing page where its test begins. Use a path beginning with `/` and omit the scheme and host. Use an empty string only when the repository does not provide enough evidence to identify the route.
 
