@@ -22,10 +22,14 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     end
   end
 
-  def npm_change(name: "playbook-ui", old_version: "17.0.0", new_version: "17.1.0")
+  def npm_change(name: "playbook-ui", old_version: "17.0.0", new_version: "17.1.0",
+                 locator: nil, integrity: nil)
     TestPlan::DependencyDelta::Change.new(
       ecosystem: "yarn", name: name, old_version: old_version, new_version: new_version,
-      source: "npm", old_locator: nil, new_locator: nil, direct: true, lockfiles: ["yarn.lock"]
+      source: "npm",
+      old_locator: locator || "https://registry.npmjs.org/#{name}/-/#{name}-#{old_version}.tgz",
+      new_locator: locator || "https://registry.npmjs.org/#{name}/-/#{name}-#{new_version}.tgz",
+      new_integrity: integrity, direct: true, lockfiles: ["yarn.lock"]
     )
   end
 
@@ -40,6 +44,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
   let(:npm_metadata) do
     {
       "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate(
+        "dist" => { "tarball" => "https://registry.npmjs.org/x.tgz", "integrity" => "sha512-public==" },
         "repository" => {
           "type" => "git",
           "url" => "git+ssh://git@github.com/powerhome/playbook.git",
@@ -139,9 +144,50 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     )
   end
 
+  it "reads the changelog of a proxied package whose checksum matches the public one" do
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata.merge(raw("17.0.0", "old\n")).merge(raw("HEAD", "new\n"))
+    )
+    change = npm_change(
+      locator: "https://npm.powerapp.cloud/playbook-ui/-/playbook-ui-17.1.0.tgz",
+      integrity: "sha512-public=="
+    )
+
+    expect(described_class.new(downloader: downloader).diffs_for(change).length).to eq(1)
+  end
+
+  it "refuses the changelog of a private package that only shares a public name" do
+    # Source retrieval rejects this package for the same reason, and a changelog
+    # survives a refused download -- so without this check the provider would be handed
+    # an unrelated project's release notes precisely when it has nothing else.
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata.merge(raw("17.0.0", "old\n")).merge(raw("HEAD", "new\n"))
+    )
+    change = npm_change(
+      locator: "https://npm.powerapp.cloud/playbook-ui/-/playbook-ui-17.1.0.tgz",
+      integrity: "sha512-different=="
+    )
+
+    expect(described_class.new(downloader: downloader).diffs_for(change)).to be_empty
+  end
+
+  it "refuses the changelog of a gem resolved from a private remote" do
+    downloader = FakeChangelogDownloader.new({})
+    change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "rack", old_version: "3.1.7", new_version: "3.1.8",
+      source: "rubygems", old_locator: "https://gems.powerapp.cloud/",
+      new_locator: "https://gems.powerapp.cloud/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+
+    expect(described_class.new(downloader: downloader).diffs_for(change)).to be_empty
+    expect(downloader.requested).to be_empty
+  end
+
   it "returns nothing when the package records no repository" do
     downloader = FakeChangelogDownloader.new(
-      "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate("name" => "playbook-ui")
+      "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate(
+        "dist" => { "integrity" => "sha512-public==" }, "name" => "playbook-ui"
+      )
     )
 
     expect(described_class.new(downloader: downloader).diffs_for(npm_change)).to be_empty

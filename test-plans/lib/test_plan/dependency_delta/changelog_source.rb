@@ -5,6 +5,7 @@ require "uri"
 
 require_relative "git_locator"
 require_relative "public_downloader"
+require_relative "public_origin"
 require_relative "source_diff"
 require_relative "source_diff_builder"
 
@@ -92,11 +93,20 @@ module TestPlan
         FILENAMES.map { |name| directory ? "#{directory}/#{name}" : name }
       end
 
+      # The version document is only this package's if the lockfile entry is the public
+      # package at all. Without that check a private package sharing a name with a
+      # public one would be handed the unrelated project's changelog -- and it would be
+      # handed it precisely when source retrieval had already refused the package for
+      # the same reason, since a changelog survives a refused download.
       def npm_repository(change)
         payload = fetch_json(
           "https://registry.npmjs.org/#{URI.encode_www_form_component(change.name)}/" \
             "#{URI.encode_www_form_component(change.new_version)}"
         )
+        unless PublicOrigin.npm_public?(payload["dist"].to_h, change.new_locator, change.new_integrity)
+          return [nil, nil]
+        end
+
         repository = payload["repository"]
         return [nil, nil] unless repository.is_a?(Hash)
 
@@ -104,6 +114,10 @@ module TestPlan
       end
 
       def rubygems_repository(change)
+        # Gemfile.lock carries no checksum, so a gem resolved from anywhere but
+        # rubygems.org cannot be shown to be the public gem of that name.
+        return [nil, nil] unless PublicOrigin.rubygems_public?(change)
+
         payload = fetch_json(
           "https://rubygems.org/api/v1/gems/#{URI.encode_www_form_component(change.name)}.json"
         )

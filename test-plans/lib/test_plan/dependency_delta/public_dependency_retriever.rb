@@ -2,6 +2,7 @@ require "fileutils"
 require "tmpdir"
 require "uri"
 require_relative "./git_locator"
+require_relative "./public_origin"
 require_relative "./public_downloader"
 require_relative "./safe_tar_extractor"
 require_relative "./source_diff"
@@ -10,10 +11,6 @@ require_relative "./source_diff_builder"
 module TestPlan
   module DependencyDelta
     class PublicRetriever
-      PUBLIC_RUBYGEMS_HOSTS = %w[rubygems.org].freeze
-      # registry.yarnpkg.com is an alias of registry.npmjs.org.
-      PUBLIC_NPM_HOSTS = %w[registry.npmjs.org registry.yarnpkg.com].freeze
-
       def initialize(downloader: PublicDownloader.new, extractor: SafeTarExtractor.new)
         @downloader = downloader
         @extractor = extractor
@@ -46,12 +43,7 @@ module TestPlan
       # Gemfile.lock carries no checksum we could fall back on, so anything else is treated
       # as a private source and reported rather than guessed at.
       def retrieve_gems(change, directory, old_root, new_root)
-        [change.old_locator, change.new_locator].each do |locator|
-          next if public_host?(locator, PUBLIC_RUBYGEMS_HOSTS)
-
-          raise "#{change.name} resolves to a non-public RubyGems source (#{locator.to_s.empty? ? "unknown" : locator}); " \
-            "private sources are not retrieved"
-        end
+        PublicOrigin.rubygems_public!(change)
 
         old_archive = File.join(directory, "old.gem")
         new_archive = File.join(directory, "new.gem")
@@ -79,30 +71,9 @@ module TestPlan
       # would hand the provider a same-named package's unrelated source.
       def public_npm_tarball(change, version, locator, integrity)
         dist = @downloader.npm_dist(change.name, version)
-        return dist.fetch("tarball") if public_host?(locator, PUBLIC_NPM_HOSTS)
-
-        unless checksum_matches?(dist, locator, integrity)
-          raise "#{change.name}@#{version} resolves to a non-public registry " \
-            "(#{locator.to_s.empty? ? "unknown" : URI.parse(locator).host}) and its lockfile checksum does not " \
-            "match the public package; private sources are not retrieved"
-        end
+        PublicOrigin.npm_public!(change, version, dist, locator, integrity)
 
         dist.fetch("tarball")
-      end
-
-      def checksum_matches?(dist, locator, integrity)
-        return true if !integrity.to_s.empty? && integrity == dist["integrity"]
-
-        # Older yarn v1 entries carry no integrity line and record a sha1 fragment instead.
-        fragment = locator.to_s.split("#", 2)[1].to_s
-        !fragment.empty? && fragment == dist["shasum"]
-      end
-
-      def public_host?(locator, hosts)
-        uri = URI.parse(locator.to_s)
-        uri.is_a?(URI::HTTPS) && hosts.include?(uri.host)
-      rescue URI::InvalidURIError
-        false
       end
 
       # Each revision has to come from the repository that actually recorded it. When a

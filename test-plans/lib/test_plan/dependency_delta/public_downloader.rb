@@ -46,17 +46,23 @@ module TestPlan
         destination
       end
 
-      def npm_dist(name, version)
+      # The version document carries both dist -- which proves whether a lockfile entry
+      # is this public package -- and repository, which says where its changelog lives.
+      # One fetch serves both.
+      def npm_version(name, version)
         encoded_name = URI.encode_www_form_component(name)
         metadata_url = "https://registry.npmjs.org/#{encoded_name}/#{URI.encode_www_form_component(version)}"
         Tempfile.create(["npm-metadata", ".json"]) do |metadata|
           download(metadata_url, metadata.path)
-          payload = JSON.parse(File.read(metadata.path, encoding: Encoding::UTF_8))
-          dist = payload["dist"]
-          raise "npm metadata did not include a tarball for #{name}@#{version}" if dist.to_h["tarball"].to_s.empty?
-
-          dist
+          JSON.parse(File.read(metadata.path, encoding: Encoding::UTF_8))
         end
+      end
+
+      def npm_dist(name, version)
+        dist = npm_version(name, version)["dist"]
+        raise "npm metadata did not include a tarball for #{name}@#{version}" if dist.to_h["tarball"].to_s.empty?
+
+        dist
       end
     end
   end
