@@ -111,14 +111,29 @@ module TestPlan
           "https://registry.npmjs.org/#{URI.encode_www_form_component(change.name)}/" \
             "#{URI.encode_www_form_component(change.new_version)}"
         )
+        # Both sides, not just the new one. The changelog diff starts at the old
+        # version's tag, so an old entry that came from a private package would have
+        # this repository's history presented as its release notes -- and would, since a
+        # changelog survives the refused download of that side.
         unless PublicOrigin.npm_public?(payload["dist"].to_h, change.new_locator, change.new_integrity)
           return [nil, nil]
         end
+        return [nil, nil] unless old_version_public?(change)
 
         repository = payload["repository"]
         return [nil, nil] unless repository.is_a?(Hash)
 
         [GitLocator.repository(repository["url"]), presence(repository["directory"])]
+      end
+
+      def old_version_public?(change)
+        payload = fetch_json(
+          "https://registry.npmjs.org/#{URI.encode_www_form_component(change.name)}/" \
+            "#{URI.encode_www_form_component(change.old_version)}"
+        )
+        PublicOrigin.npm_public?(payload["dist"].to_h, change.old_locator, change.old_integrity)
+      rescue
+        false
       end
 
       def rubygems_repository(change)

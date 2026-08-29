@@ -23,13 +23,14 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
   end
 
   def npm_change(name: "playbook-ui", old_version: "17.0.0", new_version: "17.1.0",
-                 locator: nil, integrity: nil)
+                 locator: nil, integrity: nil, old_integrity: nil)
     TestPlan::DependencyDelta::Change.new(
       ecosystem: "yarn", name: name, old_version: old_version, new_version: new_version,
       source: "npm",
       old_locator: locator || "https://registry.npmjs.org/#{name}/-/#{name}-#{old_version}.tgz",
       new_locator: locator || "https://registry.npmjs.org/#{name}/-/#{name}-#{new_version}.tgz",
-      new_integrity: integrity, direct: true, lockfiles: ["yarn.lock"]
+      old_integrity: old_integrity, new_integrity: integrity,
+      direct: true, lockfiles: ["yarn.lock"]
     )
   end
 
@@ -41,6 +42,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     )
   end
 
+  # Both versions are looked up: the changelog diff starts at the old version's tag, so
+  # the old side has to be shown to be this package too.
   let(:npm_metadata) do
     {
       "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate(
@@ -50,6 +53,9 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
           "url" => "git+ssh://git@github.com/powerhome/playbook.git",
           "directory" => "playbook",
         }
+      ),
+      "https://registry.npmjs.org/playbook-ui/17.0.0" => JSON.generate(
+        "dist" => { "tarball" => "https://registry.npmjs.org/y.tgz", "integrity" => "sha512-public-old==" }
       ),
     }
   end
@@ -150,10 +156,25 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     )
     change = npm_change(
       locator: "https://npm.powerapp.cloud/playbook-ui/-/playbook-ui-17.1.0.tgz",
-      integrity: "sha512-public=="
+      integrity: "sha512-public==", old_integrity: "sha512-public-old=="
     )
 
     expect(described_class.new(downloader: downloader).diffs_for(change).length).to eq(1)
+  end
+
+  it "refuses when only the new side proves to be the public package" do
+    # Source retrieval rejects the old side, and a changelog survives a refused
+    # download, so the public project's history would stand in for the private old
+    # version's release notes.
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata.merge(raw("17.0.0", "old\n")).merge(raw("HEAD", "new\n"))
+    )
+    change = npm_change(
+      locator: "https://npm.powerapp.cloud/playbook-ui/-/playbook-ui-17.1.0.tgz",
+      integrity: "sha512-public==", old_integrity: "sha512-was-private=="
+    )
+
+    expect(described_class.new(downloader: downloader).diffs_for(change)).to be_empty
   end
 
   it "refuses the changelog of a private package that only shares a public name" do
