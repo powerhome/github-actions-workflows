@@ -680,7 +680,14 @@ end
 
 class SourceDiffBuilder
   CHANGELOG_PATTERN = %r{(?:^|/)(?:change(?:log|s)?|history|release(?:s|_notes)?|upgrade(?:_guide)?)(?:\.|/|$)}i
-  TEST_PATTERN = %r{(?:^|/)(?:test|tests|spec|specs|__tests__)(?:/|$)}i
+  # Directory segments, plus colocated names like avatar.test.js and widget_spec.rb.
+  # Matching only on directories scored Playbook's colocated tests as runtime source,
+  # so they competed with real source for the context budget.
+  TEST_PATTERN = %r{
+    (?:^|/)(?:test|tests|spec|specs|__tests__)(?:/|$)
+    |
+    [._-](?:test|spec)\.[^/]+\z
+  }xi
   DOC_PATTERN = %r{(?:^|/)(?:docs?|readme)(?:\.|/|$)}i
   GENERATED_PATTERN = %r{(?:^|/)(?:vendor|dist|build|coverage|node_modules)(?:/|$)|(?:\.min\.|\.map\z)}i
 
