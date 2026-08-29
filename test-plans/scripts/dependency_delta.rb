@@ -672,13 +672,23 @@ private
   end
 end
 
-SourceDiff = Struct.new(:path, :diff, keyword_init: true) do
+SourceDiff = Struct.new(:path, :diff, :priority, keyword_init: true) do
   def bytesize
     diff.bytesize
+  end
+
+  def generated?
+    priority == SourceDiffBuilder::PRIORITY_GENERATED
   end
 end
 
 class SourceDiffBuilder
+  PRIORITY_CHANGELOG = 0
+  PRIORITY_RUNTIME = 1
+  PRIORITY_TEST = 2
+  PRIORITY_DOC = 3
+  PRIORITY_GENERATED = 4
+
   CHANGELOG_PATTERN = %r{(?:^|/)(?:change(?:log|s)?|history|release(?:s|_notes)?|upgrade(?:_guide)?)(?:\.|/|$)}i
   # Directory segments, plus colocated names like avatar.test.js and widget_spec.rb.
   # Matching only on directories scored Playbook's colocated tests as runtime source,
@@ -716,12 +726,12 @@ private
   end
 
   def priority(path)
-    return 0 if path.match?(CHANGELOG_PATTERN)
-    return 2 if path.match?(TEST_PATTERN)
-    return 3 if path.match?(DOC_PATTERN)
-    return 4 if path.match?(GENERATED_PATTERN)
+    return PRIORITY_CHANGELOG if path.match?(CHANGELOG_PATTERN)
+    return PRIORITY_TEST if path.match?(TEST_PATTERN)
+    return PRIORITY_DOC if path.match?(DOC_PATTERN)
+    return PRIORITY_GENERATED if path.match?(GENERATED_PATTERN)
 
-    1
+    PRIORITY_RUNTIME
   end
 
   def same_file?(old_path, new_path)
@@ -745,7 +755,7 @@ private
     )
     raise "diff failed for #{relative}: #{stderr.strip}" unless [0, 1].include?(status.exitstatus)
 
-    stdout.empty? ? nil : SourceDiff.new(path: relative, diff: stdout)
+    stdout.empty? ? nil : SourceDiff.new(path: relative, diff: stdout, priority: priority(relative))
   end
 end
 
@@ -902,8 +912,11 @@ end
 
 class DependencyDeltaGenerator
   FULL_LIMIT = 10 * 1024 * 1024
-  CONTEXT_PER_DEPENDENCY_LIMIT = 100 * 1024
   CONTEXT_TOTAL_LIMIT = 500 * 1024
+  # Floor on a dependency's share. Below this a slice is too small to say anything
+  # useful, so it is better to spend the budget on the dependencies sorted first --
+  # direct, then Git-pinned -- and let the tail fall off.
+  CONTEXT_MINIMUM_PER_DEPENDENCY = 25 * 1024
 
   def initialize(changes:, retriever: PublicDependencyRetriever.new, problems: [])
     @changes = changes.sort_by { |change| [change.direct ? 0 : 1, change.source == "git" ? 0 : 1, change.name] }
@@ -916,9 +929,12 @@ class DependencyDeltaGenerator
     full = +""
     context = +""
     entries = []
+    remaining_context = CONTEXT_TOTAL_LIMIT
+    remaining_changes = @changes.length
 
     @changes.each do |change|
       entry = change.to_h
+      entry["related"] = related_for(change)
       begin
         diffs = @retriever.retrieve(change)
         entry["changed_files"] = diffs.length
@@ -930,21 +946,31 @@ class DependencyDeltaGenerator
         # shared artifact budget being spent by earlier dependencies says nothing
         # about this one's evidence.
         omitted_from_artifact = append_chunks(full, header, diffs, FULL_LIMIT)
-        dependency_context = +""
-        omitted_from_context = append_chunks(
-          dependency_context,
-          header,
-          diffs,
-          CONTEXT_PER_DEPENDENCY_LIMIT
-        )
-        if append_text(context, dependency_context, CONTEXT_TOTAL_LIMIT)
-          omitted_from_context = diffs.map(&:path)
-          entry["warnings"] << "Provider context reached the #{kib(CONTEXT_TOTAL_LIMIT)} total limit; " \
-            "this dependency's delta was omitted."
-        elsif omitted_from_context.any?
-          entry["warnings"] << "Provider context reached the #{kib(CONTEXT_PER_DEPENDENCY_LIMIT)} " \
-            "per-dependency limit; #{omitted_from_context.length} file diffs were omitted."
+
+        candidates = context_candidates(entry.fetch("related"), diffs)
+        excluded = diffs - candidates
+        omitted_from_context = []
+
+        if candidates.any?
+          budget = context_budget(remaining_context, remaining_changes)
+          dependency_context = +""
+          omitted_from_context = append_chunks(dependency_context, header, candidates, budget)
+          context << dependency_context
+          remaining_context -= dependency_context.bytesize
+
+          if omitted_from_context.any?
+            entry["warnings"] << "Provider context budget of #{kib(budget)} was exhausted; " \
+              "#{omitted_from_context.length} file diffs were omitted."
+          end
         end
+
+        if excluded.any?
+          entry["warnings"] << "Kept #{excluded.length} generated build files out of the provider " \
+            "context; #{entry.fetch("related").join(", ")} carries the source for the same " \
+            "release. They remain in the full-delta artifact."
+        end
+
+        entry["status"] = omitted_from_context.any? ? "truncated" : "retrieved"
 
         if omitted_from_artifact.any?
           entry["warnings"] << "The full-delta artifact reached its #{mib(FULL_LIMIT)} limit; " \
@@ -952,20 +978,20 @@ class DependencyDeltaGenerator
             "from the provider context."
         end
 
-        entry["related"] = related_for(change)
-        entry["context_files"] = diffs.length - omitted_from_context.length
+        entry["context_files"] = candidates.length - omitted_from_context.length
         entry["omitted_from_context"] = omitted_from_context.sort
+        entry["excluded_generated"] = excluded.map(&:path).sort
         entry["omitted_from_artifact"] = omitted_from_artifact.sort
-        entry["status"] = omitted_from_context.any? ? "truncated" : "retrieved"
       rescue => e
         entry["status"] = "unavailable"
-        entry["related"] = related_for(change)
         entry["changed_files"] = 0
         entry["context_files"] = 0
         entry["omitted_from_context"] = []
+        entry["excluded_generated"] = []
         entry["omitted_from_artifact"] = []
         entry["warnings"] = [e.message]
       end
+      remaining_changes -= 1
       entries << entry
     end
 
@@ -985,6 +1011,29 @@ class DependencyDeltaGenerator
   end
 
 private
+
+  # Share what is left among the dependencies still to come, so a lone dependency --
+  # a Playbook bump, typically -- can use the whole budget instead of a fixed slice of
+  # it, and an early dependency that came in small hands its surplus to the next.
+  def context_budget(remaining_context, remaining_changes)
+    share = remaining_context / [remaining_changes, 1].max
+    [[share, CONTEXT_MINIMUM_PER_DEPENDENCY].max, remaining_context].min
+  end
+
+  # One upstream release published as a gem and a package: the build output in this
+  # half is compiled from source that reaches the provider through the other half, so
+  # spending context on minified bundles would only crowd that source out. Everything
+  # that is not build output still goes through -- an npm tarball's package.json says
+  # something its gem counterpart does not.
+  #
+  # Assumes the linked sibling carries source. That holds for a gem-and-package pair,
+  # where the gem ships source by construction; two all-generated halves would leave
+  # the release with no context, which the warnings would make visible.
+  def context_candidates(related, diffs)
+    return diffs if related.empty?
+
+    diffs.reject(&:generated?)
+  end
 
   def kib(bytes)
     "#{bytes / 1024} KiB"
@@ -1045,12 +1094,6 @@ private
     omitted
   end
 
-  def append_text(target, text, limit)
-    return true if target.bytesize + text.bytesize > limit
-
-    target << text
-    false
-  end
 end
 
 class DependencyDeltaCommand
@@ -1104,7 +1147,9 @@ private
         dependencies.each do |entry|
           summary.puts("- `#{entry.fetch("name")}`: #{entry.fetch("old_version")} -> #{entry.fetch("new_version")} (#{entry.fetch("status")})")
           entry.fetch("warnings").each { |warning| summary.puts("  - #{warning}") }
-          entry.fetch("omitted_from_context", []).each { |path| summary.puts("  - omitted from context: `#{path}`") }
+          omitted = entry.fetch("omitted_from_context", [])
+          omitted.first(10).each { |path| summary.puts("  - omitted from context: `#{path}`") }
+          summary.puts("  - ...and #{omitted.length - 10} more") if omitted.length > 10
         end
       end
 

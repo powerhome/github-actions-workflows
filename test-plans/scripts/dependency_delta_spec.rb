@@ -1005,7 +1005,7 @@ RSpec.describe "dependency delta generation" do
     it "names every file it omitted from the provider context" do
       diffs = [
         SourceDiff.new(path: "CHANGELOG.md", diff: "c" * 1024),
-        SourceDiff.new(path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_PER_DEPENDENCY_LIMIT + 1)),
+        SourceDiff.new(path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1)),
         SourceDiff.new(path: "lib/small.rb", diff: "s" * 1024),
       ]
       result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
@@ -1020,54 +1020,124 @@ RSpec.describe "dependency delta generation" do
       expect(entry.fetch("warnings").join).to include("1 file diffs were omitted")
     end
 
-    it "records the whole file list when the total context budget drops a dependency" do
-      # 60 KiB fits the per-dependency budget but not the sliver left in the total.
-      diffs = [
-        SourceDiff.new(path: "a.rb", diff: "a" * (30 * 1024)),
-        SourceDiff.new(path: "b.rb", diff: "b" * (30 * 1024)),
-      ]
-      # Each filler contributes ~99 KiB, just under the per-dependency cap, so six of
-      # them exhaust the 500 KiB total before the dependency under test is reached.
-      fillers = Array.new(6) do |index|
+    it "gives a lone dependency the whole context budget" do
+      # 400 KiB would have been cut to 100 KiB under a fixed per-dependency cap.
+      diffs = Array.new(8) { |index| SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }
+
+      result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
+      entry = result.dig(:manifest, "dependencies", 0)
+
+      expect(entry).to include("status" => "retrieved", "context_files" => 8)
+      expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
+    end
+
+    it "hands an early dependency's unused budget to a later one" do
+      small = DependencyChange.new(
+        ecosystem: "bundler", name: "aaa-small", old_version: "1.0.0", new_version: "2.0.0",
+        source: "rubygems", old_locator: "https://rubygems.org/",
+        new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+      )
+      retriever = double("retriever")
+      allow(retriever).to receive(:retrieve) do |candidate|
+        if candidate.name == "aaa-small"
+          [SourceDiff.new(path: "tiny.rb", diff: "t" * 1024)]
+        else
+          # 400 KiB: more than an even two-way split would allow.
+          Array.new(8) { |index| SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }
+        end
+      end
+
+      result = described_class.new(changes: [small, change], retriever: retriever).generate
+      entry = result.dig(:manifest, "dependencies").find { |candidate| candidate.fetch("name") == "example" }
+
+      expect(entry).to include("status" => "retrieved", "context_files" => 8)
+    end
+
+    it "spends the budget on the dependencies sorted first and drops the tail" do
+      changes = Array.new(30) do |index|
         DependencyChange.new(
-          ecosystem: "bundler", name: "aaa-filler-#{index}", old_version: "1.0.0",
+          ecosystem: "bundler", name: format("gem-%02d", index), old_version: "1.0.0",
           new_version: "2.0.0", source: "rubygems", old_locator: "https://rubygems.org/",
           new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
         )
       end
       retriever = double("retriever")
       allow(retriever).to receive(:retrieve) do |candidate|
-        if candidate.name.start_with?("aaa-filler")
-          [SourceDiff.new(path: "filler.rb", diff: "f" * (99 * 1024))]
+        [SourceDiff.new(path: "#{candidate.name}.rb", diff: "x" * (24 * 1024))]
+      end
+
+      result = described_class.new(changes: changes, retriever: retriever).generate
+      entries = result.dig(:manifest, "dependencies")
+
+      expect(entries.first.fetch("context_files")).to eq(1)
+      expect(entries.last.fetch("context_files")).to eq(0)
+      expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
+    end
+
+    it "keeps the build output of a linked release out of the provider context" do
+      gem_change = DependencyChange.new(
+        ecosystem: "bundler", name: "playbook_ui", old_version: "17.0.0", new_version: "17.1.0",
+        source: "rubygems", old_locator: "https://rubygems.org/",
+        new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+      )
+      npm_change = DependencyChange.new(
+        ecosystem: "yarn", name: "playbook-ui", old_version: "17.0.0", new_version: "17.1.0",
+        source: "npm", old_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-17.0.0.tgz",
+        new_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-17.1.0.tgz",
+        direct: true, lockfiles: ["yarn.lock"]
+      )
+      builder = SourceDiffBuilder.new
+      source_diff = lambda do |path|
+        SourceDiff.new(
+          path: path,
+          diff: "--- a/#{path}\n+++ b/#{path}\n#{"x" * 512}\n",
+          priority: builder.send(:priority, path)
+        )
+      end
+      retriever = double("retriever")
+      allow(retriever).to receive(:retrieve) do |candidate|
+        if candidate.ecosystem == "bundler"
+          [source_diff.call("app/pb_kits/playbook/pb_card/_card.tsx")]
         else
-          diffs
+          [
+            source_diff.call("dist/card.js"),
+            source_diff.call("dist/ai/card.schema.json"),
+            source_diff.call("package.json"),
+          ]
         end
       end
 
-      result = described_class.new(changes: fillers + [change], retriever: retriever).generate
-      entry = result.dig(:manifest, "dependencies").find { |candidate| candidate.fetch("name") == "example" }
+      result = described_class.new(changes: [gem_change, npm_change], retriever: retriever).generate
+      entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
+        index[entry.fetch("name")] = entry
+      end
 
-      expect(entry).to include(
-        "status" => "truncated",
-        "context_files" => 0,
-        "omitted_from_context" => ["a.rb", "b.rb"]
+      # The bundles are dropped; package.json is not build output and still goes through.
+      npm_entry = entries.fetch("playbook-ui")
+      expect(npm_entry).to include(
+        "status" => "retrieved",
+        "context_files" => 1,
+        "excluded_generated" => ["dist/ai/card.schema.json", "dist/card.js"]
       )
-      expect(entry.fetch("warnings").join).to include("total limit")
+      expect(npm_entry.fetch("warnings").join).to include("generated build files")
+      expect(result.fetch(:context)).to include("package.json")
+      expect(result.fetch(:context)).not_to include("dist/card.js")
+
+      # The source half is unaffected, and the artifact still holds everything.
+      expect(entries.fetch("playbook_ui").fetch("context_files")).to eq(1)
+      expect(result.fetch(:full)).to include("dist/card.js")
     end
 
-    it "caps provider context and marks truncation" do
-      retriever = double(
-        "retriever",
-        retrieve: [
-          SourceDiff.new(
-            path: "oversized.rb",
-            diff: "x" * (described_class::CONTEXT_PER_DEPENDENCY_LIMIT + 1)
-          ),
-        ]
-      )
-      result = described_class.new(changes: [change], retriever: retriever).generate
-      expect(result.dig(:manifest, "dependencies", 0, "status")).to eq("truncated")
-      expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
+    it "still sends build output for a dependency that has no linked source half" do
+      builder = SourceDiffBuilder.new
+      diffs = [
+        SourceDiff.new(path: "dist/thing.js", diff: "x" * 2048,
+                       priority: builder.send(:priority, "dist/thing.js")),
+      ]
+
+      result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
+
+      expect(result.dig(:manifest, "dependencies", 0, "context_files")).to eq(1)
     end
   end
 end

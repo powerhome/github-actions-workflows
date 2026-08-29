@@ -41,7 +41,11 @@ The action detects raised Bundler and Yarn v1 dependencies across root and compo
 
 For public sources, the action downloads old/new RubyGem or npm archives, or public GitHub revision archives, and creates a deterministic source diff without executing package contents. Retrieval is allowlisted to public HTTPS hosts and enforces archive traversal, link, file-count, expanded-size, download-size, and timeout controls.
 
-Context is prioritized across dependencies as direct, then Git-pinned, then transitive; and within each dependency as changelogs and release notes, runtime source, tests, documentation, and finally generated or vendored files. Truncation happens only at file-diff boundaries, and the manifest names every file it dropped in `omitted_from_context` and `omitted_from_artifact`.
+Context is prioritized across dependencies as direct, then Git-pinned, then transitive; and within each dependency as changelogs and release notes, runtime source, tests, documentation, and finally generated or vendored files. The 500 KiB context budget is shared out among the dependencies that changed rather than fixed per dependency, so a lone upgrade can use all of it and an upgrade that came in small hands its surplus to the next.
+
+Where a gem and an npm package are linked as one upstream release, the build output in either half is kept out of the provider context — it is compiled from source that reaches the model through the other half — while non-generated files such as `package.json` still go through. Everything stays in the full-delta artifact regardless.
+
+Truncation happens only at file-diff boundaries, and the manifest names every file it dropped in `omitted_from_context`, `excluded_generated`, and `omitted_from_artifact`.
 
 Artifacts include:
 
