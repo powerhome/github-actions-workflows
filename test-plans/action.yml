@@ -63,6 +63,10 @@ runs:
       run: |
         set -euo pipefail
 
+        # This path is written before any checkout of the pull-request head, but a
+        # caller may have checked one out already, so clear the name first either way.
+        rm -rf -- "${BLOCKED_COMMENT_PATH}"
+
         if [[ "${BLOCKED_REASON}" == "conflicting" ]]; then
           message="This PR currently has merge conflicts with its base branch. Resolve the conflicts, then remove and reapply the \`${PROFILE_ID}\` label to generate a new test plan."
         else
@@ -112,6 +116,34 @@ runs:
         ref: ${{ steps.pr_metadata.outputs.head_sha }}
         fetch-depth: 1
         token: ${{ steps.app_token.outputs.token }}
+
+    - name: Clear generated output paths
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
+        DEPENDENCY_DELTA_FULL_PATH: ${{ github.workspace }}/dependency-deltas-full.diff
+        DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
+        DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
+        TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
+        TEST_PLAN_COMMENT_PATH: ${{ github.workspace }}/test-plan-comment.md
+      # The workspace is the pull-request head, so it may already contain a file -- or a
+      # symlink -- at any of the names written below. Both shell redirects and File.write
+      # follow a symlink, which would let the head redirect a write outside the workspace
+      # or read back something it chose. rm -rf unlinks a symlink rather than following
+      # it, so clearing the names first is enough.
+      run: |
+        set -euo pipefail
+
+        rm -rf -- \
+          "${PR_DIFF_PATH}" \
+          "${DEPENDENCY_DELTA_MANIFEST_PATH}" \
+          "${DEPENDENCY_DELTA_FULL_PATH}" \
+          "${DEPENDENCY_DELTA_CONTEXT_PATH}" \
+          "${DEPENDENCY_KIT_USAGE_PATH}" \
+          "${TEST_PLAN_JSON_PATH}" \
+          "${TEST_PLAN_COMMENT_PATH}"
 
     - name: Fetch base commit
       if: steps.pr_metadata.outputs.generate == 'true'

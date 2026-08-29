@@ -90,6 +90,16 @@ module ActionWiring
     end.uniq
   end
 
+  # The step that clears reserved names before anything writes to them. Its env is the
+  # canonical list of workspace outputs, so it declares paths it does not produce.
+  def clearing_step
+    steps.find { |step| step.fetch("name", "").include?("Clear generated output paths") }
+  end
+
+  def workspace_paths(step)
+    step.fetch("env", {}).values.grep(/github\.workspace/).map { |value| File.basename(value) }
+  end
+
   def outputs_consumed
     read("action.yml")
       .scan(/steps\.([a-z_]+)\.outputs\.([a-z_]+)/)
@@ -159,10 +169,8 @@ RSpec.describe "action.yml wiring" do
     end
 
     it "uploads every workspace file the steps produce" do
-      produced = ActionWiring.steps
-        .flat_map { |step| step.fetch("env", {}).values }
-        .grep(/github\.workspace/)
-        .map { |value| File.basename(value) }
+      produced = (ActionWiring.steps - [ActionWiring.clearing_step])
+        .flat_map { |step| ActionWiring.workspace_paths(step) }
         .uniq
         # Comments are posted, not archived.
         .reject { |name| name.end_with?("-comment.md") }
@@ -171,6 +179,30 @@ RSpec.describe "action.yml wiring" do
       uploaded = upload.dig("with", "path").to_s
 
       expect(produced.reject { |name| uploaded.include?(name) }).to be_empty
+    end
+
+    # The checked-out head can pre-create any of these names, as a file or a symlink, and
+    # both shell redirects and File.write follow one. Every name written into the
+    # workspace has to be cleared before the first write.
+    it "clears every workspace path it later writes" do
+      # A step may also clear its own path inline, which counts the same.
+      cleared = ActionWiring.steps
+        .select { |step| step.equal?(ActionWiring.clearing_step) || step.fetch("run", "").include?("rm -rf --") }
+        .flat_map { |step| ActionWiring.workspace_paths(step) }
+        .uniq
+      written = (ActionWiring.steps - [ActionWiring.clearing_step])
+        .flat_map { |step| ActionWiring.workspace_paths(step) }
+        .uniq
+
+      expect(written - cleared).to be_empty
+    end
+
+    it "clears those paths before anything writes to the workspace" do
+      names = ActionWiring.steps.map { |step| step.fetch("name") }
+      clearing = names.index(ActionWiring.clearing_step.fetch("name"))
+
+      expect(clearing).to be > names.index("Check out repository")
+      expect(clearing).to be < names.index("Compute PR diff")
     end
   end
 end
