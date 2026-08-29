@@ -108,9 +108,17 @@ module TestPlan
       # both and produced no evidence and no warning. The two sides are not comparable
       # artifacts, so this reports the transition rather than trying to diff it.
       def mixed_source_changes(path, name, old_records, new_records, direct)
-        old_git = old_records.any? { |record| git_locator?(record.resolved) }
-        new_git = new_records.any? { |record| git_locator?(record.resolved) }
-        return [] if old_records.empty? || new_records.empty? || old_git == new_git
+        return [] if old_records.empty? || new_records.empty?
+
+        # One name can legitimately carry both npm and Git selectors at once. Asking
+        # whether any record is Git called that a transition, and reported one on top of
+        # the real raise that version_changes had already found. A transition is only
+        # readable when each side is entirely one kind.
+        return [] unless uniform?(old_records) && uniform?(new_records)
+
+        old_git = git_locator?(old_records.first.resolved)
+        new_git = git_locator?(new_records.first.resolved)
+        return [] if old_git == new_git
 
         old_record = old_records.last
         new_record = new_records.last
@@ -127,6 +135,10 @@ module TestPlan
             lockfiles: [path]
           ),
         ]
+      end
+
+      def uniform?(records)
+        records.map { |record| git_locator?(record.resolved) }.uniq.length == 1
       end
 
       def version(value)

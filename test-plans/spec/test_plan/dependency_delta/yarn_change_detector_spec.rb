@@ -73,6 +73,32 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     expect(changes.first).to have_attributes(old_version: "aaaaaaa", new_version: "2.0.0")
   end
 
+  it "does not call a raise a transition when one name has both kinds of selector" do
+    old_lock = <<~LOCK
+      mixed@^1.0.0:
+        version "1.0.0"
+        resolved "https://registry.npmjs.org/mixed/-/mixed-1.0.0.tgz"
+      mixed@github:example/mixed#aaaaaaa:
+        version "9.9.9"
+        resolved "https://codeload.github.com/example/mixed/tar.gz/aaaaaaa"
+    LOCK
+    new_lock = <<~LOCK
+      mixed@^2.0.0:
+        version "2.0.0"
+        resolved "https://registry.npmjs.org/mixed/-/mixed-2.0.0.tgz"
+    LOCK
+
+    changes = described_class.new.detect(
+      path: "yarn.lock", old_content: old_lock, new_content: new_lock,
+      direct_names: Set["mixed"], workspace_names: Set.new
+    )
+
+    # The npm raise is real; the Git selector merely going away is not a transition, and
+    # reporting one would have added a second change and a spurious warning.
+    expect(changes.map(&:source)).to eq(["npm"])
+    expect(changes.first).to have_attributes(old_version: "1.0.0", new_version: "2.0.0")
+  end
+
   it "reports a dependency that moved from npm to a Git locator" do
     old_lock = <<~LOCK
       moving@^1.0.0:
