@@ -81,9 +81,9 @@ module TestPlan
           next
         end
 
-        workspace_patterns = packages.flat_map { |_path, package| workspace_patterns(package) }
+        workspace_globs = packages.flat_map { |path, package| workspace_globs(path, package) }
         packages.each do |path, package|
-          if package["name"] && (path.start_with?("components/") || workspace_path?(path, workspace_patterns))
+          if package["name"] && (path.start_with?("components/") || workspace_path?(path, workspace_globs))
             local << package["name"]
           end
 
@@ -101,7 +101,19 @@ module TestPlan
         [direct, local]
       end
 
-      def workspace_patterns(package)
+      # A workspace glob is relative to the package.json that declares it, not to the
+      # repository root. Flattening every glob into one root-relative list meant a
+      # nested package declaring "packages/*" never matched its own members, and their
+      # upgrades were reported as external dependencies.
+      def workspace_globs(package_json_path, package)
+        directory = File.dirname(package_json_path)
+
+        patterns(package).map do |pattern|
+          directory == "." ? pattern.to_s : File.join(directory, pattern.to_s)
+        end
+      end
+
+      def patterns(package)
         workspaces = package["workspaces"]
         case workspaces
         when Array
@@ -113,10 +125,10 @@ module TestPlan
         end
       end
 
-      def workspace_path?(package_json_path, patterns)
+      def workspace_path?(package_json_path, globs)
         package_directory = File.dirname(package_json_path)
-        patterns.any? do |pattern|
-          File.fnmatch?(pattern.to_s, package_directory, File::FNM_PATHNAME | File::FNM_EXTGLOB)
+        globs.any? do |glob|
+          File.fnmatch?(glob, package_directory, File::FNM_PATHNAME | File::FNM_EXTGLOB)
         end
       end
 

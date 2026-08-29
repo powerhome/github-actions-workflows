@@ -93,6 +93,36 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     expect(changes.first.lockfiles).to contain_exactly("one/Gemfile.lock", "two/Gemfile.lock")
   end
 
+  it "resolves a nested package's workspace globs relative to its own directory" do
+    old_lock = <<~LOCK
+      external@^1.0.0:
+        version "1.0.0"
+      nested-widget@^1.0.0:
+        version "1.0.0"
+    LOCK
+    new_lock = old_lock.gsub('version "1.0.0"', 'version "2.0.0"')
+    snapshot = FakeSnapshot.new(
+      "merge_base" => { "yarn.lock" => old_lock },
+      "head" => {
+        "yarn.lock" => new_lock,
+        "package.json" => JSON.generate(
+          "dependencies" => { "external" => "^2.0.0", "nested-widget" => "^2.0.0" }
+        ),
+        # Declares its members relative to itself, not to the repository root.
+        "apps/site/package.json" => JSON.generate(
+          "name" => "site", "workspaces" => ["packages/*"]
+        ),
+        "apps/site/packages/widget/package.json" => JSON.generate("name" => "nested-widget"),
+      }
+    )
+    allow(snapshot).to receive(:changed_dependency_files).and_return(["yarn.lock"])
+
+    changes = described_class.new(snapshot).detect
+
+    # nested-widget is a workspace member, so its bump is local, not an external raise.
+    expect(changes.map(&:name)).to eq(["external"])
+  end
+
   it "deduplicates a raise recorded through different registry remotes" do
     lock = lambda do |remote, version|
       <<~LOCK
