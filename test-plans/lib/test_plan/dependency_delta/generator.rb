@@ -1,3 +1,4 @@
+require_relative "./changelog_source"
 require_relative "./public_dependency_retriever"
 
 module TestPlan
@@ -10,9 +11,10 @@ module TestPlan
       # direct, then Git-pinned -- and let the tail fall off.
       CONTEXT_MINIMUM_PER_DEPENDENCY = 25 * 1024
 
-      def initialize(changes:, retriever: PublicRetriever.new, problems: [])
+      def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new, problems: [])
         @changes = changes.sort_by { |change| [change.direct ? 0 : 1, change.source == "git" ? 0 : 1, change.name] }
         @retriever = retriever
+        @changelog = changelog
         @problems = problems
         @related = build_related(@changes)
       end
@@ -27,10 +29,10 @@ module TestPlan
         @changes.each do |change|
           entry = change.to_h
           entry["related"] = related_for(change)
+          entry["warnings"] = []
           begin
-            diffs = @retriever.retrieve(change)
+            diffs = retrieve_diffs(change, entry)
             entry["changed_files"] = diffs.length
-            entry["warnings"] = []
             header = dependency_header(change)
 
             # The artifact and the provider context have separate budgets. Only the
@@ -76,12 +78,12 @@ module TestPlan
             entry["omitted_from_artifact"] = omitted_from_artifact.sort
           rescue => e
             entry["status"] = "unavailable"
+            entry["warnings"] = [e.message]
             entry["changed_files"] = 0
             entry["context_files"] = 0
             entry["omitted_from_context"] = []
             entry["excluded_generated"] = []
             entry["omitted_from_artifact"] = []
-            entry["warnings"] = [e.message]
           end
           remaining_changes -= 1
           entries << entry
@@ -103,6 +105,22 @@ module TestPlan
       end
 
     private
+
+      # The changelog comes from the repository rather than the package, so it can
+      # survive a package download the registry refuses -- which is the difference
+      # between no evidence at all and the release notes for the version being tested.
+      def retrieve_diffs(change, entry)
+        changelog = @changelog.diffs_for(change)
+
+        begin
+          changelog + @retriever.retrieve(change)
+        rescue => e
+          raise if changelog.empty?
+
+          entry["warnings"] << "#{e.message}. The changelog was still read from the repository."
+          changelog
+        end
+      end
 
       # Share what is left among the dependencies still to come, so a lone dependency --
       # a Playbook bump, typically -- can use the whole budget instead of a fixed slice of

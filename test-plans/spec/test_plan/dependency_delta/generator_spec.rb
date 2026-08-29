@@ -2,6 +2,12 @@ require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
 RSpec.describe TestPlan::DependencyDelta::Generator do
+  # The real ChangelogSource reaches the network; these specs are about budgeting, so
+  # they build generators with it stubbed out. The changelog path has its own specs.
+  def generator(**options)
+    described_class.new(changelog: double("changelog", diffs_for: []), **options)
+  end
+
   let(:change) do
     TestPlan::DependencyDelta::Change.new(
       ecosystem: "bundler",
@@ -20,10 +26,45 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve).and_raise("not public")
 
-    result = described_class.new(changes: [change], retriever: retriever).generate
+    result = generator(changes: [change], retriever: retriever).generate
     entry = result.dig(:manifest, "dependencies", 0)
     expect(entry).to include("status" => "unavailable", "warnings" => ["not public"])
     expect(result.dig(:manifest, "warning_count")).to eq(1)
+  end
+
+  it "keeps the changelog when the package download is refused" do
+    changelog = TestPlan::DependencyDelta::SourceDiff.new(
+      path: "CHANGELOG.md",
+      diff: "--- a/CHANGELOG.md\n+++ b/CHANGELOG.md\n+## 2.0.0 fixed the widget\n",
+      priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_CHANGELOG
+    )
+    retriever = double("retriever")
+    allow(retriever).to receive(:retrieve).and_raise("resolves to a non-public registry")
+
+    result = described_class.new(
+      changes: [change],
+      retriever: retriever,
+      changelog: double("changelog", diffs_for: [changelog])
+    ).generate
+    entry = result.dig(:manifest, "dependencies", 0)
+
+    # A package the registry refuses still yields its public release notes, which is
+    # the part a tester can act on.
+    expect(entry).to include("status" => "retrieved", "context_files" => 1)
+    expect(entry.fetch("warnings").join).to include("changelog was still read")
+    expect(result.fetch(:context)).to include("fixed the widget")
+  end
+
+  it "reports the dependency unavailable when neither package nor changelog resolves" do
+    retriever = double("retriever")
+    allow(retriever).to receive(:retrieve).and_raise("not public")
+
+    result = generator(changes: [change], retriever: retriever).generate
+
+    expect(result.dig(:manifest, "dependencies", 0)).to include(
+      "status" => "unavailable",
+      "warnings" => ["not public"]
+    )
   end
 
   it "reports lockfiles it could not analyze without failing generation" do
@@ -32,7 +73,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       message: "Unable to parse components/broken/Gemfile.lock: boom"
     )
 
-    result = described_class.new(changes: [], problems: [problem]).generate
+    result = generator(changes: [], problems: [problem]).generate
 
     expect(result.dig(:manifest, "lockfile_warnings")).to eq(
       [{ "lockfile" => "components/broken/Gemfile.lock", "warning" => problem.message }]
@@ -63,7 +104,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = described_class.new(changes: [big, small], retriever: retriever).generate
+    result = generator(changes: [big, small], retriever: retriever).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -87,7 +128,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
     retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
 
-    result = described_class.new(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -113,7 +154,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
     retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
 
-    result = described_class.new(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
 
     expect(result.dig(:manifest, "dependencies").map { |entry| entry.fetch("related") }).to eq([[], []])
   end
@@ -124,7 +165,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       TestPlan::DependencyDelta::SourceDiff.new(path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1)),
       TestPlan::DependencyDelta::SourceDiff.new(path: "lib/small.rb", diff: "s" * 1024),
     ]
-    result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
+    result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
     entry = result.dig(:manifest, "dependencies", 0)
 
     expect(entry).to include(
@@ -140,7 +181,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     # 400 KiB would have been cut to 100 KiB under a fixed per-dependency cap.
     diffs = Array.new(8) { |index| TestPlan::DependencyDelta::SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }
 
-    result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
+    result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
     entry = result.dig(:manifest, "dependencies", 0)
 
     expect(entry).to include("status" => "retrieved", "context_files" => 8)
@@ -163,7 +204,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = described_class.new(changes: [small, change], retriever: retriever).generate
+    result = generator(changes: [small, change], retriever: retriever).generate
     entry = result.dig(:manifest, "dependencies").find { |candidate| candidate.fetch("name") == "example" }
 
     expect(entry).to include("status" => "retrieved", "context_files" => 8)
@@ -182,7 +223,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       [TestPlan::DependencyDelta::SourceDiff.new(path: "#{candidate.name}.rb", diff: "x" * (24 * 1024))]
     end
 
-    result = described_class.new(changes: changes, retriever: retriever).generate
+    result = generator(changes: changes, retriever: retriever).generate
     entries = result.dig(:manifest, "dependencies")
 
     expect(entries.first.fetch("context_files")).to eq(1)
@@ -223,7 +264,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = described_class.new(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -251,7 +292,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
                      priority: builder.send(:priority, "dist/thing.js")),
     ]
 
-    result = described_class.new(changes: [change], retriever: double("r", retrieve: diffs)).generate
+    result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
 
     expect(result.dig(:manifest, "dependencies", 0, "context_files")).to eq(1)
   end

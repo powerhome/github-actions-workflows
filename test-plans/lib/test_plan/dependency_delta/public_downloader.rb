@@ -7,7 +7,12 @@ module TestPlan
   module DependencyDelta
     class PublicDownloader
       MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
-      ALLOWED_HOSTS = %w[codeload.github.com registry.npmjs.org rubygems.org].freeze
+      ALLOWED_HOSTS = %w[
+        codeload.github.com
+        raw.githubusercontent.com
+        registry.npmjs.org
+        rubygems.org
+      ].freeze
 
       def download(url, destination, redirects: 3)
         raise "Too many redirects while downloading #{url}" if redirects.negative?

@@ -1,5 +1,6 @@
 require_relative "dependency_delta/change"
 require_relative "dependency_delta/change_detector"
+require_relative "dependency_delta/changelog_source"
 require_relative "dependency_delta/command"
 require_relative "dependency_delta/generator"
 require_relative "dependency_delta/git_snapshot"

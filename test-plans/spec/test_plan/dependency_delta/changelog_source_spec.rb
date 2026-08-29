@@ -1,0 +1,155 @@
+require_relative "../../spec_helper"
+require "test_plan/dependency_delta"
+
+require "json"
+
+RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
+  # Stands in for the network: keyed by URL, values are file bodies. Anything not
+  # listed 404s, which is how a missing tag or changelog actually presents.
+  class FakeChangelogDownloader
+    attr_reader :requested
+
+    def initialize(bodies)
+      @bodies = bodies
+      @requested = []
+    end
+
+    def download(url, destination)
+      @requested << url
+      body = @bodies[url] or raise "Dependency download failed (404): #{url}"
+      File.write(destination, body)
+      destination
+    end
+  end
+
+  def npm_change(name: "playbook-ui", old_version: "17.0.0", new_version: "17.1.0")
+    TestPlan::DependencyDelta::Change.new(
+      ecosystem: "yarn", name: name, old_version: old_version, new_version: new_version,
+      source: "npm", old_locator: nil, new_locator: nil, direct: true, lockfiles: ["yarn.lock"]
+    )
+  end
+
+  def gem_change(name: "rack")
+    TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: name, old_version: "3.1.7", new_version: "3.1.8",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+  end
+
+  let(:npm_metadata) do
+    {
+      "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate(
+        "repository" => {
+          "type" => "git",
+          "url" => "git+ssh://git@github.com/powerhome/playbook.git",
+          "directory" => "playbook",
+        }
+      ),
+    }
+  end
+
+  def raw(ref, body, path: "playbook/CHANGELOG.md", repo: "powerhome/playbook")
+    { "https://raw.githubusercontent.com/#{repo}/#{ref}/#{path}" => body }
+  end
+
+  it "diffs the repository changelog between the old tag and the default branch" do
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata
+        .merge(raw("17.0.0", "# 16.12.0\nolder notes\n"))
+        .merge(raw("HEAD", "# 17.1.0\nnew notes\n\n# 16.12.0\nolder notes\n"))
+    )
+
+    diffs = described_class.new(downloader: downloader).diffs_for(npm_change)
+
+    expect(diffs.length).to eq(1)
+    expect(diffs.first.path).to eq("playbook/CHANGELOG.md")
+    expect(diffs.first.priority).to eq(TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_CHANGELOG)
+    expect(diffs.first.diff).to include("+# 17.1.0", "+new notes")
+  end
+
+  it "reads the default branch, not the upgraded-to tag" do
+    # playbook's 17.1.0 tag still describes 17.0.0 as the newest release, because the
+    # changelog is generated after tagging.
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata
+        .merge(raw("17.0.0", "old\n"))
+        .merge(raw("17.1.0", "tag-time content\n"))
+        .merge(raw("HEAD", "default-branch content\n"))
+    )
+
+    diffs = described_class.new(downloader: downloader).diffs_for(npm_change)
+
+    expect(diffs.first.diff).to include("+default-branch content")
+    expect(downloader.requested).not_to include(
+      "https://raw.githubusercontent.com/powerhome/playbook/17.1.0/playbook/CHANGELOG.md"
+    )
+  end
+
+  it "falls back to a v-prefixed tag" do
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata
+        .merge(raw("v17.0.0", "old\n"))
+        .merge(raw("HEAD", "new\n"))
+    )
+
+    expect(described_class.new(downloader: downloader).diffs_for(npm_change).length).to eq(1)
+  end
+
+  it "resolves a gem's repository from its rubygems metadata" do
+    downloader = FakeChangelogDownloader.new(
+      {
+        "https://rubygems.org/api/v1/gems/rack.json" => JSON.generate(
+          "source_code_uri" => "https://github.com/rack/rack"
+        ),
+      }
+        .merge(raw("3.1.7", "old\n", path: "CHANGELOG.md", repo: "rack/rack"))
+        .merge(raw("HEAD", "new\n", path: "CHANGELOG.md", repo: "rack/rack"))
+    )
+
+    diffs = described_class.new(downloader: downloader).diffs_for(gem_change)
+
+    expect(diffs.first.path).to eq("CHANGELOG.md")
+  end
+
+  it "returns nothing when the package records no repository" do
+    downloader = FakeChangelogDownloader.new(
+      "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate("name" => "playbook-ui")
+    )
+
+    expect(described_class.new(downloader: downloader).diffs_for(npm_change)).to be_empty
+  end
+
+  it "returns nothing when no changelog exists at the old tag" do
+    downloader = FakeChangelogDownloader.new(npm_metadata.merge(raw("HEAD", "new\n")))
+
+    expect(described_class.new(downloader: downloader).diffs_for(npm_change)).to be_empty
+  end
+
+  it "returns nothing when the changelog did not change" do
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata.merge(raw("17.0.0", "same\n")).merge(raw("HEAD", "same\n"))
+    )
+
+    expect(described_class.new(downloader: downloader).diffs_for(npm_change)).to be_empty
+  end
+
+  it "caps an oversized diff instead of letting it be dropped whole" do
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata
+        .merge(raw("17.0.0", "old\n"))
+        .merge(raw("HEAD", Array.new(20_000) { |i| "line #{i}" }.join("\n")))
+    )
+
+    diff = described_class.new(downloader: downloader).diffs_for(npm_change).first.diff
+
+    expect(diff.bytesize).to be <= described_class::MAX_DIFF_BYTES + described_class::TRUNCATION_NOTICE.bytesize
+    expect(diff).to end_with(described_class::TRUNCATION_NOTICE)
+  end
+
+  it "never raises when the registry itself is unreachable" do
+    downloader = FakeChangelogDownloader.new({})
+
+    expect { described_class.new(downloader: downloader).diffs_for(npm_change) }.not_to raise_error
+  end
+end
