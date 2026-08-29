@@ -53,6 +53,34 @@ RSpec.describe TestPlan::Profile do
     end.to raise_error(RuntimeError, /Invalid/)
   end
 
+  it "rejects a definition whose declared id is not the one requested" do
+    Dir.mktmpdir do |directory|
+      profiles = File.join(directory, "profiles")
+      Dir.mkdir(profiles)
+      Dir.mkdir(File.join(directory, "prompts"))
+      File.write(File.join(directory, "prompts", "plan.md"), "prompt")
+      File.write(
+        File.join(profiles, "requested-plan.json"),
+        JSON.generate(
+          "id" => "some-other-plan",
+          "display_name" => "Mismatched",
+          "prompt" => "prompts/plan.md",
+          "model" => "",
+          "comment_tag" => "mismatched",
+          "status_comment_tag" => "mismatched-status",
+          "failure_comment_tag" => "mismatched-failure",
+          "artifact_name" => "mismatched-artifact"
+        )
+      )
+
+      # The blocked message names this id as the label to reapply, so a mismatch would
+      # send the author after a label that does not exist.
+      expect do
+        described_class.load(action_root: directory, profile_id: "requested-plan")
+      end.to raise_error(RuntimeError, /declares a different id/)
+    end
+  end
+
   it "rejects prompts outside the action root" do
     Dir.mktmpdir do |directory|
       profiles = File.join(directory, "profiles")

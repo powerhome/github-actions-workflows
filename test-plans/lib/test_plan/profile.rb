@@ -25,10 +25,19 @@ module TestPlan
       path = File.join(profiles_root, "#{profile_id}.json")
       raise "Unknown test-plan profile: #{profile_id}" unless File.file?(path)
 
-      new(
+      profile = new(
         action_root: action_root,
         attributes: JSON.parse(File.read(path, encoding: Encoding::UTF_8))
       ).tap(&:validate!)
+
+      # The file is chosen by the requested id, so a definition declaring a different one
+      # would publish under a name nothing asked for -- and the blocked message tells the
+      # author to reapply a label named after it, which would then be the wrong label.
+      unless profile.id == profile_id
+        raise "Test-plan profile #{profile_id} declares a different id: #{profile.id.inspect}"
+      end
+
+      profile
     end
 
     def initialize(action_root:, attributes:)
