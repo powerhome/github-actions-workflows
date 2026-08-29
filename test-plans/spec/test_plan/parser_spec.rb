@@ -68,6 +68,31 @@ RSpec.describe TestPlan::Parser do
     )
   end
 
+  it "discards a scenario whose steps are not strings" do
+    parsed = described_class.new(
+      payload(
+        "feature_areas" => [
+          {
+            "test_path" => "Usable",
+            "scenarios" => [
+              { "title" => "Object step", "steps" => [{ "x" => 1 }] },
+              { "title" => "Scalar steps", "steps" => "Open it." },
+              { "title" => "Fine", "steps" => ["Open it.", "Verify it."] },
+            ],
+          },
+        ]
+      ).to_json
+    )
+
+    # Coercion would have published a step reading {"x"=>1}, and turned a bare string
+    # into a one-element array the schema never allowed.
+    expect(parsed.feature_areas.first.fetch("scenarios").map { |s| s.fetch("title") }).to eq(["Fine"])
+    expect(parsed.discarded).to contain_exactly(
+      "scenario 1.1 (Object step) had no steps array of strings",
+      "scenario 1.2 (Scalar steps) had no steps array of strings"
+    )
+  end
+
   it "reports nothing discarded for a well-formed response" do
     expect(described_class.new(payload.to_json).discarded).to be_empty
   end

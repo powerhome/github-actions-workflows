@@ -114,8 +114,9 @@ module TestPlan
       return discard("scenario #{position} was not an object") unless entry.is_a?(Hash)
 
       title = normalize_text(entry["title"])
-      steps = unique_strings(Array(entry["steps"]))
+      steps = string_list(entry["steps"])
       return discard("scenario #{position} had no title") if title.empty?
+      return discard("scenario #{position} (#{title}) had no steps array of strings") if steps.nil?
       return discard("scenario #{position} (#{title}) had no steps") if steps.empty?
 
       {
@@ -169,10 +170,25 @@ module TestPlan
       end
     end
 
+    # Steps are the plan's instructions, and the schema says they are strings. Coercing
+    # anything else produces a published step reading {"x"=>1}, which is worse than
+    # dropping the scenario and saying so. Returns nil when the value is not an array of
+    # strings, so the caller can record why it went.
+    def string_list(values)
+      return nil unless values.is_a?(Array)
+      return nil unless values.all? { |value| value.is_a?(String) }
+
+      unique_strings(values)
+    end
+
+    # Supporting collections -- roles, details, permission changes -- drop what they
+    # cannot use rather than discarding the entry around them.
     def unique_strings(values)
       seen = {}
 
-      values.filter_map do |value|
+      Array(values).filter_map do |value|
+        next unless value.is_a?(String)
+
         text = normalize_text(value)
         next if text.empty? || seen[text]
 
