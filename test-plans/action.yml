@@ -148,6 +148,7 @@ runs:
         DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
         DEPENDENCY_DELTA_FULL_PATH: ${{ github.workspace }}/dependency-deltas-full.diff
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
+        DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
       run: |
         set -euo pipefail
         ruby "${{ github.action_path }}/bin/dependency_delta.rb"
@@ -192,6 +193,7 @@ runs:
           ${{ github.workspace }}/dependency-delta-manifest.json
           ${{ github.workspace }}/dependency-deltas-full.diff
           ${{ github.workspace }}/dependency-deltas-context.diff
+          ${{ github.workspace }}/dependency-kit-usage.md
         if-no-files-found: warn
 
     - name: Render test-plan comment

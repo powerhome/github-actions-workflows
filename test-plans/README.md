@@ -55,6 +55,13 @@ Artifacts include:
 - `dependency-delta-manifest.json`
 - `dependency-deltas-full.diff` (maximum 10 MiB)
 - `dependency-deltas-context.diff` (maximum 100 KiB per dependency and 500 KiB total)
+- `dependency-kit-usage.md`
+
+### Playbook Kit Usage
+
+A Playbook version bump often changes no application code at all — nitro-web's 17.1.0 bump touched 143 files, every one a lockfile — so `pr.diff` cannot say which pages to test. When the upgrade is Playbook, the action reads the changed kits from the gem's own diff paths (`app/pb_kits/playbook/pb_<kit>/`, which is exact, where matching release-note headings is guesswork) and searches the repository for where each is used, in Rails templates and React alike.
+
+The result is `dependency-kit-usage.md`, listing the files that use each changed kit. A kit used in more than 25 files is reported as a count instead, since a list that long stops naming pages to visit. On the real 17.0.0 → 17.1.0 upgrade this identifies 22 changed kits, six of them narrow enough to enumerate — including the two form inputs that release converted from React-rendered kits to enhanced elements.
 
 Unreadable lockfiles, missing private sources, failed downloads, and truncation do not fail the plan. A lockfile the action cannot parse is skipped and reported; the remaining lockfiles are still analyzed. Every such case produces a warning in the PR comment, workflow annotation, job summary, and dependency manifest.
 

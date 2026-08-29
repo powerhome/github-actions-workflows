@@ -1,6 +1,7 @@
 require "json"
 require_relative "./change_detector"
 require_relative "./generator"
+require_relative "./playbook_kit_usage"
 require_relative "./git_snapshot"
 
 module TestPlan
@@ -17,7 +18,11 @@ module TestPlan
         )
         detector = ChangeDetector.new(snapshot)
         changes = detector.detect
-        result = Generator.new(changes: changes, problems: detector.problems).generate
+        result = Generator.new(
+          changes: changes,
+          kit_usage: PlaybookKitUsage.new(workspace: workspace),
+          problems: detector.problems
+        ).generate
 
         manifest_path = ENV.fetch("DEPENDENCY_DELTA_MANIFEST_PATH")
         full_path = ENV.fetch("DEPENDENCY_DELTA_FULL_PATH")
@@ -25,6 +30,9 @@ module TestPlan
         File.write(manifest_path, JSON.pretty_generate(result.fetch(:manifest)) + "\n", encoding: Encoding::UTF_8)
         File.write(full_path, result.fetch(:full), encoding: Encoding::UTF_8)
         File.write(context_path, result.fetch(:context), encoding: Encoding::UTF_8)
+
+        kit_usage_path = ENV.fetch("DEPENDENCY_KIT_USAGE_PATH")
+        File.write(kit_usage_path, result.fetch(:kit_usage).to_s, encoding: Encoding::UTF_8)
 
         warning_count = result.dig(:manifest, "warning_count")
         write_outputs(changes.length, warning_count)

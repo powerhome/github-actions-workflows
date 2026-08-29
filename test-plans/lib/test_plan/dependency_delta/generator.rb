@@ -1,4 +1,5 @@
 require_relative "./changelog_source"
+require_relative "./playbook_kit_usage"
 require_relative "./public_dependency_retriever"
 
 module TestPlan
@@ -11,10 +12,12 @@ module TestPlan
       # direct, then Git-pinned -- and let the tail fall off.
       CONTEXT_MINIMUM_PER_DEPENDENCY = 25 * 1024
 
-      def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new, problems: [])
+      def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new,
+                     kit_usage: PlaybookKitUsage.disabled, problems: [])
         @changes = changes.sort_by { |change| [change.direct ? 0 : 1, change.source == "git" ? 0 : 1, change.name] }
         @retriever = retriever
         @changelog = changelog
+        @kit_usage = kit_usage
         @problems = problems
         @related = build_related(@changes)
       end
@@ -32,6 +35,7 @@ module TestPlan
           entry["warnings"] = []
           begin
             diffs = retrieve_diffs(change, entry)
+            @kit_usage.observe(change, diffs)
             entry["changed_files"] = diffs.length
             header = dependency_header(change)
 
@@ -101,6 +105,7 @@ module TestPlan
           },
           full: full,
           context: context,
+          kit_usage: @kit_usage.report,
         }
       end
 
