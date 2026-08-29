@@ -32,13 +32,12 @@ module TestPlan
 
         if base_paths.include?(relative)
           trusted = read_base(relative)
-          next if File.file?(absolute) && File.binread(absolute) == trusted
+          next if unchanged?(absolute, trusted)
 
-          FileUtils.mkdir_p(File.dirname(absolute))
-          File.binwrite(absolute, trusted)
+          write_trusted(absolute, trusted)
           restored << relative
         else
-          next unless File.exist?(absolute)
+          next unless File.exist?(absolute) || File.symlink?(absolute)
 
           FileUtils.rm_rf(absolute)
           prune_empty_parents(absolute)
@@ -76,6 +75,40 @@ module TestPlan
 
     def read_base(relative)
       git("show", "#{merge_base_sha}:#{relative}")
+    end
+
+    # Compared without following links: a symlink standing where a file belongs is a
+    # change the pull request made, whatever it happens to point at.
+    def unchanged?(absolute, trusted)
+      return false if symlinked_component?(absolute)
+
+      File.file?(absolute) && File.binread(absolute) == trusted
+    end
+
+    # A pull request can replace an instruction file, or any directory above it, with a
+    # symlink. Writing through one would put merge-base content wherever the link
+    # points, outside the workspace entirely. Every symlinked component is removed
+    # first -- the same answer the rest of this class gives, since a link the pull
+    # request introduced is not what the merge base holds. FileUtils.rm_rf unlinks a
+    # symlink rather than following it.
+    def write_trusted(absolute, trusted)
+      each_component(absolute) { |path| FileUtils.rm_rf(path) if File.symlink?(path) }
+      FileUtils.mkdir_p(File.dirname(absolute))
+      File.binwrite(absolute, trusted)
+    end
+
+    def symlinked_component?(absolute)
+      each_component(absolute).any? { |path| File.symlink?(path) }
+    end
+
+    def each_component(absolute)
+      return enum_for(:each_component, absolute) unless block_given?
+
+      current = @root
+      absolute.delete_prefix("#{@root}#{File::SEPARATOR}").split(File::SEPARATOR).each do |segment|
+        current = File.join(current, segment)
+        yield current
+      end
     end
 
     # A path the pull request added may have brought empty directories with it.

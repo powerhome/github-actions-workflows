@@ -143,6 +143,57 @@ RSpec.describe TestPlan::TrustedAgentInstructions do
     end
   end
 
+  it "does not write through a symlink the pull request put in place of a file" do
+    Dir.mktmpdir do |outside|
+      target = File.join(outside, "escape.txt")
+      File.write(target, "untouched\n")
+
+      repository(
+        base: { "AGENTS.md" => "Real project harness.\n" },
+        head: { "AGENTS.md" => nil }
+      ) do |root, guard|
+        FileUtils.ln_s(target, File.join(root, "AGENTS.md"))
+
+        guard.run
+
+        expect(File.read(target)).to eq("untouched\n")
+        expect(File.symlink?(File.join(root, "AGENTS.md"))).to be(false)
+        expect(File.read(File.join(root, "AGENTS.md"))).to eq("Real project harness.\n")
+      end
+    end
+  end
+
+  it "does not write through a symlinked parent directory" do
+    Dir.mktmpdir do |outside|
+      FileUtils.mkdir_p(File.join(outside, "rules"))
+      target = File.join(outside, "rules", "house-style.mdc")
+      File.write(target, "untouched\n")
+
+      repository(
+        base: { ".cursor/rules/house-style.mdc" => "Follow the house style.\n" },
+        head: { ".cursor" => nil }
+      ) do |root, guard|
+        FileUtils.ln_s(outside, File.join(root, ".cursor"))
+
+        guard.run
+
+        expect(File.read(target)).to eq("untouched\n")
+        expect(File.symlink?(File.join(root, ".cursor"))).to be(false)
+        expect(File.read(File.join(root, ".cursor/rules/house-style.mdc")))
+          .to eq("Follow the house style.\n")
+      end
+    end
+  end
+
+  it "removes a dangling symlink the pull request introduced" do
+    repository(base: {}, head: {}) do |root, guard|
+      FileUtils.ln_s("/nonexistent/target", File.join(root, "AGENTS.md"))
+
+      expect(guard.run.removed).to eq(["AGENTS.md"])
+      expect(File.symlink?(File.join(root, "AGENTS.md"))).to be(false)
+    end
+  end
+
   it "compares against the merge base, not the base branch tip" do
     Dir.mktmpdir do |root|
       git(root, "init", "--initial-branch", "main", ".")
