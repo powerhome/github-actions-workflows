@@ -22,6 +22,7 @@ module TestPlan
     def render
       sections = [heading]
       sections << "> ⚠️ #{@generation_warning}" unless @generation_warning.empty?
+      sections << discarded_notice unless @parsed.discarded.empty?
       sections.concat(
         [
           "---",
@@ -37,6 +38,17 @@ module TestPlan
     end
 
   private
+
+    # Parts of the response that could not be used are dropped rather than failing the
+    # run, so the plan has to say it is not the whole of what was generated.
+    def discarded_notice
+      discarded = @parsed.discarded
+      count = discarded.length
+      lines = ["> ⚠️ #{count} #{count == 1 ? "part" : "parts"} of the generated response could not be used:"]
+      discarded.first(5).each { |reason| lines << "> - #{sanitize(reason)}" }
+      lines << "> - ...and #{count - 5} more" if count > 5
+      lines.join("\n")
+    end
 
     def heading
       name = @profile_name.empty? ? "Test Plan" : @profile_name

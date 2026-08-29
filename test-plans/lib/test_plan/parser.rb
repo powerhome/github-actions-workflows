@@ -6,13 +6,14 @@ module TestPlan
     DEFAULT_FEATURE_CODE = "AC"
     FEATURE_CODE_PATTERN = /\A[A-Z][A-Z0-9]{1,5}\z/
 
-    attr_reader :permissions, :feature_areas, :regression_tests
+    attr_reader :permissions, :feature_areas, :regression_tests, :discarded
 
     def self.parse_file(path)
       new(File.read(path, encoding: Encoding::UTF_8))
     end
 
     def initialize(json_string)
+      @discarded = []
       @payload = JSON.parse(extract_json(json_string))
       validate_root!
       @permissions = build_permissions
@@ -80,17 +81,26 @@ module TestPlan
     end
 
     def build_feature_areas
-      @payload.fetch("feature_areas").filter_map do |entry|
-        build_feature_area(entry)
+      @payload.fetch("feature_areas").each_with_index.filter_map do |entry, index|
+        build_feature_area(entry, index + 1)
       end
     end
 
-    def build_feature_area(entry)
-      return unless entry.is_a?(Hash)
+    # A malformed part of the response is dropped rather than failing the whole run: one
+    # unusable scenario should not cost a plan that is otherwise sound. What it must not
+    # do is disappear quietly, so every discard is recorded and the rendered plan says
+    # how much of the response could not be used.
+    def build_feature_area(entry, position)
+      unless entry.is_a?(Hash)
+        return discard("feature area #{position} was not an object")
+      end
 
       test_path = normalize_text(entry["test_path"])
-      scenarios = Array(entry["scenarios"]).filter_map { |scenario| build_scenario(scenario) }
-      return if test_path.empty? || scenarios.empty?
+      scenarios = Array(entry["scenarios"]).each_with_index.filter_map do |scenario, index|
+        build_scenario(scenario, "#{position}.#{index + 1}")
+      end
+      return discard("feature area #{position} had no test_path") if test_path.empty?
+      return discard("feature area #{position} (#{test_path}) had no usable scenarios") if scenarios.empty?
 
       {
         "test_path" => test_path,
@@ -100,12 +110,13 @@ module TestPlan
       }
     end
 
-    def build_scenario(entry)
-      return unless entry.is_a?(Hash)
+    def build_scenario(entry, position)
+      return discard("scenario #{position} was not an object") unless entry.is_a?(Hash)
 
       title = normalize_text(entry["title"])
       steps = unique_strings(Array(entry["steps"]))
-      return if title.empty? || steps.empty?
+      return discard("scenario #{position} had no title") if title.empty?
+      return discard("scenario #{position} (#{title}) had no steps") if steps.empty?
 
       {
         "title" => title,
@@ -120,8 +131,8 @@ module TestPlan
     def build_regression_tests
       seen = {}
 
-      @payload.fetch("regression_tests").filter_map do |entry|
-        next unless entry.is_a?(Hash)
+      @payload.fetch("regression_tests").each_with_index.filter_map do |entry, index|
+        next discard("regression test #{index + 1} was not an object") unless entry.is_a?(Hash)
 
         text = normalize_text(entry["text"])
         next if text.empty? || seen[text]
@@ -168,6 +179,12 @@ module TestPlan
         seen[text] = true
         text
       end
+    end
+
+    # Always nil, so a caller can `return discard(...)` and drop the entry in one line.
+    def discard(reason)
+      @discarded << reason
+      nil
     end
 
     def normalize_text(value)

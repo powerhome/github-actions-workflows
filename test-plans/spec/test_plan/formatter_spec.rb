@@ -123,6 +123,23 @@ RSpec.describe TestPlan::Formatter do
     expect(output).to include("- Verify it loads.")
   end
 
+  it "says when part of the response could not be used" do
+    payload["feature_areas"] << { "test_path" => "Broken area", "scenarios" => [] }
+    payload["feature_areas"][0]["scenarios"] << { "title" => "No steps", "steps" => [] }
+
+    output = render
+
+    expect(output).to include("2 parts of the generated response could not be used")
+    expect(output).to include("scenario 1.2 (No steps) had no steps")
+    expect(output).to include("feature area 2 (Broken area) had no usable scenarios")
+    # The usable part of the plan is still published.
+    expect(output).to include("#### RCH-1 — Default results")
+  end
+
+  it "says nothing when the whole response was usable" do
+    expect(render).not_to include("could not be used")
+  end
+
   it "renders dependency warnings directly below the heading" do
     output = render(warning: "Some dependency deltas were unavailable.")
     expect(output).to start_with(<<~MARKDOWN.chomp)

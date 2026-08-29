@@ -41,6 +41,37 @@ RSpec.describe TestPlan::Parser do
     )
   end
 
+  it "records what it could not use instead of dropping it silently" do
+    parsed = described_class.new(
+      payload(
+        "feature_areas" => [
+          "not an object",
+          { "test_path" => "", "scenarios" => [{ "title" => "x", "steps" => ["a"] }] },
+          {
+            "test_path" => "Usable",
+            "scenarios" => [
+              { "title" => "Fine", "steps" => ["Open it.", "Verify it."] },
+              { "title" => "No steps", "steps" => [] },
+            ],
+          },
+        ],
+        "regression_tests" => ["not an object"]
+      ).to_json
+    )
+
+    expect(parsed.feature_areas.map { |area| area.fetch("test_path") }).to eq(["Usable"])
+    expect(parsed.discarded).to contain_exactly(
+      "feature area 1 was not an object",
+      "feature area 2 had no test_path",
+      "scenario 3.2 (No steps) had no steps",
+      "regression test 1 was not an object"
+    )
+  end
+
+  it "reports nothing discarded for a well-formed response" do
+    expect(described_class.new(payload.to_json).discarded).to be_empty
+  end
+
   it "carries a scenario's audience and defaults it to empty" do
     parsed = described_class.new(
       payload(
