@@ -154,9 +154,8 @@ module TestPlan
         )
 
         # A changelog_uri pointing at a blob gives the path as well as the repository.
-        blob = payload["changelog_uri"].to_s
-          .match(%r{github\.com/([^/]+)/([^/]+)/blob/[^/]+/(.+)\z})
-        return ["#{blob[1]}/#{blob[2]}", blob[3]] if blob
+        blob = GitLocator.blob(payload["changelog_uri"])
+        return blob if blob
 
         %w[source_code_uri changelog_uri homepage_uri].each do |field|
           repository = GitLocator.repository(payload[field])

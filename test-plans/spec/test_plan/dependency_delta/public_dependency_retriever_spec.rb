@@ -233,6 +233,16 @@ RSpec.describe TestPlan::DependencyDelta::PublicRetriever do
     expect(retriever.send(:github_repository, locator)).to eq("example/git-package")
   end
 
+  it "refuses a locator whose host merely contains github.com" do
+    retriever = described_class.new
+
+    # Substring matching accepted these as real repositories, and retrieval would then
+    # have attached an unrelated project's source to the dependency.
+    expect(retriever.send(:github_repository, "https://evilgithub.com/example/widget.git#a")).to be_nil
+    expect(retriever.send(:github_repository, "https://github.com.evil.test/example/widget.git")).to be_nil
+    expect(retriever.send(:github_repository, "https://evilcodeload.github.com/a/b/tar.gz/x")).to be_nil
+  end
+
   it "resolves the repository from a git+ssh style locator" do
     retriever = described_class.new
     locator = "git+https://github.com/example/git-package.git#abc123"
