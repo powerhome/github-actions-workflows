@@ -102,6 +102,21 @@ RSpec.describe TestPlan::Formatter do
     expect(output).not_to include("<img")
   end
 
+  it "stops a bare URL from autolinking" do
+    payload["feature_areas"][0]["scenarios"][0]["steps"] = [
+      "Open https://example.test/phish and www.example.test/also.",
+      "Verify nothing links.",
+    ]
+
+    output = render
+
+    # GitHub links a bare https:// or www. without any Markdown syntax around it.
+    expect(output).not_to include("https://example.test")
+    expect(output).not_to include("www.example.test")
+    expect(output).to include("https&#58;//example.test/phish")
+    expect(output).to include("www&#46;example.test/also")
+  end
+
   it "neutralizes a pull-request title the author controls" do
     described = described_class.new(
       parsed: TestPlan::Parser.new(payload.to_json),

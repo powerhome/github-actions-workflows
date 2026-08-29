@@ -197,8 +197,10 @@ module TestPlan
     # The plan's own structure is built by this formatter, so provider text never needs
     # to carry markup and can be neutralised wholesale.
     #
-    # &#64; renders as @ without becoming a mention; the escapes leave the reader with
-    # the characters that were written.
+    # &#64; renders as @ without becoming a mention, and breaking the scheme separator
+    # the same way stops a bare URL from autolinking -- escaping bracket syntax alone
+    # would not, since GitHub links a bare https:// or www. on sight. The escapes leave
+    # the reader with the characters that were written.
     def sanitize(value)
       value
         .to_s
@@ -208,6 +210,8 @@ module TestPlan
         .gsub(">", "&gt;")
         .gsub("@", "&#64;")
         .gsub(/([\[\]])/) { "\\#{Regexp.last_match(1)}" }
+        .gsub(%r{\b(https?|ftp)://}i) { "#{Regexp.last_match(1)}&#58;//" }
+        .gsub(/\bwww\./i) { "www&#46;" }
     end
 
     def normalize_text(value)
