@@ -40,7 +40,7 @@ module TestPlan
 
     def heading
       name = @profile_name.empty? ? "Test Plan" : @profile_name
-      title_suffix = @pull_request_title.empty? ? "" : ": #{@pull_request_title}"
+      title_suffix = @pull_request_title.empty? ? "" : ": #{sanitize(@pull_request_title)}"
       "## ✅ #{name}#{title_suffix}"
     end
 
@@ -54,7 +54,7 @@ module TestPlan
       permission_changes = @parsed.permissions.fetch("changes")
       unless permission_changes.empty?
         lines << "- **Permission Changes in This PR:**"
-        permission_changes.each { |change| lines << "  - #{change.delete("`")}" }
+        permission_changes.each { |change| lines << "  - #{sanitize(change)}" }
       end
 
       roles = @parsed.permissions.fetch("roles")
@@ -63,7 +63,7 @@ module TestPlan
         lines << "- **Roles to Test:** #{roles_message}"
       else
         lines << "- **Roles to Test:**"
-        roles.each { |role| lines << "  - #{role}" }
+        roles.each { |role| lines << "  - #{sanitize(role)}" }
       end
 
       subject_actions = @parsed.permissions.fetch("subject_actions")
@@ -94,17 +94,17 @@ module TestPlan
         area.fetch("scenarios").each_with_index do |scenario, scenario_index|
           lines << "" unless scenario_index.zero?
           identifier = @case_identifiers.fetch(scenario.object_id)
-          lines << "#### #{identifier} — #{scenario.fetch("title")}"
+          lines << "#### #{identifier} — #{sanitize(scenario.fetch("title"))}"
           lines << ""
           lines << "**Landing Page:** #{format_landing_page(scenario.fetch("landing_page"))}  "
-          audience = scenario.fetch("audience").delete("`")
+          audience = sanitize(scenario.fetch("audience"))
           # Only rendered where the application actually serves more than one audience;
           # a single-audience application would otherwise carry a "not identified" line
           # on every case.
           lines << "**Audience:** #{audience}  " unless audience.empty?
           lines << "**Permissions:** #{scenario_permissions(scenario)}"
           lines << ""
-          scenario.fetch("steps").each { |step| lines << "- #{step}" }
+          scenario.fetch("steps").each { |step| lines << "- #{sanitize(step)}" }
         end
       end
 
@@ -112,9 +112,9 @@ module TestPlan
     end
 
     def feature_heading(area)
-      domain = area.fetch("domain")
+      domain = sanitize(area.fetch("domain"))
       suffix = domain.empty? ? "" : " — #{domain}"
-      "### #{area.fetch("test_path")}#{suffix}"
+      "### #{sanitize(area.fetch("test_path"))}#{suffix}"
     end
 
     def regression_section
@@ -132,8 +132,8 @@ module TestPlan
       end
 
       @parsed.regression_tests.each do |test|
-        lines << "- #{test.fetch("text")}"
-        test.fetch("details").each { |detail| lines << "  - #{detail}" }
+        lines << "- #{sanitize(test.fetch("text"))}"
+        test.fetch("details").each { |detail| lines << "  - #{sanitize(detail)}" }
       end
 
       lines.join("\n")
@@ -169,14 +169,33 @@ module TestPlan
     end
 
     def permission_display(permission)
-      subject = permission.fetch("subject").delete("`")
-      action = permission.fetch("action").delete("`")
+      subject = sanitize(permission.fetch("subject"))
+      action = sanitize(permission.fetch("action"))
       "#{subject} — #{action}"
     end
 
     def format_landing_page(value)
-      landing_page = value.delete("`")
+      landing_page = sanitize(value)
       landing_page.empty? ? "Not identified from this change." : landing_page
+    end
+
+    # Everything the provider returns, and the pull-request title, is untrusted text
+    # rendered into a comment the bot signs. Left raw, a step or a title could carry an
+    # @mention that notifies people, a link or image pointing anywhere, or inline HTML.
+    # The plan's own structure is built by this formatter, so provider text never needs
+    # to carry markup and can be neutralised wholesale.
+    #
+    # &#64; renders as @ without becoming a mention; the escapes leave the reader with
+    # the characters that were written.
+    def sanitize(value)
+      value
+        .to_s
+        .delete("`")
+        .gsub("&", "&amp;")
+        .gsub("<", "&lt;")
+        .gsub(">", "&gt;")
+        .gsub("@", "&#64;")
+        .gsub(/([\[\]])/) { "\\#{Regexp.last_match(1)}" }
     end
 
     def normalize_text(value)

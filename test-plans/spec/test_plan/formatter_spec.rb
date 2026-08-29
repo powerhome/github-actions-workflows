@@ -82,6 +82,47 @@ RSpec.describe TestPlan::Formatter do
     expect(output).to include("**Permissions:** No special permission required.")
   end
 
+  it "neutralizes mentions, links, and HTML in provider text" do
+    scenario = payload["feature_areas"][0]["scenarios"][0]
+    scenario["title"] = "Ping @powerhome/heroes-for-hire"
+    scenario["steps"] = [
+      "Open [the page](https://example.test/phish).",
+      "Verify <img src=x onerror=alert(1)> renders nothing.",
+    ]
+    payload["permissions"]["roles"] = ["Role for @someone"]
+    payload["regression_tests"] = [{ "text" => "Ask @another to confirm.", "details" => [] }]
+
+    output = render
+
+    expect(output).not_to include("@powerhome", "@someone", "@another")
+    expect(output).to include("&#64;powerhome/heroes-for-hire")
+    # The link and the tag survive as readable text without being live.
+    expect(output).to include("\\[the page\\]")
+    expect(output).to include("&lt;img src=x onerror=alert(1)&gt;")
+    expect(output).not_to include("<img")
+  end
+
+  it "neutralizes a pull-request title the author controls" do
+    described = described_class.new(
+      parsed: TestPlan::Parser.new(payload.to_json),
+      pull_request_title: "Fix for @everyone <b>now</b>",
+      profile_name: "Cobra Test Plan",
+      generation_warning: ""
+    ).render
+
+    expect(described).to include("&#64;everyone &lt;b&gt;now&lt;/b&gt;")
+    expect(described).not_to include("@everyone")
+  end
+
+  it "leaves ordinary text alone" do
+    payload["feature_areas"][0]["scenarios"][0]["steps"] = ["Open the R&D page.", "Verify it loads."]
+
+    output = render
+
+    expect(output).to include("Open the R&amp;D page.")
+    expect(output).to include("- Verify it loads.")
+  end
+
   it "renders dependency warnings directly below the heading" do
     output = render(warning: "Some dependency deltas were unavailable.")
     expect(output).to start_with(<<~MARKDOWN.chomp)
