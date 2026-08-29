@@ -204,6 +204,27 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     expect(downloader.requested).to be_empty
   end
 
+  it "reads a Git-pinned upgrade at its revision, not at the default branch" do
+    downloader = FakeChangelogDownloader.new(
+      raw("aaaaaaa", "old notes\n", path: "CHANGELOG.md", repo: "example/widget")
+        .merge(raw("bbbbbbb", "notes through bbbbbbb\n", path: "CHANGELOG.md", repo: "example/widget"))
+        .merge(raw("HEAD", "notes for commits this pin does not include\n",
+                   path: "CHANGELOG.md", repo: "example/widget"))
+    )
+    change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "yarn", name: "widget", old_version: "aaaaaaa", new_version: "bbbbbbb",
+      source: "git", old_locator: "git+https://github.com/example/widget.git#aaaaaaa",
+      new_locator: "git+https://github.com/example/widget.git#bbbbbbb",
+      direct: true, lockfiles: ["yarn.lock"]
+    )
+
+    # The lockfile pins an exact revision, so reading past it describes commits the
+    # dependency does not contain.
+    diff = described_class.new(downloader: downloader).diffs_for(change).first.diff
+    expect(diff).to include("+notes through bbbbbbb")
+    expect(diff).not_to include("this pin does not include")
+  end
+
   it "returns nothing when the package records no repository" do
     downloader = FakeChangelogDownloader.new(
       "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate(

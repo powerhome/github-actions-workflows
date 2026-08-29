@@ -52,7 +52,7 @@ module TestPlan
         old_body, path = fetch_any(repository, candidates, old_ref)
         return [] unless old_body
 
-        new_body = fetch(repository, DEFAULT_REF, path)
+        new_body = fetch(repository, new_ref(change), path)
         return [] unless new_body && new_body != old_body
 
         diff = unified_diff(path, old_body, new_body)
@@ -72,6 +72,14 @@ module TestPlan
       end
 
     private
+
+      # A registry release is read at the default branch because a generated changelog
+      # is committed after its release is tagged. A Git-pinned dependency has no such
+      # gap: the lockfile names the exact revision in use, and reading past it would
+      # describe commits the dependency does not contain.
+      def new_ref(change)
+        change.source == "git" ? change.new_version.to_s : DEFAULT_REF
+      end
 
       # Returns the repository and the changelog paths worth trying, in order.
       #
