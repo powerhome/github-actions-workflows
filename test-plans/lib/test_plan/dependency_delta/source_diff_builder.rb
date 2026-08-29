@@ -28,9 +28,12 @@ module TestPlan
           old_path = File.join(old_root, path)
           new_path = File.join(new_root, path)
           next if same_file?(old_path, new_path)
-          next if binary?(old_path) || binary?(new_path)
 
-          unified_diff(path, old_path, new_path)
+          if binary?(old_path) || binary?(new_path)
+            binary_marker(path, old_path, new_path)
+          else
+            unified_diff(path, old_path, new_path)
+          end
         end
       end
 
@@ -58,6 +61,24 @@ module TestPlan
         return PRIORITY_DOC if path.match?(DOC_PATTERN)
 
         PRIORITY_RUNTIME
+      end
+
+      # A binary file has no readable diff, but dropping it left an icon, an image, or a
+      # font changing with nothing to show for it -- absent from the artifact and from
+      # every omission list, against the promise that what is dropped gets named. The
+      # marker costs a line and keeps the change countable.
+      def binary_marker(path, old_path, new_path)
+        state =
+          if !File.file?(old_path) then "was added"
+          elsif !File.file?(new_path) then "was removed"
+          else "changed"
+          end
+
+        SourceDiff.new(
+          path: path,
+          diff: "Binary file #{path} #{state} (#{File.size(File.file?(new_path) ? new_path : old_path)} bytes)\n",
+          priority: priority(path)
+        )
       end
 
       def same_file?(old_path, new_path)

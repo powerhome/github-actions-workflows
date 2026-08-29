@@ -49,6 +49,36 @@ RSpec.describe TestPlan::DependencyDelta::SourceDiffBuilder do
     end
   end
 
+  it "records a binary change instead of dropping it" do
+    Dir.mktmpdir do |directory|
+      old_root = File.join(directory, "old")
+      new_root = File.join(directory, "new")
+      FileUtils.mkdir_p([old_root, new_root])
+      File.binwrite(File.join(old_root, "icon.png"), "\x89PNG\x00old".b)
+      File.binwrite(File.join(new_root, "icon.png"), "\x89PNG\x00new-and-longer".b)
+      File.binwrite(File.join(new_root, "added.woff"), "\x00\x01font".b)
+
+      diffs = described_class.new.build(old_root, new_root)
+
+      # A changed icon or font is user-visible; dropping it left nothing in the artifact
+      # and nothing in any omission list.
+      expect(diffs.map(&:path)).to contain_exactly("icon.png", "added.woff")
+      expect(diffs.find { |d| d.path == "icon.png" }.diff).to include("Binary file icon.png changed")
+      expect(diffs.find { |d| d.path == "added.woff" }.diff).to include("was added")
+    end
+  end
+
+  it "leaves an unchanged binary alone" do
+    Dir.mktmpdir do |directory|
+      old_root = File.join(directory, "old")
+      new_root = File.join(directory, "new")
+      FileUtils.mkdir_p([old_root, new_root])
+      [old_root, new_root].each { |root| File.binwrite(File.join(root, "icon.png"), "\x89PNG\x00".b) }
+
+      expect(described_class.new.build(old_root, new_root)).to be_empty
+    end
+  end
+
   it "prioritizes changelogs and emits unified source diffs" do
     Dir.mktmpdir do |directory|
       old_root = File.join(directory, "old")
