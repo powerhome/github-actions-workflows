@@ -1,10 +1,10 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency_delta/change_detector"
+require "test_plan/dependency_delta"
 
 require "json"
 require "set"
 
-describe TestPlan::DependencyDelta::ChangeDetector do
+RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
   class FakeSnapshot
     attr_reader :base_sha, :merge_base_sha, :head_sha
 

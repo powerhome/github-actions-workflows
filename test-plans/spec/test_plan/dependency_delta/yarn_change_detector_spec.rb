@@ -1,9 +1,9 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency_delta/yarn_change_detector"
+require "test_plan/dependency_delta"
 
 require "set"
 
-describe TestPlan::DependencyDelta::YarnChangeDetector do
+RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
   let(:old_lock) do
     <<~LOCK
       # yarn lockfile v1

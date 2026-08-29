@@ -1,10 +1,10 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency_delta/public_dependency_retriever"
+require "test_plan/dependency_delta"
 
 require "fileutils"
 require "tmpdir"
 
-describe TestPlan::DependencyDelta::PublicRetriever do
+RSpec.describe TestPlan::DependencyDelta::PublicRetriever do
   class FakeDownloader
     attr_reader :downloaded
 

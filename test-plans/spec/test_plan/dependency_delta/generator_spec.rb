@@ -1,7 +1,7 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency_delta/generator"
+require "test_plan/dependency_delta"
 
-describe TestPlan::DependencyDelta::Generator do
+RSpec.describe TestPlan::DependencyDelta::Generator do
   let(:change) do
     TestPlan::DependencyDelta::Change.new(
       ecosystem: "bundler",

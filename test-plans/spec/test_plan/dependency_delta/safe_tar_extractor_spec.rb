@@ -1,11 +1,11 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency_delta/safe_tar_extractor"
+require "test_plan/dependency_delta"
 
 require "rubygems/package"
 require "tmpdir"
 require "zlib"
 
-describe TestPlan::DependencyDelta::SafeTarExtractor do
+RSpec.describe TestPlan::DependencyDelta::SafeTarExtractor do
   def build_tar_gz(path, entry_name)
     Zlib::GzipWriter.open(path) do |gzip|
       Gem::Package::TarWriter.new(gzip) do |tar|

@@ -1,10 +1,10 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency_delta/source_diff_builder"
+require "test_plan/dependency_delta"
 
 require "fileutils"
 require "tmpdir"
 
-describe TestPlan::DependencyDelta::SourceDiffBuilder do
+RSpec.describe TestPlan::DependencyDelta::SourceDiffBuilder do
   it "ranks colocated test files below runtime source" do
     builder = described_class.new
     ranked = lambda { |path| builder.send(:priority, path) }

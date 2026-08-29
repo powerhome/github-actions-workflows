@@ -1,7 +1,7 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency_delta/bundler_change_detector"
+require "test_plan/dependency_delta"
 
-describe TestPlan::DependencyDelta::BundlerChangeDetector do
+RSpec.describe TestPlan::DependencyDelta::BundlerChangeDetector do
   let(:old_lock) do
     <<~LOCK
       GIT

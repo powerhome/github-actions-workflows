@@ -1,10 +1,10 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency_delta/git_snapshot"
+require "test_plan/dependency_delta"
 
 require "open3"
 require "tmpdir"
 
-describe TestPlan::DependencyDelta::GitSnapshot do
+RSpec.describe TestPlan::DependencyDelta::GitSnapshot do
   def git(directory, *args)
     stdout, stderr, status = Open3.capture3("git", *args, chdir: directory)
     raise "git #{args.join(" ")} failed: #{stderr}" unless status.success?
