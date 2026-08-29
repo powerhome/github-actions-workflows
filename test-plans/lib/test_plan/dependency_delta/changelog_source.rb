@@ -52,11 +52,13 @@ module TestPlan
         old_body, path = fetch_any(repository, candidates, old_ref)
         return [] unless old_body
 
-        new_body = fetch(repository, new_ref(change), path)
+        new_body, bounded = new_side(change, repository, path)
         return [] unless new_body && new_body != old_body
 
         diff = unified_diff(path, old_body, new_body)
         return [] if diff.nil?
+
+        diff = unbounded_notice(change) + diff unless bounded
 
         [
           SourceDiff.new(
@@ -73,12 +75,29 @@ module TestPlan
 
     private
 
-      # A registry release is read at the default branch because a generated changelog
-      # is committed after its release is tagged. A Git-pinned dependency has no such
-      # gap: the lockfile names the exact revision in use, and reading past it would
-      # describe commits the dependency does not contain.
-      def new_ref(change)
-        change.source == "git" ? change.new_version.to_s : DEFAULT_REF
+      # Returns the new side of the comparison and whether it is bounded by the upgrade.
+      #
+      # A Git-pinned dependency names its revision, so that is the new side outright.
+      #
+      # For a registry release, the upgraded-to tag is preferred: where a project
+      # commits its changelog before tagging, that file already describes the release
+      # and the diff stops there. Where the changelog is committed after tagging, the
+      # tag predates its own notes and only the default branch carries them -- at the
+      # cost of also carrying anything released since, which the notice then says.
+      def new_side(change, repository, path)
+        return [fetch(repository, change.new_version.to_s, path), true] if change.source == "git"
+
+        tagged = resolve_tag(repository, [path], change.new_version)
+        body = tagged && fetch(repository, tagged, path)
+        return [body, true] if body && body.include?(change.new_version.to_s)
+
+        [fetch(repository, DEFAULT_REF, path), false]
+      end
+
+      def unbounded_notice(change)
+        "[These notes were read from the default branch, because this project commits " \
+          "its changelog after tagging a release. Entries for releases later than " \
+          "#{change.new_version} may appear below and are not part of this upgrade.]\n\n"
       end
 
       # Returns the repository and the changelog paths worth trying, in order.

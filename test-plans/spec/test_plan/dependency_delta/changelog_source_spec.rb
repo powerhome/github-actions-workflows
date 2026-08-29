@@ -79,22 +79,38 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     expect(diffs.first.diff).to include("+# 17.1.0", "+new notes")
   end
 
-  it "reads the default branch, not the upgraded-to tag" do
+  it "stops at the upgraded-to tag when it already describes that release" do
+    downloader = FakeChangelogDownloader.new(
+      npm_metadata
+        .merge(raw("17.0.0", "# 16.12.0\n"))
+        .merge(raw("17.1.0", "# 17.1.0\nthe upgrade\n\n# 16.12.0\n"))
+        .merge(raw("HEAD", "# 18.0.0\nreleased since\n\n# 17.1.0\nthe upgrade\n\n# 16.12.0\n"))
+    )
+
+    diff = described_class.new(downloader: downloader).diffs_for(npm_change).first.diff
+
+    # Bounded by the upgrade: a release made since is not part of it.
+    expect(diff).to include("+the upgrade")
+    expect(diff).not_to include("released since")
+    expect(diff).not_to include("read from the default branch")
+  end
+
+  it "falls back to the default branch when the tag predates its own notes" do
     # playbook's 17.1.0 tag still describes 17.0.0 as the newest release, because the
     # changelog is generated after tagging.
     downloader = FakeChangelogDownloader.new(
       npm_metadata
-        .merge(raw("17.0.0", "old\n"))
-        .merge(raw("17.1.0", "tag-time content\n"))
-        .merge(raw("HEAD", "default-branch content\n"))
+        .merge(raw("17.0.0", "# 16.12.0\n"))
+        .merge(raw("17.1.0", "# 17.0.0\n\n# 16.12.0\n"))
+        .merge(raw("HEAD", "# 17.1.0\nthe upgrade\n\n# 17.0.0\n\n# 16.12.0\n"))
     )
 
-    diffs = described_class.new(downloader: downloader).diffs_for(npm_change)
+    diff = described_class.new(downloader: downloader).diffs_for(npm_change).first.diff
 
-    expect(diffs.first.diff).to include("+default-branch content")
-    expect(downloader.requested).not_to include(
-      "https://raw.githubusercontent.com/powerhome/playbook/17.1.0/playbook/CHANGELOG.md"
-    )
+    expect(diff).to include("+the upgrade")
+    # The default branch can carry later releases too, so the notes say so.
+    expect(diff).to start_with("[These notes were read from the default branch")
+    expect(diff).to include("later than 17.1.0")
   end
 
   it "falls back to a v-prefixed tag" do
