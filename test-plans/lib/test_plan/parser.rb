@@ -203,8 +203,15 @@ module TestPlan
       nil
     end
 
+    # Anything that is not a string normalizes to empty rather than through to_s, which
+    # would have published a numeric title as "42" and an object-valued regression text
+    # as Ruby inspect output. Empty is what the existing paths already handle: a
+    # scenario without a title is discarded, a landing page without one reads as not
+    # identified, a permission pair without both halves is dropped.
     def normalize_text(value)
-      value.to_s.strip.gsub(/\s+/, " ")
+      return "" unless value.is_a?(String)
+
+      value.strip.gsub(/\s+/, " ")
     end
   end
 end

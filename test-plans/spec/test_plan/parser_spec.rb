@@ -93,6 +93,45 @@ RSpec.describe TestPlan::Parser do
     )
   end
 
+  it "treats non-string scalars as absent rather than printing them" do
+    parsed = described_class.new(
+      payload(
+        "permissions" => {
+          "required" => 1,
+          "roles" => ["Real role", 7],
+          "changes" => [],
+          "subject_actions" => [{ "subject" => 42, "action" => "Read" }],
+        },
+        "feature_areas" => [
+          {
+            "test_path" => "Usable",
+            "domain" => { "x" => 1 },
+            "scenarios" => [
+              { "title" => 99, "steps" => ["Open it.", "Verify it."] },
+              {
+                "title" => "Fine",
+                "landing_page" => 5,
+                "steps" => ["Open it.", "Verify it."],
+              },
+            ],
+          },
+        ],
+        "regression_tests" => [{ "text" => { "x" => 1 }, "details" => [] }]
+      ).to_json
+    )
+    scenario = parsed.feature_areas.first.fetch("scenarios").first
+
+    # to_s would have published "42", "99", and Ruby inspect output as plan text.
+    expect(parsed.permissions.fetch("required")).to eq("not_identified")
+    expect(parsed.permissions.fetch("roles")).to eq(["Real role"])
+    expect(parsed.permissions.fetch("subject_actions")).to be_empty
+    expect(parsed.feature_areas.first.fetch("domain")).to eq("")
+    expect(scenario.fetch("title")).to eq("Fine")
+    expect(scenario.fetch("landing_page")).to eq("")
+    expect(parsed.regression_tests).to be_empty
+    expect(parsed.discarded).to include("scenario 1.1 had no title")
+  end
+
   it "reports nothing discarded for a well-formed response" do
     expect(described_class.new(payload.to_json).discarded).to be_empty
   end
