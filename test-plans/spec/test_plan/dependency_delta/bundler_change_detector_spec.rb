@@ -117,6 +117,69 @@ RSpec.describe TestPlan::DependencyDelta::BundlerChangeDetector do
     expect(TestPlan::DependencyDelta::PublicOrigin.rubygems_public?(changes.first)).to be(true)
   end
 
+  it "reports a gem that moved from RubyGems to a Git source" do
+    from_gem = <<~LOCK
+      GEM
+        remote: https://rubygems.org/
+        specs:
+          moving_gem (1.0.0)
+
+      DEPENDENCIES
+        moving_gem
+    LOCK
+    to_git = <<~LOCK
+      GIT
+        remote: https://github.com/example/moving_gem.git
+        revision: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+        specs:
+          moving_gem (2.0.0)
+
+      DEPENDENCIES
+        moving_gem!
+    LOCK
+
+    changes = described_class.new.detect(
+      path: "Gemfile.lock", old_content: from_gem, new_content: to_git
+    )
+
+    # Previously dropped entirely: new_git was present while old_git was nil.
+    expect(changes.map(&:source)).to eq(["mixed"])
+    expect(changes.first).to have_attributes(
+      old_version: "1.0.0", new_version: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    )
+  end
+
+  it "reports a gem that moved from a Git source back to RubyGems" do
+    from_git = <<~LOCK
+      GIT
+        remote: https://github.com/example/moving_gem.git
+        revision: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        specs:
+          moving_gem (1.0.0)
+
+      DEPENDENCIES
+        moving_gem!
+    LOCK
+    to_gem = <<~LOCK
+      GEM
+        remote: https://rubygems.org/
+        specs:
+          moving_gem (2.0.0)
+
+      DEPENDENCIES
+        moving_gem
+    LOCK
+
+    changes = described_class.new.detect(
+      path: "Gemfile.lock", old_content: from_git, new_content: to_gem
+    )
+
+    expect(changes.map(&:source)).to eq(["mixed"])
+    expect(changes.first).to have_attributes(
+      old_version: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", new_version: "2.0.0"
+    )
+  end
+
   it "ignores decreases and removals" do
     changes = described_class.new.detect(
       path: "Gemfile.lock",

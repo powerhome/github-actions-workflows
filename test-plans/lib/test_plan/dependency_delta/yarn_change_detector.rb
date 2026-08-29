@@ -14,8 +14,10 @@ module TestPlan
           next [] if workspace_names.include?(name)
 
           old_records = old_by_name.fetch(name, [])
-          version_changes(path, name, old_records, new_records, direct_names.include?(name)) +
-            git_changes(path, name, old_records, new_records, direct_names.include?(name))
+          direct = direct_names.include?(name)
+          version_changes(path, name, old_records, new_records, direct) +
+            git_changes(path, name, old_records, new_records, direct) +
+            mixed_source_changes(path, name, old_records, new_records, direct)
         end
       end
 
@@ -99,6 +101,32 @@ module TestPlan
         end
 
         pairs
+      end
+
+      # version_changes skips any pair with a Git side and git_changes pairs only Git
+      # with Git, so a dependency moving between a Git locator and npm fell through
+      # both and produced no evidence and no warning. The two sides are not comparable
+      # artifacts, so this reports the transition rather than trying to diff it.
+      def mixed_source_changes(path, name, old_records, new_records, direct)
+        old_git = old_records.any? { |record| git_locator?(record.resolved) }
+        new_git = new_records.any? { |record| git_locator?(record.resolved) }
+        return [] if old_records.empty? || new_records.empty? || old_git == new_git
+
+        old_record = old_records.last
+        new_record = new_records.last
+        [
+          Change.new(
+            ecosystem: "yarn",
+            name: name,
+            old_version: old_git ? git_revision(old_record.resolved) : old_record.version,
+            new_version: new_git ? git_revision(new_record.resolved) : new_record.version,
+            source: "mixed",
+            old_locator: old_record.resolved,
+            new_locator: new_record.resolved,
+            direct: direct,
+            lockfiles: [path]
+          ),
+        ]
       end
 
       def version(value)

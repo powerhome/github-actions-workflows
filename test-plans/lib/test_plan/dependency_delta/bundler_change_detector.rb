@@ -46,6 +46,16 @@ module TestPlan
       end
 
       def build_change(path:, name:, old_spec:, new_spec:, old_git:, new_git:, direct:)
+        # A dependency that moves between RubyGems and Git changed where its code comes
+        # from, which matters more than most version bumps -- but the two sides are not
+        # comparable artifacts, so there is nothing to diff. Reporting it keeps the
+        # change visible instead of dropping it as though nothing happened.
+        if old_git.nil? != new_git.nil?
+          return mixed_source_change(path: path, name: name, old_spec: old_spec,
+                                     new_spec: new_spec, old_git: old_git,
+                                     new_git: new_git, direct: direct)
+        end
+
         if new_git
           old_revision = old_git && old_git["revision"]
           new_revision = new_git["revision"]
@@ -74,6 +84,20 @@ module TestPlan
           source: "rubygems",
           old_locator: rubygems_remote(old_spec.source),
           new_locator: rubygems_remote(new_spec.source),
+          direct: direct,
+          lockfiles: [path]
+        )
+      end
+
+      def mixed_source_change(path:, name:, old_spec:, new_spec:, old_git:, new_git:, direct:)
+        Change.new(
+          ecosystem: "bundler",
+          name: name,
+          old_version: old_git ? old_git["revision"].to_s : old_spec.version.to_s,
+          new_version: new_git ? new_git["revision"].to_s : new_spec.version.to_s,
+          source: "mixed",
+          old_locator: old_git ? old_git["remote"] : rubygems_remote(old_spec.source),
+          new_locator: new_git ? new_git["remote"] : rubygems_remote(new_spec.source),
           direct: direct,
           lockfiles: [path]
         )

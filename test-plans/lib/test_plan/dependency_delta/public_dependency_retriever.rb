@@ -29,6 +29,9 @@ module TestPlan
             retrieve_npm(change, directory, old_root, new_root)
           when "git"
             retrieve_git(change, directory, old_root, new_root)
+          when "mixed"
+            raise "#{change.name} moved between a Git source and a registry, so its old " \
+              "and new artifacts are not comparable; no source delta was retrieved"
           else
             raise "Unsupported public dependency source: #{change.source}"
           end

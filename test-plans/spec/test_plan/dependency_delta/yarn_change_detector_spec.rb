@@ -50,6 +50,50 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     expect(changes.find { |change| change.name == "transitive-package" }.direct).to be(false)
   end
 
+  it "reports a dependency that moved from a Git locator to npm" do
+    old_lock = <<~LOCK
+      moving@github:example/moving#aaaaaaa:
+        version "1.0.0"
+        resolved "https://codeload.github.com/example/moving/tar.gz/aaaaaaa"
+    LOCK
+    new_lock = <<~LOCK
+      moving@^2.0.0:
+        version "2.0.0"
+        resolved "https://registry.npmjs.org/moving/-/moving-2.0.0.tgz"
+    LOCK
+
+    changes = described_class.new.detect(
+      path: "yarn.lock", old_content: old_lock, new_content: new_lock,
+      direct_names: Set["moving"], workspace_names: Set.new
+    )
+
+    # version_changes skips any pair with a Git side and git_changes pairs only Git with
+    # Git, so this used to fall through both and report nothing at all.
+    expect(changes.map(&:source)).to eq(["mixed"])
+    expect(changes.first).to have_attributes(old_version: "aaaaaaa", new_version: "2.0.0")
+  end
+
+  it "reports a dependency that moved from npm to a Git locator" do
+    old_lock = <<~LOCK
+      moving@^1.0.0:
+        version "1.0.0"
+        resolved "https://registry.npmjs.org/moving/-/moving-1.0.0.tgz"
+    LOCK
+    new_lock = <<~LOCK
+      moving@github:example/moving#bbbbbbb:
+        version "2.0.0"
+        resolved "https://codeload.github.com/example/moving/tar.gz/bbbbbbb"
+    LOCK
+
+    changes = described_class.new.detect(
+      path: "yarn.lock", old_content: old_lock, new_content: new_lock,
+      direct_names: Set["moving"], workspace_names: Set.new
+    )
+
+    expect(changes.map(&:source)).to eq(["mixed"])
+    expect(changes.first).to have_attributes(old_version: "1.0.0", new_version: "bbbbbbb")
+  end
+
   it "ignores decreases and removals" do
     old_lock = <<~LOCK
       downgraded@^2.0.0:
