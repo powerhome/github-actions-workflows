@@ -51,6 +51,12 @@ module TestPlan
           entries += 1
           raise "Archive contains more than #{MAX_FILES} entries" if entries > MAX_FILES
 
+          # Counted before the metadata entries are skipped: TarReader still inflates
+          # and reads past their declared size, so a small compressed archive of huge
+          # PAX payloads would otherwise cost unbounded work under this limit.
+          total_bytes += entry.header.size
+          raise "Archive expands beyond 100 MiB" if total_bytes > MAX_EXTRACTED_BYTES
+
           next if PAX_HEADER_TYPEFLAGS.include?(entry.header.typeflag)
 
           relative = safe_relative_path(entry.full_name)
@@ -62,9 +68,6 @@ module TestPlan
           if entry.directory?
             FileUtils.mkdir_p(target)
           elsif entry.file?
-            total_bytes += entry.header.size
-            raise "Archive expands beyond 100 MiB" if total_bytes > MAX_EXTRACTED_BYTES
-
             FileUtils.mkdir_p(File.dirname(target))
             File.open(target, "wb") { |file| IO.copy_stream(entry, file) }
           else

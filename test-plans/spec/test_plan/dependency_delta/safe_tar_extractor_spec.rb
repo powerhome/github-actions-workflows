@@ -125,6 +125,33 @@ RSpec.describe TestPlan::DependencyDelta::SafeTarExtractor do
     end
   end
 
+  it "counts a metadata entry's declared size against the expansion limit" do
+    stub_const("#{described_class}::MAX_EXTRACTED_BYTES", 512)
+
+    Dir.mktmpdir do |directory|
+      archive = File.join(directory, "fat-pax.tgz")
+      payload = "x" * 4096
+      Zlib::GzipWriter.open(archive) do |gzip|
+        header = Gem::Package::TarHeader.new(
+          name: "pax_global_header", mode: 0o644, size: payload.bytesize,
+          prefix: "", typeflag: "g", mtime: 0, uid: 0, gid: 0
+        )
+        gzip.write(header.to_s)
+        gzip.write(payload)
+        gzip.write("\0" * (512 - (payload.bytesize % 512)))
+        Gem::Package::TarWriter.new(gzip) do |tar|
+          tar.add_file_simple("package/x.txt", 0o644, 1) { |file| file.write("x") }
+        end
+      end
+
+      # The reader still inflates and skips past a metadata payload, so its declared
+      # size has to count even though nothing is written to disk.
+      expect do
+        described_class.new.extract_gzip(archive, File.join(directory, "target"))
+      end.to raise_error(RuntimeError, /expands beyond/)
+    end
+  end
+
   it "rejects path traversal" do
     Dir.mktmpdir do |directory|
       archive = File.join(directory, "unsafe.tgz")
