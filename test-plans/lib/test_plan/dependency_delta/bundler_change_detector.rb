@@ -83,8 +83,14 @@ module TestPlan
         source.respond_to?(:options) ? source.options.transform_keys(&:to_s) : {}
       end
 
+      # A GEM section can list several remotes, and the lockfile does not say which one a
+      # given spec came from. Naming the first would let an internal gem read as public
+      # whenever rubygems.org happens to sort first, which is the confusion the
+      # provenance check exists to prevent. Ambiguity is reported as no remote at all, so
+      # retrieval refuses rather than guesses.
       def rubygems_remote(source)
-        Array(source_options(source)["remotes"]).first.to_s
+        remotes = Array(source_options(source)["remotes"])
+        remotes.length == 1 ? remotes.first.to_s : ""
       end
 
       def git_sources(content)

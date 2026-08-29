@@ -71,6 +71,52 @@ RSpec.describe TestPlan::DependencyDelta::BundlerChangeDetector do
     )
   end
 
+  it "reports no remote when a GEM section lists several" do
+    # The lockfile does not attribute a spec to one of them, so naming the first would
+    # let an internal gem read as public whenever rubygems.org sorts first.
+    lock = lambda do |version|
+      <<~LOCK
+        GEM
+          remote: https://gems.internal.example/
+          remote: https://rubygems.org/
+          specs:
+            shared_gem (#{version})
+
+        DEPENDENCIES
+          shared_gem
+      LOCK
+    end
+
+    changes = described_class.new.detect(
+      path: "Gemfile.lock", old_content: lock.call("1.0.0"), new_content: lock.call("2.0.0")
+    )
+
+    expect(changes.length).to eq(1)
+    expect(changes.first.new_locator).to eq("")
+    expect(TestPlan::DependencyDelta::PublicOrigin.rubygems_public?(changes.first)).to be(false)
+  end
+
+  it "keeps the remote when a GEM section lists exactly one" do
+    lock = lambda do |version|
+      <<~LOCK
+        GEM
+          remote: https://rubygems.org/
+          specs:
+            shared_gem (#{version})
+
+        DEPENDENCIES
+          shared_gem
+      LOCK
+    end
+
+    changes = described_class.new.detect(
+      path: "Gemfile.lock", old_content: lock.call("1.0.0"), new_content: lock.call("2.0.0")
+    )
+
+    expect(changes.first.new_locator).to eq("https://rubygems.org/")
+    expect(TestPlan::DependencyDelta::PublicOrigin.rubygems_public?(changes.first)).to be(true)
+  end
+
   it "ignores decreases and removals" do
     changes = described_class.new.detect(
       path: "Gemfile.lock",
