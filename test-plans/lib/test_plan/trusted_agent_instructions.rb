@@ -57,12 +57,23 @@ module TestPlan
     def head_paths
       @head_paths ||= [].tap do |paths|
         Find.find(@root) do |path|
+          relative = path.delete_prefix("#{@root}#{File::SEPARATOR}")
+
+          # Checked before the directory branch, which follows links: a .cursor symlink
+          # reads as a directory and would be skipped, while Find refuses to descend it,
+          # so nothing beneath it is ever seen either. Cursor has no such reluctance --
+          # it follows the link and reads whatever the pull request put there.
+          if File.symlink?(path)
+            paths << relative if self.class.instruction_path?(relative) ||
+              DIRECTORY_NAMES.include?(File.basename(path))
+            next
+          end
+
           if File.directory?(path)
             Find.prune if PRUNED_DIRECTORY_NAMES.include?(File.basename(path))
             next
           end
 
-          relative = path.delete_prefix("#{@root}#{File::SEPARATOR}")
           paths << relative if self.class.instruction_path?(relative)
         end
       end
