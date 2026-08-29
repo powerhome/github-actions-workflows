@@ -120,6 +120,45 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     expect(changes.first).to have_attributes(old_version: "1.0.0", new_version: "bbbbbbb")
   end
 
+  it "fetches evidence for the package an npm alias actually installs" do
+    old_lock = <<~LOCK
+      "string-width-cjs@npm:string-width@^4.2.0":
+        version "4.2.0"
+        resolved "https://registry.npmjs.org/string-width/-/string-width-4.2.0.tgz"
+    LOCK
+    new_lock = <<~LOCK
+      "string-width-cjs@npm:string-width@^4.2.0":
+        version "4.2.3"
+        resolved "https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz"
+    LOCK
+
+    changes = described_class.new.detect(
+      path: "yarn.lock", old_content: old_lock, new_content: new_lock,
+      direct_names: Set["string-width-cjs"], workspace_names: Set.new
+    )
+
+    # Retrieval asks the registry for change.name, so naming the alias would download an
+    # unrelated package that happens to bear it.
+    expect(changes.map(&:name)).to eq(["string-width"])
+    # The manifest lists the alias, so that is what decides direct-dependency status.
+    expect(changes.first.direct).to be(true)
+  end
+
+  it "treats an aliased workspace member as local" do
+    old_lock = <<~LOCK
+      "local-alias@npm:@powerhome/local@^1.0.0":
+        version "1.0.0"
+    LOCK
+    new_lock = old_lock.gsub('version "1.0.0"', 'version "2.0.0"')
+
+    changes = described_class.new.detect(
+      path: "yarn.lock", old_content: old_lock, new_content: new_lock,
+      direct_names: Set["local-alias"], workspace_names: Set["local-alias"]
+    )
+
+    expect(changes).to be_empty
+  end
+
   it "ignores decreases and removals" do
     old_lock = <<~LOCK
       downgraded@^2.0.0:

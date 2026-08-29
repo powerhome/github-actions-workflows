@@ -11,10 +11,14 @@ module TestPlan
         new_by_name = YarnLockParser.new(new_content).records.group_by(&:name)
 
         new_by_name.flat_map do |name, new_records|
-          next [] if workspace_names.include?(name)
+          # Grouped by the installed package, since that is the artifact whose evidence
+          # is fetched. A manifest lists the name it asked for, so workspace membership
+          # and direct-dependency status are decided by the alias.
+          aliases = new_records.map(&:alias)
+          next [] if aliases.any? { |requested| workspace_names.include?(requested) }
 
           old_records = old_by_name.fetch(name, [])
-          direct = direct_names.include?(name)
+          direct = aliases.any? { |requested| direct_names.include?(requested) }
           version_changes(path, name, old_records, new_records, direct) +
             git_changes(path, name, old_records, new_records, direct) +
             mixed_source_changes(path, name, old_records, new_records, direct)

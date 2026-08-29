@@ -1,6 +1,15 @@
 module TestPlan
   module DependencyDelta
-    YarnRecord = Struct.new(:name, :version, :resolved, :integrity, keyword_init: true)
+    # `name` is the package the lockfile actually installed, which is what evidence has
+    # to be fetched for. `alias` is the name the manifest asked for, which is what a
+    # package.json dependency or a workspace member is listed under. For everything
+    # except an npm alias the two are the same.
+    YarnRecord = Struct.new(:name, :alias, :version, :resolved, :integrity, keyword_init: true) do
+      def initialize(**attributes)
+        super
+        self.alias ||= name
+      end
+    end
 
     class YarnLockParser
       def initialize(content)
@@ -15,10 +24,11 @@ module TestPlan
         integrity = nil
 
         flush = lambda do
-          package_names(selectors).each do |name|
+          package_names(selectors).each do |requested, installed|
             if version
               output << YarnRecord.new(
-                name: name,
+                name: installed,
+                alias: requested,
                 version: version,
                 resolved: resolved,
                 integrity: integrity
@@ -52,15 +62,34 @@ module TestPlan
         header.scan(/"([^"]+)"|([^,\s]+)/).map { |quoted, bare| quoted || bare }
       end
 
+      # Returns [requested name, installed name] pairs. They differ only for an npm
+      # alias -- `alias-name@npm:real-package@^1` installs real-package while the
+      # manifest asks for alias-name. Fetching evidence for the alias would download an
+      # unrelated package that happens to bear that name.
       def package_names(selectors)
         selectors.filter_map do |selector|
-          if selector.start_with?("@")
-            separator = selector.index("@", 1)
-            selector[0...separator] if separator
-          else
-            selector.split("@", 2).first
-          end
+          requested, descriptor = split_selector(selector)
+          next unless requested
+
+          [requested, installed_name(descriptor) || requested]
         end.uniq
+      end
+
+      def split_selector(selector)
+        if selector.start_with?("@")
+          separator = selector.index("@", 1)
+          separator ? [selector[0...separator], selector[(separator + 1)..]] : [nil, nil]
+        else
+          name, descriptor = selector.split("@", 2)
+          [name, descriptor]
+        end
+      end
+
+      def installed_name(descriptor)
+        target = descriptor.to_s[/\Anpm:(.+)\z/, 1]
+        return nil unless target
+
+        split_selector(target).first
       end
     end
   end
