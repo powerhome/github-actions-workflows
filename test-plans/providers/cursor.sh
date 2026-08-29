@@ -41,13 +41,15 @@ cp "${CLI_CONFIG_TEMPLATE}" .cursor/cli-config.json
 
 PROMPT="$(cat "${TEST_PLAN_PROMPT_PATH}")"
 
-# The standard profile pins no model, so this array is routinely empty. Expanding an
-# empty array as "${MODEL_ARGS[@]}" under `set -u` is only safe from bash 4.4 on; the
-# runner has bash 5, but macOS still ships 3.2, where it aborts the script.
-MODEL_ARGS=()
+# Built as one list rather than a separate array of model flags. The standard profile
+# pins no model, and expanding an empty array under `set -u` needs a guard that is only
+# safe from bash 4.4 on -- macOS still ships 3.2. Keeping the flags in the same array
+# means it is never empty, so no guard is needed and there is one invocation to read.
+AGENT_ARGS=(--print --trust --output-format text)
 if [[ -n "${MODEL:-}" ]]; then
-  MODEL_ARGS+=(--model "${MODEL}")
+  AGENT_ARGS+=(--model "${MODEL}")
 fi
+AGENT_ARGS+=("${PROMPT}")
 
 # Named so a run's logs show which model actually answered, without reading the profile.
 MODEL_LABEL="${MODEL:-cursor default}"
@@ -56,9 +58,7 @@ echo "[test_plan] provider: cursor, model: ${MODEL_LABEL}" >&2
 # --trust is required because the headless agent otherwise refuses the workspace.
 # Read-only CLI permissions are copied from config/cli-config.json.
 status=0
-agent --print --trust --output-format text \
-  ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} \
-  "${PROMPT}" >"${TEST_PLAN_JSON_PATH}" || status=$?
+agent "${AGENT_ARGS[@]}" >"${TEST_PLAN_JSON_PATH}" || status=$?
 
 # The agent writes its own diagnostics to stdout, which the redirect above captures
 # into the output file rather than the log. Without echoing the file back, a rejected
