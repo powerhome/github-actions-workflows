@@ -46,11 +46,16 @@ module TestPlan
         end
       end
 
+      # Generated is decided before test and documentation, because a name like
+      # dist/widget.test.js or build/docs/readme.md is build output whatever its suffix
+      # suggests. Classifying it as a test left generated?(that) false, which sent a
+      # linked release's bundles to the provider despite the exclusion. Changelogs stay
+      # first: one shipped inside dist/ is still the release notes.
       def priority(path)
         return PRIORITY_CHANGELOG if path.match?(CHANGELOG_PATTERN)
+        return PRIORITY_GENERATED if path.match?(GENERATED_PATTERN)
         return PRIORITY_TEST if path.match?(TEST_PATTERN)
         return PRIORITY_DOC if path.match?(DOC_PATTERN)
-        return PRIORITY_GENERATED if path.match?(GENERATED_PATTERN)
 
         PRIORITY_RUNTIME
       end

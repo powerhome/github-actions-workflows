@@ -20,6 +20,20 @@ RSpec.describe TestPlan::DependencyDelta::SourceDiffBuilder do
     expect(ranked.call("app/pb_kits/playbook/pb_card/card.rb")).to eq(1)
   end
 
+  it "classifies build output as generated whatever its filename suggests" do
+    builder = described_class.new
+    ranked = lambda { |path| builder.send(:priority, path) }
+
+    # These used to rank as test and documentation, so generated? was false and a linked
+    # release's bundles reached the provider despite the exclusion.
+    expect(ranked.call("dist/widget.test.js")).to eq(described_class::PRIORITY_GENERATED)
+    expect(ranked.call("build/docs/readme.md")).to eq(described_class::PRIORITY_GENERATED)
+    expect(ranked.call("node_modules/thing/spec/x.rb")).to eq(described_class::PRIORITY_GENERATED)
+
+    # A changelog shipped inside dist/ is still the release notes.
+    expect(ranked.call("dist/CHANGELOG.md")).to eq(described_class::PRIORITY_CHANGELOG)
+  end
+
   it "orders runtime source ahead of a colocated test" do
     Dir.mktmpdir do |directory|
       old_root = File.join(directory, "old")
