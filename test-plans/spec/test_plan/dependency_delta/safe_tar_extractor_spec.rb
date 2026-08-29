@@ -94,7 +94,34 @@ RSpec.describe TestPlan::DependencyDelta::SafeTarExtractor do
 
       expect do
         described_class.new.extract_gzip(archive, File.join(directory, "target"))
-      end.to raise_error(RuntimeError, /more than 2 files/)
+      end.to raise_error(RuntimeError, /more than 2 entries/)
+    end
+  end
+
+  it "counts directory and metadata entries against the limit too" do
+    stub_const("#{described_class}::MAX_FILES", 3)
+
+    Dir.mktmpdir do |directory|
+      archive = File.join(directory, "dirs.tgz")
+      payload = "52 comment=0000000000000000000000000000000000000000\n"
+      Zlib::GzipWriter.open(archive) do |gzip|
+        header = Gem::Package::TarHeader.new(
+          name: "pax_global_header", mode: 0o644, size: payload.bytesize,
+          prefix: "", typeflag: "g", mtime: 0, uid: 0, gid: 0
+        )
+        gzip.write(header.to_s)
+        gzip.write(payload)
+        gzip.write("\0" * (512 - (payload.bytesize % 512)))
+        Gem::Package::TarWriter.new(gzip) do |tar|
+          5.times { |index| tar.mkdir("package/dir_#{index}", 0o755) }
+        end
+      end
+
+      # An archive of nothing but directories and metadata used to bypass the cap
+      # entirely, since only regular files were counted.
+      expect do
+        described_class.new.extract_gzip(archive, File.join(directory, "target"))
+      end.to raise_error(RuntimeError, /more than 3 entries/)
     end
   end
 

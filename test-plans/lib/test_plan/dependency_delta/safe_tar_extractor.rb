@@ -41,10 +41,16 @@ module TestPlan
 
       def extract_entries(tar, destination)
         total_bytes = 0
-        files = 0
+        entries = 0
         root = File.expand_path(destination)
 
         tar.each do |entry|
+          # Counted before dispatching on type: an archive of nothing but directory or
+          # metadata entries costs the same inodes and CPU as one full of files, and
+          # counting only regular files let it past this limit entirely.
+          entries += 1
+          raise "Archive contains more than #{MAX_FILES} entries" if entries > MAX_FILES
+
           next if PAX_HEADER_TYPEFLAGS.include?(entry.header.typeflag)
 
           relative = safe_relative_path(entry.full_name)
@@ -56,9 +62,7 @@ module TestPlan
           if entry.directory?
             FileUtils.mkdir_p(target)
           elsif entry.file?
-            files += 1
             total_bytes += entry.header.size
-            raise "Archive contains more than #{MAX_FILES} files" if files > MAX_FILES
             raise "Archive expands beyond 100 MiB" if total_bytes > MAX_EXTRACTED_BYTES
 
             FileUtils.mkdir_p(File.dirname(target))
