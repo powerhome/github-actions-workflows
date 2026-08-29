@@ -100,6 +100,10 @@ module ActionWiring
     step.fetch("env", {}).values.grep(/github\.workspace/).map { |value| File.basename(value) }
   end
 
+  def provider_step
+    steps.find { |step| step.fetch("name", "") == "Run test-plan provider" }
+  end
+
   def outputs_consumed
     read("action.yml")
       .scan(/steps\.([a-z_]+)\.outputs\.([a-z_]+)/)
@@ -139,6 +143,36 @@ RSpec.describe "action.yml wiring" do
       provided = step.fetch("env", {}).keys + ActionWiring::AMBIENT
 
       expect(ActionWiring.shell_env_reads("providers/cursor.sh") - provided).to be_empty
+    end
+  end
+
+  # The provider runs against the workspace with Read(**), so anything left there is
+  # readable by prompt-influenced output.
+  describe "what the provider can read" do
+    it "drops the checkout credential before the provider runs" do
+      names = ActionWiring.steps.map { |step| step.fetch("name") }
+      removal = names.index("Remove Git credentials from the workspace")
+
+      expect(removal).not_to be_nil
+      expect(removal).to be > names.index("Fetch through merge-base")
+      expect(removal).to be < names.index(ActionWiring.provider_step.fetch("name"))
+    end
+
+    it "keeps the unbounded delta out of the workspace" do
+      full = ActionWiring.steps
+        .flat_map { |step| step.fetch("env", {}).to_a }
+        .find { |name, _value| name == "DEPENDENCY_DELTA_FULL_PATH" }
+
+      # Readable there, it would bypass both the context budget and the generated-file
+      # exclusions the budget exists to enforce.
+      expect(full.last).not_to include("github.workspace")
+      expect(full.last).to include("runner.temp")
+    end
+
+    it "still uploads the delta from outside the workspace" do
+      upload = ActionWiring.steps.find { |step| step.fetch("name", "").include?("Upload") }
+
+      expect(upload.dig("with", "path")).to include("dependency-deltas-full.diff")
     end
   end
 

@@ -123,7 +123,6 @@ runs:
       env:
         PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
         DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
-        DEPENDENCY_DELTA_FULL_PATH: ${{ github.workspace }}/dependency-deltas-full.diff
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
         DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
         TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
@@ -160,6 +159,25 @@ runs:
         head_ref: ${{ steps.pr_metadata.outputs.head_sha }}
         deepen_length: ${{ inputs.deepen-length }}
 
+    - name: Remove Git credentials from the workspace
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      # actions/checkout persists the installation token in .git/config, and the
+      # provider then runs against this workspace with Read(**) while that token is
+      # still valid -- so prompt-influenced output could read and disclose it. Every
+      # remaining Git operation is local (diff, ls-tree, merge-base, show, grep), so the
+      # credential is dropped here rather than left for the provider to find.
+      run: |
+        set -euo pipefail
+
+        git -C "${GITHUB_WORKSPACE}" config --local --unset-all \
+          "http.https://github.com/.extraheader" || true
+
+        if git -C "${GITHUB_WORKSPACE}" config --local --get-regexp "^http\..*\.extraheader$" >/dev/null 2>&1; then
+          echo "An authorization header is still present in .git/config" >&2
+          exit 1
+        fi
+
     - name: Compute PR diff
       if: steps.pr_metadata.outputs.generate == 'true'
       shell: bash
@@ -178,7 +196,10 @@ runs:
         BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
         HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
         DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
-        DEPENDENCY_DELTA_FULL_PATH: ${{ github.workspace }}/dependency-deltas-full.diff
+        # Deliberately outside the workspace: this is the unbounded artifact, and the
+        # provider runs with Read(**) over the workspace. Left there, the agent could
+        # open it and bypass both the context budget and the generated-file exclusions.
+        DEPENDENCY_DELTA_FULL_PATH: ${{ runner.temp }}/dependency-deltas-full.diff
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
         DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
       run: |
@@ -223,7 +244,7 @@ runs:
         path: |
           ${{ github.workspace }}/test-plan-agent.json
           ${{ github.workspace }}/dependency-delta-manifest.json
-          ${{ github.workspace }}/dependency-deltas-full.diff
+          ${{ runner.temp }}/dependency-deltas-full.diff
           ${{ github.workspace }}/dependency-deltas-context.diff
           ${{ github.workspace }}/dependency-kit-usage.md
         if-no-files-found: warn
