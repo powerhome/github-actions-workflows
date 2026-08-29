@@ -1,3 +1,5 @@
+require_relative "untrusted_text"
+
 module TestPlan
   class Formatter
     NO_MANUAL_QA_MESSAGE = "No manual application QA was identified for this change."
@@ -191,27 +193,8 @@ module TestPlan
       landing_page.empty? ? "Not identified from this change." : landing_page
     end
 
-    # Everything the provider returns, and the pull-request title, is untrusted text
-    # rendered into a comment the bot signs. Left raw, a step or a title could carry an
-    # @mention that notifies people, a link or image pointing anywhere, or inline HTML.
-    # The plan's own structure is built by this formatter, so provider text never needs
-    # to carry markup and can be neutralised wholesale.
-    #
-    # &#64; renders as @ without becoming a mention, and breaking the scheme separator
-    # the same way stops a bare URL from autolinking -- escaping bracket syntax alone
-    # would not, since GitHub links a bare https:// or www. on sight. The escapes leave
-    # the reader with the characters that were written.
     def sanitize(value)
-      value
-        .to_s
-        .delete("`")
-        .gsub("&", "&amp;")
-        .gsub("<", "&lt;")
-        .gsub(">", "&gt;")
-        .gsub("@", "&#64;")
-        .gsub(/([\[\]])/) { "\\#{Regexp.last_match(1)}" }
-        .gsub(%r{\b(https?|ftp)://}i) { "#{Regexp.last_match(1)}&#58;//" }
-        .gsub(/\bwww\./i) { "www&#46;" }
+      UntrustedText.escape(value)
     end
 
     def normalize_text(value)

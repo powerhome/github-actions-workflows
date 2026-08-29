@@ -1,4 +1,6 @@
 require "json"
+
+require_relative "../untrusted_text"
 require_relative "./change_detector"
 require_relative "./generator"
 require_relative "./playbook_kit_usage"
@@ -50,6 +52,13 @@ module TestPlan
         end
       end
 
+      # Names, versions, paths and warning text all originate in lockfiles the pull
+      # request can edit, or in messages built from them, and the summary is rendered as
+      # Markdown. Same policy as the comment.
+      def escape(value)
+        UntrustedText.escape(value.to_s)
+      end
+
       def write_summary(manifest)
         summary_path = ENV["GITHUB_STEP_SUMMARY"]
         return if summary_path.to_s.empty?
@@ -62,17 +71,20 @@ module TestPlan
             summary.puts("No raised external Bundler or Yarn dependencies were detected.")
           else
             dependencies.each do |entry|
-              summary.puts("- `#{entry.fetch("name")}`: #{entry.fetch("old_version")} -> #{entry.fetch("new_version")} (#{entry.fetch("status")})")
-              entry.fetch("warnings").each { |warning| summary.puts("  - #{warning}") }
+              summary.puts(
+                "- #{escape(entry.fetch("name"))}: #{escape(entry.fetch("old_version"))} -> " \
+                  "#{escape(entry.fetch("new_version"))} (#{entry.fetch("status")})"
+              )
+              entry.fetch("warnings").each { |warning| summary.puts("  - #{escape(warning)}") }
               omitted = entry.fetch("omitted_from_context", [])
-              omitted.first(10).each { |path| summary.puts("  - omitted from context: `#{path}`") }
+              omitted.first(10).each { |path| summary.puts("  - omitted from context: #{escape(path)}") }
               summary.puts("  - ...and #{omitted.length - 10} more") if omitted.length > 10
             end
           end
 
           lockfile_warnings.each do |warning|
-            summary.puts("- `#{warning.fetch("lockfile")}`: not analyzed")
-            summary.puts("  - #{warning.fetch("warning")}")
+            summary.puts("- #{escape(warning.fetch("lockfile"))}: not analyzed")
+            summary.puts("  - #{escape(warning.fetch("warning"))}")
           end
         end
       end
