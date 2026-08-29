@@ -131,14 +131,14 @@ runs:
       # symlink -- at any of the names written below. Both shell redirects and File.write
       # follow a symlink, which would let the head redirect a write outside the workspace
       # or read back something it chose. rm -rf unlinks a symlink rather than following
-      # it, so clearing the names first is enough.
+      # it, so clearing the names first is enough. The full delta is not listed: it is
+      # written to the runner temp directory, which the pull request cannot reach.
       run: |
         set -euo pipefail
 
         rm -rf -- \
           "${PR_DIFF_PATH}" \
           "${DEPENDENCY_DELTA_MANIFEST_PATH}" \
-          "${DEPENDENCY_DELTA_FULL_PATH}" \
           "${DEPENDENCY_DELTA_CONTEXT_PATH}" \
           "${DEPENDENCY_KIT_USAGE_PATH}" \
           "${TEST_PLAN_JSON_PATH}" \

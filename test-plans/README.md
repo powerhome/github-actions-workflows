@@ -161,5 +161,5 @@ ruby test-plans/spec/run_all.rb
 A single file works the same way, since each spec loads the shared helper:
 
 ```bash
-ruby test-plans/spec/test_plan/dependency_delta_spec.rb
+ruby test-plans/spec/test_plan/dependency_delta/generator_spec.rb
 ```

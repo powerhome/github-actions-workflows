@@ -64,9 +64,16 @@ module ActionWiring
 
   # Shell reads, minus anything the script assigns itself.
   def shell_env_reads(path)
-    body = read(path)
+    script_env_reads(read(path))
+  end
+
+  def script_env_reads(body)
     assigned = body.scan(/^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)=/).flatten
     body.scan(/\$\{([A-Z_][A-Z0-9_]*)[:}]/).flatten.uniq - assigned
+  end
+
+  def inline_shell_steps
+    steps.select { |step| step.fetch("shell", "") == "bash" && step.key?("run") }
   end
 
   def step_running(script)
@@ -136,6 +143,18 @@ RSpec.describe "action.yml wiring" do
     it "runs every bin entry point from some step" do
       orphaned = ActionWiring.entry_points.reject { |entry| ActionWiring.step_running(entry) }
       expect(orphaned).to be_empty
+    end
+
+    # These run under `set -u`, so a variable a step references but does not declare
+    # aborts the step rather than expanding empty.
+    it "declares every variable its inline shell steps reference" do
+      undeclared = ActionWiring.inline_shell_steps.filter_map do |step|
+        provided = step.fetch("env", {}).keys + ActionWiring::AMBIENT
+        missing = ActionWiring.script_env_reads(step.fetch("run")) - provided
+        [step.fetch("name"), missing] if missing.any?
+      end
+
+      expect(undeclared).to be_empty
     end
 
     it "cursor.sh only reads variables the provider step provides" do
