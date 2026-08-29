@@ -175,10 +175,22 @@ module TestPlan
       # published artifacts genuinely differ (Rails kits versus compiled components), so
       # both deltas are kept; the link only stops the provider reading them as two
       # unrelated changes and writing coverage twice.
+      #
+      # The pairs are named rather than inferred. Matching on a normalised name and equal
+      # versions would have linked an unrelated widget_ui gem and widget-ui package that
+      # happened to bump together, and linking drops each half's build output from the
+      # provider context -- so a wrong link silently costs both of them their evidence.
+      LINKED_RELEASES = [
+        %w[playbook_ui playbook-ui],
+      ].freeze
+
       def build_related(changes)
         changes
-          .group_by { |change| [release_name(change), change.old_version, change.new_version] }
-          .each_with_object({}) do |(_release, group), related|
+          .group_by { |change| [linked_release(change), change.old_version, change.new_version] }
+          .each_with_object({}) do |(key, group), related|
+            # key is [linked release, old version, new version]; a nil release means the
+            # package is not half of a named pair.
+            next if key.first.nil?
             next if group.map(&:ecosystem).uniq.length < 2
 
             group.each do |change|
@@ -189,8 +201,8 @@ module TestPlan
           end
       end
 
-      def release_name(change)
-        change.name.to_s.sub(%r{\A@[^/]+/}, "").downcase.tr("_", "-")
+      def linked_release(change)
+        LINKED_RELEASES.find { |names| names.include?(change.name) }
       end
 
       def related_for(change)

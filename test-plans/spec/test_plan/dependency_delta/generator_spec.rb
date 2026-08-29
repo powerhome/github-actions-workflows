@@ -81,12 +81,12 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       )
     end
     gem_change = TestPlan::DependencyDelta::Change.new(
-      ecosystem: "bundler", name: "widget_ui", old_version: "1.0.0", new_version: "2.0.0",
+      ecosystem: "bundler", name: "playbook_ui", old_version: "1.0.0", new_version: "2.0.0",
       source: "rubygems", old_locator: "https://rubygems.org/",
       new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
     )
     npm_change = TestPlan::DependencyDelta::Change.new(
-      ecosystem: "yarn", name: "widget-ui", old_version: "1.0.0", new_version: "2.0.0",
+      ecosystem: "yarn", name: "playbook-ui", old_version: "1.0.0", new_version: "2.0.0",
       source: "npm", old_locator: "https://registry.npmjs.org/a.tgz",
       new_locator: "https://registry.npmjs.org/b.tgz", direct: true, lockfiles: ["yarn.lock"]
     )
@@ -185,6 +185,27 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(entries.fetch("zzz-small").fetch("status")).to eq("retrieved")
     expect(entries.fetch("zzz-small").fetch("warnings").join).to include("artifact only")
     expect(result.dig(:manifest, "warning_count")).to eq(1)
+  end
+
+  it "does not link unrelated packages that happen to bump together" do
+    gem_change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "widget_ui", old_version: "1.0.0", new_version: "2.0.0",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+    npm_change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "yarn", name: "widget-ui", old_version: "1.0.0", new_version: "2.0.0",
+      source: "npm", old_locator: "https://registry.npmjs.org/a.tgz",
+      new_locator: "https://registry.npmjs.org/b.tgz", direct: true, lockfiles: ["yarn.lock"]
+    )
+    retriever = double("retriever", retrieve: [
+      TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n", priority: 0),
+    ])
+
+    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+
+    # Linking drops each half's build output, so a wrong link costs both their evidence.
+    expect(result.dig(:manifest, "dependencies").map { |entry| entry.fetch("related") }).to eq([[], []])
   end
 
   it "links a gem and an npm package released together as one upstream release" do
