@@ -8,8 +8,28 @@ set -euo pipefail
 export PATH="${HOME}/.local/bin:${PATH}"
 
 if ! command -v agent >/dev/null 2>&1; then
-  # Cursor does not currently document a version-pinned CLI installer for CI.
-  curl https://cursor.com/install -fsS | bash
+  # Cursor does not currently document a version-pinned CLI installer for CI, so this
+  # runs whatever that endpoint serves. It is at least downloaded before it is run:
+  # piping into bash starts executing while the transfer is still going, so a connection
+  # dropped halfway leaves the first half already run, and nothing is recorded about what
+  # ran. Fetching first makes the download succeed or fail as a whole and lets the run
+  # log what it executed.
+  installer="$(mktemp)"
+  trap 'rm -f "${installer}"' EXIT
+
+  curl -fsSL https://cursor.com/install -o "${installer}"
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    installer_digest="$(sha256sum "${installer}" | cut -d" " -f1)"
+  else
+    installer_digest="$(shasum -a 256 "${installer}" | cut -d" " -f1)"
+  fi
+  echo "[test_plan] Cursor installer: $(wc -c <"${installer}") bytes, sha256 ${installer_digest}" >&2
+
+  bash "${installer}"
+  rm -f "${installer}"
+  trap - EXIT
+
   export PATH="${HOME}/.local/bin:${PATH}"
 fi
 
