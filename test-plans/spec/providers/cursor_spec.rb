@@ -125,15 +125,17 @@ RSpec.describe "providers/cursor.sh" do
       FileUtils.mkdir_p([workspace, bin, home, temp])
 
       args_path = File.join(root, "agent-args")
+      # Carried as base64 rather than a heredoc so the body is delivered byte for byte:
+      # an empty download has to arrive as zero bytes, and a heredoc always emits a
+      # trailing newline, which is exactly the size the script under test checks for.
+      payload = [installer_body.call(args_path)].pack("m0")
       File.write(File.join(bin, "curl"), <<~CURL)
         #!/usr/bin/env bash
         out=""
         while [[ $# -gt 0 ]]; do
           case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac
         done
-        cat > "${out}" <<'INSTALLER'
-        #{installer_body.call(args_path).gsub("\n", "\n        ")}
-        INSTALLER
+        printf %s '#{payload}' | base64 --decode > "${out}"
       CURL
       FileUtils.chmod(0o755, File.join(bin, "curl"))
 
@@ -185,6 +187,19 @@ RSpec.describe "providers/cursor.sh" do
 
       # Logged before it is executed, so a surprising run has something to compare to.
       expect(result[:stderr]).to match(/Cursor installer: +\d+ bytes, sha256 [0-9a-f]{64}/)
+      expect(Dir.children(result[:temp])).to be_empty
+    end
+  end
+
+  it "fails on an empty download rather than running it as an installer" do
+    empty = ->(_args_path) { "" }
+
+    run_install(installer_body: empty) do |result|
+      expect(result[:status]).not_to be_success
+      expect(result[:stderr]).to include("Downloaded an empty Cursor installer")
+      # bash runs an empty script happily, so without the size check this reads as an
+      # installer that ran and did not place the CLI, which is a different problem.
+      expect(result[:stderr]).not_to include("agent CLI not found after install")
       expect(Dir.children(result[:temp])).to be_empty
     end
   end

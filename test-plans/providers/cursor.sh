@@ -28,6 +28,14 @@ if ! command -v agent >/dev/null 2>&1; then
   fi
   echo "[test_plan] Cursor installer: $(wc -c <"${installer}") bytes, sha256 ${installer_digest}" >&2
 
+  # A 200 with an empty body satisfies curl -f, and bash then runs an empty script and
+  # exits 0. The install would look like it had happened, and the missing CLI would be
+  # reported below as though the installer had run and not worked.
+  if [[ ! -s "${installer}" ]]; then
+    echo "Downloaded an empty Cursor installer from https://cursor.com/install" >&2
+    exit 1
+  fi
+
   bash "${installer}"
   rm -f "${installer}"
   trap - EXIT
