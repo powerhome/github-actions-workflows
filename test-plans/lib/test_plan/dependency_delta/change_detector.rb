@@ -12,6 +12,16 @@ module TestPlan
         end
       end
 
+      # Anchored to the start of a line so a comment is not read as a declaration.
+      # Unanchored, \bgem also matched prose: "Specify your gem's dependencies" opens a
+      # quote, and the capture then ran to the next quote anywhere in the file, which
+      # both invented a name and desynchronised the pairing for the rest of it, so a
+      # real declaration further down could be missed as well.
+      GEM = /^[ \t]*gem\s*\(?\s*["']([^"'\n]+)["']/
+      # A gemspec names its receiver: spec.add_dependency, s.add_runtime_dependency.
+      ADD_DEPENDENCY =
+        /^[ \t]*(?:[A-Za-z_]\w*\.)?add_(?:runtime_)?dependency\s*\(?\s*["']([^"'\n]+)["']/
+
       attr_reader :problems
 
       def initialize(snapshot)
@@ -142,8 +152,9 @@ module TestPlan
 
         paths.each_with_object(Set.new) do |path, names|
           content = @snapshot.read(@snapshot.head_sha, path).to_s
-          content.scan(/\bgem\s*(?:\()?\s*["']([^"']+)["']/).flatten.each { |name| names << name }
-          content.scan(/\badd_(?:runtime_)?dependency\s*(?:\()?\s*["']([^"']+)["']/).flatten.each { |name| names << name }
+          [GEM, ADD_DEPENDENCY].each do |pattern|
+            content.scan(pattern).flatten.each { |name| names << name }
+          end
         end
       end
 

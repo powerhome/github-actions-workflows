@@ -266,4 +266,69 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     expect(detector.problems.map(&:path)).to eq(["broken/Gemfile.lock"])
     expect(detector.problems.first.message).to include("Unable to parse broken/Gemfile.lock")
   end
+
+  # Which names count as direct decides ordering and how much of the context budget a
+  # raise gets, so reading a manifest loosely both promotes dependencies nobody declared
+  # and, through the quote pairing, demotes ones somebody did.
+  describe "reading direct dependencies out of a manifest" do
+    def bumping(manifests)
+      lock = lambda do |version|
+        <<~LOCK
+          GEM
+            remote: https://rubygems.org/
+            specs:
+              rack (#{version})
+              sidekiq (#{version})
+              sinatra (#{version})
+
+          DEPENDENCIES
+            sinatra
+        LOCK
+      end
+      snapshot = FakeSnapshot.new(
+        "merge_base" => { "Gemfile.lock" => lock.call("1.0.0") },
+        "head" => { "Gemfile.lock" => lock.call("2.0.0") }.merge(manifests)
+      )
+      allow(snapshot).to receive(:changed_dependency_files).and_return(["Gemfile.lock"])
+      described_class.new(snapshot).detect
+    end
+
+    it "ignores an entry that was commented out rather than deleted" do
+      changes = bumping(
+        "Gemfile" => <<~GEMFILE
+          # gem "rack"
+          gem "sinatra"
+        GEMFILE
+      )
+
+      expect(changes.select(&:direct).map(&:name)).to eq(["sinatra"])
+    end
+
+    it "still sees a declaration that follows prose containing an apostrophe" do
+      # The comment bundler's own `gem` template writes. Unanchored, its apostrophe
+      # opened a quote whose capture ran to the next one in the file -- the opening
+      # quote of the declaration below -- swallowing the name it was looking for.
+      changes = bumping(
+        "Gemfile" => <<~GEMFILE
+          # Specify your gem's dependencies in widget.gemspec
+          gem "rack"
+        GEMFILE
+      )
+
+      expect(changes.select(&:direct).map(&:name)).to contain_exactly("rack", "sinatra")
+    end
+
+    it "reads a gemspec through the receiver it names" do
+      changes = bumping(
+        "widget.gemspec" => <<~GEMSPEC
+          Gem::Specification.new do |spec|
+            spec.add_dependency "rack"
+            # spec.add_dependency "sidekiq"
+          end
+        GEMSPEC
+      )
+
+      expect(changes.select(&:direct).map(&:name)).to contain_exactly("rack", "sinatra")
+    end
+  end
 end
