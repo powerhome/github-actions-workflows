@@ -15,6 +15,7 @@ module ActionWiring
   AMBIENT = %w[
     BASH_SOURCE CI GITHUB_ENV GITHUB_OUTPUT GITHUB_REPOSITORY GITHUB_RUN_ATTEMPT
     GITHUB_RUN_ID GITHUB_SERVER_URL GITHUB_STEP_SUMMARY GITHUB_WORKSPACE HOME PATH
+    TMPDIR
   ].freeze
 
   # Steps whose outputs come from a third-party action rather than a script of ours.

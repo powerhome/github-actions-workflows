@@ -14,7 +14,9 @@ if ! command -v agent >/dev/null 2>&1; then
   # dropped halfway leaves the first half already run, and nothing is recorded about what
   # ran. Fetching first makes the download succeed or fail as a whole and lets the run
   # log what it executed.
-  installer="$(mktemp)"
+  # Templated rather than bare: mktemp only honours TMPDIR when given one on BSD, and
+  # the name says what the file is if a failed run ever leaves it behind.
+  installer="$(mktemp "${TMPDIR:-/tmp}/cursor-installer.XXXXXX")"
   trap 'rm -f "${installer}"' EXIT
 
   curl -fsSL https://cursor.com/install -o "${installer}"
