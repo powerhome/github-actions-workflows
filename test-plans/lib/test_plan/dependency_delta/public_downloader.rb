@@ -3,6 +3,8 @@ require "net/http"
 require "tempfile"
 require "uri"
 
+require_relative "../byte_size"
+
 module TestPlan
   module DependencyDelta
     class PublicDownloader
@@ -31,7 +33,9 @@ module TestPlan
               File.open(destination, "wb") do |file|
                 response.read_body do |chunk|
                   bytes += chunk.bytesize
-                  raise "Dependency download exceeds 50 MiB: #{url}" if bytes > MAX_DOWNLOAD_BYTES
+                  if bytes > MAX_DOWNLOAD_BYTES
+                    raise "Dependency download exceeds #{ByteSize.describe(MAX_DOWNLOAD_BYTES)}: #{url}"
+                  end
 
                   file.write(chunk)
                 end

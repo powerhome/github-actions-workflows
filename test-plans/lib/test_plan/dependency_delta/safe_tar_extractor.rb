@@ -3,6 +3,7 @@ require "pathname"
 require "rubygems/package"
 require "tempfile"
 require "zlib"
+require_relative "../byte_size"
 require_relative "./public_downloader"
 
 module TestPlan
@@ -27,7 +28,9 @@ module TestPlan
             Gem::Package::TarReader.new(gem_file) do |tar|
               entry = tar.find { |candidate| candidate.full_name == "data.tar.gz" }
               raise "Gem archive does not contain data.tar.gz" unless entry
-              raise "Gem data archive exceeds 50 MiB" if entry.header.size > PublicDownloader::MAX_DOWNLOAD_BYTES
+              if entry.header.size > PublicDownloader::MAX_DOWNLOAD_BYTES
+                raise "Gem data archive exceeds #{ByteSize.describe(PublicDownloader::MAX_DOWNLOAD_BYTES)}"
+              end
 
               data_archive.write(entry.read)
               data_archive.flush
@@ -55,7 +58,7 @@ module TestPlan
           # and reads past their declared size, so a small compressed archive of huge
           # PAX payloads would otherwise cost unbounded work under this limit.
           total_bytes += entry.header.size
-          raise "Archive expands beyond 100 MiB" if total_bytes > MAX_EXTRACTED_BYTES
+          raise "Archive expands beyond #{ByteSize.describe(MAX_EXTRACTED_BYTES)}" if total_bytes > MAX_EXTRACTED_BYTES
 
           next if PAX_HEADER_TYPEFLAGS.include?(entry.header.typeflag)
 
