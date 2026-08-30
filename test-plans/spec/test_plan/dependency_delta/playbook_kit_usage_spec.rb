@@ -3,6 +3,7 @@ require "test_plan/dependency_delta"
 
 require "fileutils"
 require "open3"
+require "stringio"
 require "tmpdir"
 
 RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
@@ -138,6 +139,74 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       )
 
       expect(usage.report).to include("Multi Level Select")
+    end
+  end
+
+  # "No usage found" is the one conclusion this file exists to support -- it tells a
+  # tester there is nothing to open for a changed kit. Reaching it because the search
+  # never ran is worse than producing no report at all.
+  describe "when the search cannot run" do
+    def annotations
+      original = $stdout
+      $stdout = StringIO.new
+      yield
+      $stdout.string
+    ensure
+      $stdout = original
+    end
+
+    it "says the search failed rather than reporting no usage" do
+      Dir.mktmpdir do |root|
+        # Not a git repository, so git grep exits 128 rather than 0 or 1.
+        usage = described_class.new(workspace: root)
+        report = nil
+
+        logged = annotations do
+          usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+          report = usage.report
+        end
+
+        expect(report).to include("Card (`card`) — search failed")
+        expect(report).not_to include("No usage found")
+        expect(logged).to include("::warning::Playbook kit usage search failed:", "exited 128")
+      end
+    end
+
+    it "says so when git itself cannot be run" do
+      workspace(app) do |root|
+        # Stubbed inside the block: the fixture repository is built with git too.
+        allow(Open3).to receive(:capture3).and_raise(Errno::ENOENT, "git")
+        usage = described_class.new(workspace: root)
+        report = nil
+
+        logged = annotations do
+          usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+          report = usage.report
+        end
+
+        expect(report).to include("search failed")
+        expect(logged).to include("git grep could not be run: Errno::ENOENT")
+      end
+    end
+
+    it "does not report the half of a kit's search that did run" do
+      ok = ["components/ui/app/javascript/Widget.tsx\n", "", instance_double(Process::Status, exitstatus: 0)]
+      failed = ["", "fatal: bad pattern\n", instance_double(Process::Status, exitstatus: 128)]
+
+      workspace(app) do |root|
+        allow(Open3).to receive(:capture3).and_return(ok, failed)
+        usage = described_class.new(workspace: root)
+        report = nil
+
+        annotations do
+          usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+          report = usage.report
+        end
+
+        # A partial list of paths is indistinguishable from a complete one.
+        expect(report).to include("search failed")
+        expect(report).not_to include("Widget.tsx")
+      end
     end
   end
 
