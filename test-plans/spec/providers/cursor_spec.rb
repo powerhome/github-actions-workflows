@@ -5,6 +5,12 @@ require "open3"
 require "tmpdir"
 
 RSpec.describe "providers/cursor.sh" do
+  # The system directories only, never the caller's PATH. Inheriting it meant that once
+  # a real Cursor CLI existed on this machine, `command -v agent` found it: the install
+  # branch was skipped, and one example ran the actual agent against a scratch workspace.
+  # A runner has no CLI installed, so inheriting also tested the wrong branch there.
+  SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin".freeze
+
   let(:script) { File.join(ACTION_ROOT, "providers", "cursor.sh") }
 
   def agent_script(args_path)
@@ -39,7 +45,7 @@ RSpec.describe "providers/cursor.sh" do
       json_path = File.join(root, "test-plan-agent.json")
 
       env = {
-        "PATH" => "#{bin}:#{ENV.fetch("PATH")}",
+        "PATH" => "#{bin}:#{SYSTEM_PATH}",
         "HOME" => home,
         "AGENT_MODE" => mode,
         "GITHUB_WORKSPACE" => workspace,
@@ -145,7 +151,7 @@ RSpec.describe "providers/cursor.sh" do
 
       env = {
         # No `agent` on PATH, so the script has to install one.
-        "PATH" => "#{bin}:#{ENV.fetch("PATH")}",
+        "PATH" => "#{bin}:#{SYSTEM_PATH}",
         "HOME" => home,
         "TMPDIR" => temp,
         "AGENT_MODE" => "ok",
