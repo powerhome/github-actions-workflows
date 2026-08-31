@@ -1,5 +1,7 @@
 require "open3"
 
+require_relative "../command_output"
+
 module TestPlan
   module DependencyDelta
     # A Playbook version bump is the PR shape this whole delta exists for, and it is the
@@ -110,11 +112,11 @@ module TestPlan
         )
         # git grep exits 1 when nothing matched, which is not an error here.
         unless [0, 1].include?(status.exitstatus)
-          record_failure("git grep exited #{status.exitstatus}: #{stderr}")
+          record_failure("git grep exited #{status.exitstatus}: #{CommandOutput.utf8(stderr)}")
           return nil
         end
 
-        stdout.lines.map(&:chomp).reject(&:empty?)
+        CommandOutput.utf8(stdout).lines.map(&:chomp).reject(&:empty?)
       rescue => e
         record_failure("git grep could not be run: #{e.class}: #{e.message}")
         nil

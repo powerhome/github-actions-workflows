@@ -3,6 +3,8 @@ require "open3"
 require "tempfile"
 require "uri"
 
+require_relative "../command_output"
+
 require_relative "git_locator"
 require_relative "public_downloader"
 require_relative "public_origin"
@@ -241,8 +243,11 @@ module TestPlan
               "diff", "-u", "--label", "a/#{path}", "--label", "b/#{path}",
               old_file.path, new_file.path
             )
-            raise "diff failed for #{path}: #{stderr.strip}" unless [0, 1].include?(status.exitstatus)
+            unless [0, 1].include?(status.exitstatus)
+              raise "diff failed for #{path}: #{CommandOutput.utf8(stderr).strip}"
+            end
 
+            stdout = CommandOutput.utf8(stdout)
             stdout.empty? ? nil : stdout
           end
         end

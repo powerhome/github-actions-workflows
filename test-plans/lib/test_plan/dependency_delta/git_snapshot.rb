@@ -1,5 +1,7 @@
 require "open3"
 
+require_relative "../command_output"
+
 module TestPlan
   module DependencyDelta
     class GitSnapshot
@@ -50,9 +52,11 @@ module TestPlan
 
       def git(*args)
         stdout, stderr, status = Open3.capture3("git", *args, chdir: @workspace)
-        raise "git #{args.join(" ")} failed: #{stderr.strip}" unless status.success?
+        unless status.success?
+          raise "git #{args.join(" ")} failed: #{CommandOutput.utf8(stderr).strip}"
+        end
 
-        stdout
+        CommandOutput.utf8(stdout)
       end
     end
   end

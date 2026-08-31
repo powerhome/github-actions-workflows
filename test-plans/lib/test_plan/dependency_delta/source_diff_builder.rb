@@ -1,6 +1,8 @@
 require "digest"
 require "open3"
 
+require_relative "../command_output"
+
 module TestPlan
   module DependencyDelta
     class SourceDiffBuilder
@@ -100,8 +102,11 @@ module TestPlan
           "--label", "b/#{relative}",
           old_input, new_input
         )
-        raise "diff failed for #{relative}: #{stderr.strip}" unless [0, 1].include?(status.exitstatus)
+        unless [0, 1].include?(status.exitstatus)
+          raise "diff failed for #{relative}: #{CommandOutput.utf8(stderr).strip}"
+        end
 
+        stdout = CommandOutput.utf8(stdout)
         stdout.empty? ? nil : SourceDiff.new(path: relative, diff: stdout, priority: priority(relative))
       end
     end
