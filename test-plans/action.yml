@@ -1,0 +1,315 @@
+name: Test plan
+description: Generate a profile-driven manual QA plan for a pull request and upsert it as a comment
+
+inputs:
+  profile:
+    description: Allowlisted test-plan profile (cobra-test-plan or enhanced-cobra-test-plan)
+    required: true
+  app-id:
+    description: GitHub App ID used to create an installation token
+    required: true
+  private-key:
+    description: GitHub App private key (PEM)
+    required: true
+  provider:
+    description: Test-plan backend (supported values — cursor)
+    required: false
+    default: cursor
+  provider-api-key:
+    description: API credential for the selected provider
+    required: true
+  pull-request-number:
+    description: Pull request number to analyze
+    required: true
+  deepen-length:
+    description: Passed to rmacklin/fetch-through-merge-base as deepen_length
+    required: false
+    default: "30"
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve test-plan profile
+      id: profile
+      shell: bash
+      env:
+        TEST_PLAN_ACTION_ROOT: ${{ github.action_path }}
+        TEST_PLAN_PROFILE: ${{ inputs.profile }}
+      run: ruby "${{ github.action_path }}/bin/resolve_profile.rb"
+
+    - name: Create GitHub App token
+      id: app_token
+      uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+
+    - name: Check pull request mergeability
+      id: pr_metadata
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+      run: ruby "${{ github.action_path }}/bin/pull_request_preflight.rb"
+
+    - name: Render blocked test-plan message
+      if: steps.pr_metadata.outputs.blocked == 'true'
+      shell: bash
+      env:
+        BLOCKED_REASON: ${{ steps.pr_metadata.outputs.blocked_reason }}
+        PROFILE_ID: ${{ steps.profile.outputs.profile_id }}
+        PROFILE_NAME: ${{ steps.profile.outputs.display_name }}
+        BLOCKED_COMMENT_PATH: ${{ github.workspace }}/test-plan-blocked-comment.md
+      run: |
+        set -euo pipefail
+
+        # This path is written before any checkout of the pull-request head, but a
+        # caller may have checked one out already, so clear the name first either way.
+        rm -rf -- "${BLOCKED_COMMENT_PATH}"
+
+        if [[ "${BLOCKED_REASON}" == "conflicting" ]]; then
+          message="This PR currently has merge conflicts with its base branch. Resolve the conflicts, then remove and reapply the \`${PROFILE_ID}\` label to generate a new test plan."
+        else
+          message="GitHub is still calculating whether this PR can be merged. Remove and reapply the \`${PROFILE_ID}\` label to retry the test plan."
+        fi
+
+        {
+          echo "## ⚠️ ${PROFILE_NAME} unavailable"
+          echo
+          echo "${message}"
+          echo
+          echo "[View workflow run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT})"
+        } > "${BLOCKED_COMMENT_PATH}"
+
+        {
+          echo "## ${PROFILE_NAME}"
+          echo "${message}"
+        } >> "${GITHUB_STEP_SUMMARY}"
+
+    - name: Upsert blocked test-plan comment
+      if: steps.pr_metadata.outputs.blocked == 'true'
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ github.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: ${{ steps.profile.outputs.comment_tag }}
+        mode: upsert
+        file-path: ${{ github.workspace }}/test-plan-blocked-comment.md
+
+    - name: Post in-progress status comment
+      if: steps.pr_metadata.outputs.generate == 'true'
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ github.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: ${{ steps.profile.outputs.status_comment_tag }}
+        mode: delete-on-completion
+        message: |
+          :hourglass_flowing_sand: **${{ steps.profile.outputs.display_name }}** — in progress
+
+          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
+
+    - name: Check out repository
+      if: steps.pr_metadata.outputs.generate == 'true'
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      with:
+        ref: ${{ steps.pr_metadata.outputs.head_sha }}
+        fetch-depth: 1
+        token: ${{ steps.app_token.outputs.token }}
+
+    - name: Clear generated output paths
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
+        DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
+        DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
+        TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
+        TEST_PLAN_COMMENT_PATH: ${{ github.workspace }}/test-plan-comment.md
+      # The workspace is the pull-request head, so it may already contain a file -- or a
+      # symlink -- at any of the names written below. Both shell redirects and File.write
+      # follow a symlink, which would let the head redirect a write outside the workspace
+      # or read back something it chose. rm -rf unlinks a symlink rather than following
+      # it, so clearing the names first is enough. The full delta is not listed: it is
+      # written to the runner temp directory, which the pull request cannot reach.
+      run: |
+        set -euo pipefail
+
+        rm -rf -- \
+          "${PR_DIFF_PATH}" \
+          "${DEPENDENCY_DELTA_MANIFEST_PATH}" \
+          "${DEPENDENCY_DELTA_CONTEXT_PATH}" \
+          "${DEPENDENCY_KIT_USAGE_PATH}" \
+          "${TEST_PLAN_JSON_PATH}" \
+          "${TEST_PLAN_COMMENT_PATH}"
+
+    - name: Fetch base commit
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
+      run: git fetch --depth=1 origin "$BASE_SHA"
+
+    - name: Fetch through merge-base
+      if: steps.pr_metadata.outputs.generate == 'true'
+      uses: rmacklin/fetch-through-merge-base@98594af01ba0825b881902a5dcadbf87bb46d084 # v0
+      with:
+        base_ref: ${{ steps.pr_metadata.outputs.base_sha }}
+        head_ref: ${{ steps.pr_metadata.outputs.head_sha }}
+        deepen_length: ${{ inputs.deepen-length }}
+
+    - name: Remove Git credentials from the workspace
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      # actions/checkout persists the installation token in .git/config, and the
+      # provider then runs against this workspace with Read(**) while that token is
+      # still valid -- so prompt-influenced output could read and disclose it. Every
+      # remaining Git operation is local (diff, ls-tree, merge-base, show, grep), so the
+      # credential is dropped here rather than left for the provider to find.
+      run: |
+        set -euo pipefail
+
+        git -C "${GITHUB_WORKSPACE}" config --local --unset-all \
+          "http.https://github.com/.extraheader" || true
+
+        if git -C "${GITHUB_WORKSPACE}" config --local --get-regexp "^http\..*\.extraheader$" >/dev/null 2>&1; then
+          echo "An authorization header is still present in .git/config" >&2
+          exit 1
+        fi
+
+    - name: Compute PR diff
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
+      run: |
+        set -euo pipefail
+        git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
+
+    - name: Build external dependency delta
+      id: dependency_delta
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
+        DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
+        # Deliberately outside the workspace: this is the unbounded artifact, and the
+        # provider runs with Read(**) over the workspace. Left there, the agent could
+        # open it and bypass both the context budget and the generated-file exclusions.
+        DEPENDENCY_DELTA_FULL_PATH: ${{ runner.temp }}/dependency-deltas-full.diff
+        DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
+        DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
+      run: |
+        set -euo pipefail
+        ruby "${{ github.action_path }}/bin/dependency_delta.rb"
+
+    - name: Reset agent instructions to the merge base
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
+      run: ruby "${{ github.action_path }}/bin/trusted_agent_instructions.rb"
+
+    - name: Run test-plan provider
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        PROVIDER: ${{ inputs.provider }}
+        PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
+        MODEL: ${{ steps.profile.outputs.model }}
+        TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
+        TEST_PLAN_PROMPT_PATH: ${{ steps.profile.outputs.prompt_path }}
+      run: |
+        set -euo pipefail
+
+        provider="${PROVIDER:-cursor}"
+
+        # Interpolated into a path, so it has to be a bare name: ../ would otherwise
+        # escape providers/ and run some other reachable script with the provider
+        # credential in the environment.
+        if [[ ! "${provider}" =~ ^[a-z][a-z0-9-]*$ ]]; then
+          echo "Invalid provider name: ${provider}" >&2
+          exit 1
+        fi
+
+        provider_script="${{ github.action_path }}/providers/${provider}.sh"
+
+        if [[ ! -f "${provider_script}" ]]; then
+          echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
+          exit 1
+        fi
+
+        exec bash "${provider_script}"
+
+    - name: Upload test-plan artifacts
+      if: always() && steps.pr_metadata.outputs.generate == 'true'
+      # Archival must not be able to discard the plan. This runs before rendering so a
+      # provider failure still leaves its raw output behind, but a transient artifact
+      # service error would otherwise skip the render and the comment, throwing away a
+      # provider result that has already been paid for.
+      continue-on-error: true
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: ${{ steps.profile.outputs.artifact_name }}
+        path: |
+          ${{ github.workspace }}/test-plan-agent.json
+          ${{ github.workspace }}/dependency-delta-manifest.json
+          ${{ runner.temp }}/dependency-deltas-full.diff
+          ${{ github.workspace }}/dependency-deltas-context.diff
+          ${{ github.workspace }}/dependency-kit-usage.md
+        if-no-files-found: warn
+
+    - name: Render test-plan comment
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
+        TEST_PLAN_COMMENT_PATH: ${{ github.workspace }}/test-plan-comment.md
+        TEST_PLAN_PROFILE_NAME: ${{ steps.profile.outputs.display_name }}
+        TEST_PLAN_GENERATION_WARNING: ${{ steps.dependency_delta.outputs.generation_warning }}
+        PULL_REQUEST_TITLE: ${{ steps.pr_metadata.outputs.title }}
+      run: ruby "${{ github.action_path }}/bin/render_test_plan.rb"
+
+    - name: Upsert test-plan comment
+      id: test_plan_comment
+      if: steps.pr_metadata.outputs.generate == 'true'
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ github.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: ${{ steps.profile.outputs.comment_tag }}
+        mode: upsert
+        file-path: ${{ github.workspace }}/test-plan-comment.md
+
+    - name: Clear previous failure comment
+      # Both terminal paths -- a published plan and a blocked message -- supersede any
+      # failure comment left by an earlier run. A failed run never reaches this step,
+      # so its failure comment survives.
+      if: steps.pr_metadata.outputs.blocked == 'true' || steps.pr_metadata.outputs.generate == 'true'
+      continue-on-error: true
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ github.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: ${{ steps.profile.outputs.failure_comment_tag }}
+        mode: delete
+        create-if-not-exists: false
+
+    - name: Post failure comment
+      if: failure() && steps.profile.outcome == 'success' && steps.pr_metadata.outputs.blocked != 'true' && steps.test_plan_comment.outcome != 'success'
+      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      with:
+        github-token: ${{ github.token }}
+        pr-number: ${{ inputs.pull-request-number }}
+        comment-tag: ${{ steps.profile.outputs.failure_comment_tag }}
+        mode: upsert
+        message: |
+          :x: **${{ steps.profile.outputs.display_name }}** — failed
+
+          The last successful test plan, if one exists, has been preserved.
+
+          [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](https://nitro.powerhrg.com/connect/#rooms/138).

@@ -3,5 +3,6 @@ site_description: Github workflows for packing, building, and plubishing.
 repo_url: https://github.com/powerhome/github-actions-workflows
 nav:
   - 'Home': 'README.md'
+  - 'Test Plans': 'test-plans.md'
 plugins:
   - techdocs-core
