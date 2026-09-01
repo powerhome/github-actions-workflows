@@ -28,7 +28,7 @@ module TestPlan
       DEFAULT_CONTEXT_SHARE = 1
 
       def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new,
-                     kit_usage: PlaybookKitUsage.disabled, problems: [])
+                     kit_usage: PlaybookKitUsage.disabled, problems: [], out_of_scope: [])
         # Blast radius before name. Every dependency here is usually direct and from a
         # registry, which left the alphabet deciding who got context first -- so a gem in
         # one component was funded ahead of one in a hundred of them.
@@ -44,6 +44,7 @@ module TestPlan
         @changelog = changelog
         @kit_usage = kit_usage
         @problems = problems
+        @out_of_scope = out_of_scope
         @related = build_related(@changes)
       end
 
@@ -130,6 +131,10 @@ module TestPlan
             "version" => 1,
             "dependencies" => entries,
             "lockfile_warnings" => lockfile_warnings,
+            # Recorded rather than silently dropped. These reached no root lockfile, so
+            # nothing deployed resolves them -- but a reader looking for a raise they know
+            # landed needs to find it here rather than conclude it was missed.
+            "out_of_scope" => @out_of_scope.map { |change| out_of_scope_entry(change) },
             # Counts anything that cost evidence, which is not the same as anything
             # that produced a warning: build output kept out of a linked release, and
             # an artifact that ran out of room while the provider context did not, are
@@ -160,6 +165,17 @@ module TestPlan
           entry["degraded"] = true
           changelog
         end
+      end
+
+      # Compact: these have no delta, and the manifest is echoed into the run log.
+      def out_of_scope_entry(change)
+        {
+          "ecosystem" => change.ecosystem,
+          "name" => change.name,
+          "old_version" => change.old_version,
+          "new_version" => change.new_version,
+          "lockfiles" => change.lockfiles.sort,
+        }
       end
 
       def incomplete?(entry)

@@ -188,6 +188,22 @@ RSpec.describe TestPlan::DependencyDelta::Command do
       .to eq(["::group::Dependency delta manifest (/tmp/manifest.json)", "::endgroup::"])
   end
 
+  it "names the skipped dependencies in the job summary" do
+    summary = summary_for(
+      "dependencies" => [],
+      "lockfile_warnings" => [],
+      "out_of_scope" => [
+        {
+          "ecosystem" => "bundler", "name" => "minitest", "old_version" => "5.25.5",
+          "new_version" => "6.0.6", "lockfiles" => ["components/pigment/Gemfile.lock"],
+        },
+      ]
+    )
+
+    expect(summary).to include("1 raised dependency reached no root lockfile")
+    expect(summary).to include("minitest: 5.25.5 -> 6.0.6")
+  end
+
   it "leaves ordinary dependency data readable" do
     summary = summary_for(
       "dependencies" => [

@@ -28,13 +28,14 @@ module TestPlan
           base_sha: ENV.fetch("BASE_SHA"),
           head_sha: ENV.fetch("HEAD_SHA")
         )
-        detector = ChangeDetector.new(snapshot)
+        detector = ChangeDetector.new(snapshot, scope: ENV.fetch("DEPENDENCY_SCOPE", "umbrella"))
         changes = detector.detect
         kit_usage = PlaybookKitUsage.new(workspace: workspace)
         result = Generator.new(
           changes: changes,
           kit_usage: kit_usage,
-          problems: detector.problems
+          problems: detector.problems,
+          out_of_scope: detector.out_of_scope
         ).generate
 
         manifest_path = ENV.fetch("DEPENDENCY_DELTA_MANIFEST_PATH")
@@ -176,6 +177,20 @@ module TestPlan
           lockfile_warnings.each do |warning|
             summary.puts("- #{escape(warning.fetch("lockfile"))}: not analyzed")
             summary.puts("  - #{escape(warning.fetch("warning"))}")
+          end
+
+          out_of_scope = manifest.fetch("out_of_scope", [])
+          next if out_of_scope.empty?
+
+          summary.puts(
+            "- #{out_of_scope.length} raised #{out_of_scope.length == 1 ? "dependency" : "dependencies"} " \
+              "reached no root lockfile and were not analyzed"
+          )
+          out_of_scope.each do |entry|
+            summary.puts(
+              "  - #{escape(entry.fetch("name"))}: #{escape(entry.fetch("old_version"))} -> " \
+                "#{escape(entry.fetch("new_version"))}"
+            )
           end
         end
       end

@@ -22,11 +22,28 @@ module TestPlan
       ADD_DEPENDENCY =
         /^[ \t]*(?:[A-Za-z_]\w*\.)?add_(?:runtime_)?dependency\s*\(?\s*["']([^"'\n]+)["']/
 
-      attr_reader :problems
+      # Only the umbrella application is deployed. A component's own lockfile resolves
+      # that component's test suite, so a raise reaching nothing but component lockfiles
+      # changes nothing a tester can open -- on nitro-web that was 17 of 19 dependencies,
+      # 15 of them one unmounted component's test gems, competing for the context budget
+      # against the Playbook raise the plan was about.
+      #
+      # A repository with a single lockfile is unaffected, because its lockfile is the
+      # root one. A monorepo that does mount its components wants "all".
+      UMBRELLA_LOCKFILES = %w[Gemfile.lock yarn.lock].freeze
+      SCOPES = %w[umbrella all].freeze
 
-      def initialize(snapshot)
+      attr_reader :problems, :out_of_scope
+
+      def initialize(snapshot, scope: "umbrella")
+        unless SCOPES.include?(scope.to_s)
+          raise "Unknown dependency scope: #{scope.inspect} (expected #{SCOPES.join(" or ")})"
+        end
+
         @snapshot = snapshot
+        @scope = scope.to_s
         @problems = []
+        @out_of_scope = []
       end
 
       def detect
@@ -62,10 +79,23 @@ module TestPlan
           )
         end
 
-        deduplicate(changes)
+        scoped(deduplicate(changes))
       end
 
     private
+
+      # Deduplication has to have run first: a raise recorded in both a root lockfile and
+      # a component's is one change, and partitioning before the merge would have judged
+      # the component copy on its own and dropped it.
+      def scoped(changes)
+        return changes if @scope == "all"
+
+        in_scope, out = changes.partition do |change|
+          change.lockfiles.any? { |path| UMBRELLA_LOCKFILES.include?(path) }
+        end
+        @out_of_scope = out
+        in_scope
+      end
 
       # An unreadable lockfile costs us evidence for that file only. Recording it as a
       # warning keeps the rest of the delta, and the test plan itself, intact.

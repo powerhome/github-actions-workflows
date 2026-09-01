@@ -25,6 +25,14 @@ inputs:
     description: Passed to rmacklin/fetch-through-merge-base as deepen_length
     required: false
     default: "30"
+  dependency-scope:
+    description: >-
+      Which lockfiles a dependency raise has to reach to be analyzed. "umbrella" (the
+      default) counts only the root Gemfile.lock and yarn.lock, so a raise confined to an
+      unmounted component's lockfile is recorded and skipped. "all" analyzes every
+      lockfile, which a monorepo that mounts its components wants.
+    required: false
+    default: umbrella
 
 runs:
   using: composite
@@ -204,6 +212,7 @@ runs:
         DEPENDENCY_DELTA_FULL_PATH: ${{ runner.temp }}/dependency-deltas-full.diff
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
         DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
+        DEPENDENCY_SCOPE: ${{ inputs.dependency-scope }}
       run: |
         set -euo pipefail
         ruby "${{ github.action_path }}/bin/dependency_delta.rb"

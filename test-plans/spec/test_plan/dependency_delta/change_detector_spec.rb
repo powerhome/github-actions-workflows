@@ -28,6 +28,71 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
   end
 
+  def gem_lock(version)
+    <<~LOCK
+      GEM
+        remote: https://rubygems.org/
+        specs:
+          shared_gem (#{version})
+
+      DEPENDENCIES
+        shared_gem
+    LOCK
+  end
+
+  def scoped_snapshot(paths)
+    snapshot = FakeSnapshot.new(
+      "merge_base" => paths.to_h { |path| [path, gem_lock("1.0.0")] },
+      "head" => paths.to_h { |path| [path, gem_lock("2.0.0")] }
+    )
+    allow(snapshot).to receive(:changed_dependency_files).and_return(paths)
+    snapshot
+  end
+
+  describe "dependency scope" do
+    # Only the umbrella application is deployed, so a raise confined to an unmounted
+    # component's lockfile changes nothing a tester can open.
+    it "skips a raise that reached no root lockfile" do
+      detector = described_class.new(scoped_snapshot(["components/pigment/Gemfile.lock"]))
+
+      expect(detector.detect).to be_empty
+      expect(detector.out_of_scope.map(&:name)).to eq(["shared_gem"])
+    end
+
+    it "keeps a raise in a root lockfile" do
+      detector = described_class.new(scoped_snapshot(["Gemfile.lock"]))
+
+      expect(detector.detect.map(&:name)).to eq(["shared_gem"])
+      expect(detector.out_of_scope).to be_empty
+    end
+
+    # Deduplication runs first, so the root copy carries the component ones with it.
+    it "keeps a raise recorded in both a root and a component lockfile" do
+      detector = described_class.new(
+        scoped_snapshot(["Gemfile.lock", "components/pigment/Gemfile.lock"])
+      )
+      changes = detector.detect
+
+      expect(changes.map(&:name)).to eq(["shared_gem"])
+      expect(changes.first.lockfiles).to include("components/pigment/Gemfile.lock")
+      expect(detector.out_of_scope).to be_empty
+    end
+
+    it "analyzes every lockfile when told to" do
+      detector = described_class.new(
+        scoped_snapshot(["components/pigment/Gemfile.lock"]), scope: "all"
+      )
+
+      expect(detector.detect.map(&:name)).to eq(["shared_gem"])
+      expect(detector.out_of_scope).to be_empty
+    end
+
+    it "refuses a scope it does not know" do
+      expect { described_class.new(scoped_snapshot(["Gemfile.lock"]), scope: "components") }
+        .to raise_error(/Unknown dependency scope/)
+    end
+  end
+
   it "excludes Yarn workspaces and file/link dependencies" do
     old_lock = <<~LOCK
       external@^1.0.0:
@@ -88,7 +153,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       ["one/Gemfile.lock", "two/Gemfile.lock"]
     )
 
-    changes = described_class.new(snapshot).detect
+    changes = described_class.new(snapshot, scope: "all").detect
     expect(changes.length).to eq(1)
     expect(changes.first.lockfiles).to contain_exactly("one/Gemfile.lock", "two/Gemfile.lock")
   end
@@ -149,7 +214,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       ["one/Gemfile.lock", "two/Gemfile.lock"]
     )
 
-    changes = described_class.new(snapshot).detect
+    changes = described_class.new(snapshot, scope: "all").detect
 
     expect(changes.length).to eq(1)
     expect(changes.first.lockfiles).to contain_exactly("one/Gemfile.lock", "two/Gemfile.lock")
@@ -259,7 +324,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       ["broken/Gemfile.lock", "good/Gemfile.lock"]
     )
 
-    detector = described_class.new(snapshot)
+    detector = described_class.new(snapshot, scope: "all")
     changes = detector.detect
 
     expect(changes.map(&:name)).to eq(["good_gem"])
@@ -290,7 +355,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
         "head" => { "Gemfile.lock" => lock.call("2.0.0") }.merge(manifests)
       )
       allow(snapshot).to receive(:changed_dependency_files).and_return(["Gemfile.lock"])
-      described_class.new(snapshot).detect
+      described_class.new(snapshot, scope: "all").detect
     end
 
     it "ignores an entry that was commented out rather than deleted" do

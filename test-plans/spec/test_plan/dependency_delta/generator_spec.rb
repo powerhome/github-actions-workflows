@@ -424,6 +424,30 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
   end
 
+  # Skipped deliberately, so it is recorded rather than looking like a raise the run
+  # missed -- but it cost no evidence, so it raises no warning.
+  it "records the dependencies it skipped without counting them as warnings" do
+    skipped = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "minitest", old_version: "5.25.5", new_version: "6.0.6",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: false,
+      lockfiles: ["components/pigment/Gemfile.lock"]
+    )
+    retriever = double("retriever", retrieve: [])
+
+    result = generator(changes: [change], retriever: retriever, out_of_scope: [skipped]).generate
+
+    expect(result.dig(:manifest, "out_of_scope")).to eq(
+      [
+        {
+          "ecosystem" => "bundler", "name" => "minitest", "old_version" => "5.25.5",
+          "new_version" => "6.0.6", "lockfiles" => ["components/pigment/Gemfile.lock"],
+        },
+      ]
+    )
+    expect(result.dig(:manifest, "warning_count")).to eq(0)
+  end
+
   it "gives Playbook a larger slice of the context than an equal split would" do
     playbook = TestPlan::DependencyDelta::Change.new(
       ecosystem: "bundler", name: "playbook_ui", old_version: "17.1.0",
