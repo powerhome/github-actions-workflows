@@ -20,9 +20,11 @@ module TestPlan
     class PlaybookKitUsage
       PACKAGE_NAMES = %w[playbook_ui playbook-ui].freeze
       KIT_PATH = %r{(?:\A|/)app/pb_kits/playbook/pb_([a-z0-9_]+)/}
-      # Past this a list stops being a set of pages to visit and becomes noise; the count
-      # still tells the model the kit is everywhere.
-      MAX_LISTED_FILES = 25
+      # A kit used this few times can be covered exhaustively, and the plan says so. Past
+      # it the plan tests a sample and says that instead, so SAMPLE_SIZE has to leave
+      # enough call sites to choose a few representative ones from.
+      COMPLETE_COVERAGE_MAX = 4
+      SAMPLE_SIZE = 8
       SEARCHED_EXTENSIONS = %w[*.erb *.rb *.haml *.tsx *.jsx *.ts *.js].freeze
       SEARCH_FAILED = "The search for this kit could not be run, so this section says " \
         "nothing about whether the kit is used here. Treat it as possibly used and see " \
@@ -35,6 +37,7 @@ module TestPlan
       def initialize(workspace:)
         @workspace = workspace
         @kits = {}
+        @cross_cutting = []
         @failures = []
       end
 
@@ -45,10 +48,19 @@ module TestPlan
 
         diffs.each do |diff|
           kit = diff.path[KIT_PATH, 1]
-          next unless kit
+          # A release changes more than kits -- tokens, global props, the pb_rails helper
+          # layer -- and those apply to every page rather than one. Kept rather than
+          # skipped, because nothing else in the plan can see them.
+          next @cross_cutting << diff.path unless kit
 
           (@kits[kit] ||= []) << "#{change.ecosystem}:#{change.name}"
         end
+      end
+
+      # Changed paths that belong to no kit, build output excluded: it is compiled from
+      # the source already listed and says nothing a tester can act on.
+      def cross_cutting_paths
+        @cross_cutting.reject { |path| path.match?(%r{(?:\A|/)dist/}) }.uniq.sort
       end
 
       # Empty unless the run raised Playbook, which is what shapes the plan by kit.
@@ -67,11 +79,31 @@ module TestPlan
           lists where this repository uses that kit, so coverage can start from the pages
           a tester can actually open. Paths are repository-relative.
 
-          A kit used in more than #{MAX_LISTED_FILES} files is reported as a count only. Those are
-          shared building blocks; cover a representative page rather than every one.
+          A kit used in #{COMPLETE_COVERAGE_MAX} files or fewer can be covered exhaustively, and its section
+          says so. A kit used more widely lists a sample of up to #{SAMPLE_SIZE} call sites alongside
+          its true total; choose a few representative pages from the sample and say that
+          is what they are.
 
           #{sections.join("\n")}
+          #{cross_cutting_section}
         REPORT
+      end
+
+      # Named so the plan has somewhere to put a change that belongs to no kit rather than
+      # attaching it to one it did not come from.
+      def cross_cutting_section
+        paths = cross_cutting_paths
+        return "" if paths.empty?
+
+        <<~SECTION
+          ## Changes not scoped to a kit
+
+          #{paths.length} changed #{paths.length == 1 ? "file" : "files"} belong to no kit. These apply across the
+          application rather than to one page, so cover them separately from the kits.
+
+          #{paths.first(SAMPLE_SIZE).map { |path| "- #{path}" }.join("\n")}
+          #{paths.length > SAMPLE_SIZE ? "- ...and #{paths.length - SAMPLE_SIZE} more\n" : ""}
+        SECTION
       end
 
     private
@@ -81,11 +113,18 @@ module TestPlan
         return "#{titled(kit)} — search failed\n\n#{SEARCH_FAILED}\n" if files.nil?
 
         heading = "#{titled(kit)} — #{files.length} #{files.length == 1 ? "file" : "files"}"
-
-        return "#{heading}\n\nUsed too widely to list. Cover a representative page.\n" if files.length > MAX_LISTED_FILES
         return "#{heading}\n\nNo usage found in this repository.\n" if files.empty?
 
-        "#{heading}\n\n#{files.map { |file| "- #{file}" }.join("\n")}\n"
+        listed = files.first(SAMPLE_SIZE)
+        coverage =
+          if files.length <= COMPLETE_COVERAGE_MAX
+            "Every use in this repository is listed. Cover all of them."
+          else
+            "Used in #{files.length} files. #{listed.length} of them are listed as a sample; " \
+              "cover a few and say they are representative."
+          end
+
+        "#{heading}\n\n#{coverage}\n\n#{listed.map { |file| "- #{file}" }.join("\n")}\n"
       end
 
       # These are POSIX ERE for git grep, not Ruby regexps: \s and (?:...) are silently

@@ -10,7 +10,8 @@ begin
   )
 
   File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|
-    selection.each { |key, value| output.puts("#{key}=#{value}") }
+    output.puts("name=#{selection.fetch("name")}")
+    output.puts("prompt_path=#{selection.fetch("prompt_path")}")
   end
 
   puts "[test_plan] variant: #{selection.fetch("name").empty? ? "default" : selection.fetch("name")}"

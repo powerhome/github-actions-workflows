@@ -294,6 +294,7 @@ runs:
         TEST_PLAN_COMMENT_PATH: ${{ github.workspace }}/test-plan-comment.md
         TEST_PLAN_PROFILE_NAME: ${{ steps.profile.outputs.display_name }}
         TEST_PLAN_GENERATION_WARNING: ${{ steps.dependency_delta.outputs.generation_warning }}
+        TEST_PLAN_VARIANT: ${{ steps.variant.outputs.name }}
         PULL_REQUEST_TITLE: ${{ steps.pr_metadata.outputs.title }}
       run: ruby "${{ github.action_path }}/bin/render_test_plan.rb"
 

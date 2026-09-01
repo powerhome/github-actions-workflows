@@ -81,7 +81,7 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     end
   end
 
-  it "takes the kit list from the changed paths, ignoring non-kit files" do
+  it "takes the kit list from the changed paths, and keeps the rest as cross-cutting" do
     workspace(app) do |root|
       usage = described_class.new(workspace: root)
       usage.observe(playbook_change, [
@@ -90,13 +90,27 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
         diff("dist/playbook.css"),
       ])
 
-      expect(usage.report.scan(/^## /).length).to eq(1)
+      expect(usage.kits).to eq(["multi_level_select"])
+      # Build output is compiled from source already listed, so it is not a change a
+      # tester can act on.
+      expect(usage.cross_cutting_paths).to eq(["lib/playbook/version.rb"])
+      expect(usage.report).to include("## Changes not scoped to a kit", "lib/playbook/version.rb")
     end
   end
 
-  it "reports a widely used kit as a count rather than a list" do
+  it "says nothing about cross-cutting changes when every changed file is a kit" do
+    workspace(app) do |root|
+      usage = described_class.new(workspace: root)
+      usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_multi_level_select/_x.tsx")])
+
+      expect(usage.cross_cutting_paths).to be_empty
+      expect(usage.report).not_to include("Changes not scoped to a kit")
+    end
+  end
+
+  it "samples a widely used kit and says the sample is one" do
     files = (1..30).to_h do |n|
-      ["components/wide/app/views/page_#{n}.html.erb", %(<%= pb_rails("card") %>\n)]
+      ["components/wide/app/views/page_#{format("%02d", n)}.html.erb", %(<%= pb_rails("card") %>\n)]
     end
 
     workspace(files) do |root|
@@ -104,8 +118,25 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
 
       report = usage.report
-      expect(report).to include("Card (`card`) — 30 files", "Used too widely to list")
-      expect(report).not_to include("page_1.html.erb")
+      expect(report).to include("Card (`card`) — 30 files", "Used in 30 files")
+      expect(report).to include("cover a few and say they are representative")
+      # A sample, so the model has call sites to choose from without being handed all 30.
+      expect(report.scan(/^- components\/wide/).length).to eq(described_class::SAMPLE_SIZE)
+    end
+  end
+
+  it "lists every call site of a narrowly used kit and says it is exhaustive" do
+    files = (1..3).to_h do |n|
+      ["components/narrow/app/views/page_#{n}.html.erb", %(<%= pb_rails("card") %>\n)]
+    end
+
+    workspace(files) do |root|
+      usage = described_class.new(workspace: root)
+      usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+
+      report = usage.report
+      expect(report).to include("Card (`card`) — 3 files", "Every use in this repository is listed")
+      expect(report.scan(/^- components\/narrow/).length).to eq(3)
     end
   end
 

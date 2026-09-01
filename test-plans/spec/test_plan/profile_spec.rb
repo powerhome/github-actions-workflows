@@ -81,11 +81,29 @@ RSpec.describe TestPlan::Profile do
     end
   end
 
-  it "has no Playbook prompt unless the profile declares one" do
+  it "resolves the Playbook prompt the shipped profiles declare" do
     profile = TestPlan::Profile.load(action_root: ACTION_ROOT, profile_id: "cobra-test-plan")
 
-    expect(profile.playbook_prompt_path).to eq("")
+    expect(profile.playbook_prompt_path).to end_with("prompts/cobra_playbook_test_plan.md")
     expect(profile.to_h).to have_key("playbook_prompt_path")
+  end
+
+  it "has no Playbook prompt when a profile declares none" do
+    Dir.mktmpdir do |directory|
+      Dir.mkdir(File.join(directory, "prompts"))
+      Dir.mkdir(File.join(directory, "profiles"))
+      File.write(File.join(directory, "prompts", "plan.md"), "prompt")
+      File.write(
+        File.join(directory, "profiles", "sample.json"),
+        JSON.generate(
+          "id" => "sample", "display_name" => "Sample", "prompt" => "prompts/plan.md",
+          "model" => "", "comment_tag" => "sample", "status_comment_tag" => "sample-status",
+          "failure_comment_tag" => "sample-failure", "artifact_name" => "sample-artifacts"
+        )
+      )
+
+      expect(TestPlan::Profile.load(action_root: directory, profile_id: "sample").playbook_prompt_path).to eq("")
+    end
   end
 
   it "resolves a declared Playbook prompt" do
