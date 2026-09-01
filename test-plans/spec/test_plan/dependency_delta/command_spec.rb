@@ -65,6 +65,34 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     )
   end
 
+  it "trims a long lockfile list in the log without touching the manifest" do
+    lockfiles = Array.new(142) { |index| "components/component#{index}/Gemfile.lock" }
+    manifest = {
+      "dependencies" => [
+        { "name" => "playbook_ui", "lockfiles" => lockfiles, "warnings" => ["budget exhausted"] },
+      ],
+    }
+
+    logged = capture_stdout { described_class.new.send(:log_manifest, "/tmp/manifest.json", manifest) }
+
+    expect(logged).to include("components/component0/Gemfile.lock")
+    expect(logged).to include("...and 137 more (see the manifest artifact)")
+    expect(logged).not_to include("components/component100/Gemfile.lock")
+    # The warning is the reason to read this group at all, so it has to survive.
+    expect(logged).to include("budget exhausted")
+    # The manifest written to disk and uploaded keeps every lockfile.
+    expect(manifest.dig("dependencies", 0, "lockfiles").length).to eq(142)
+  end
+
+  it "leaves a short lockfile list alone" do
+    manifest = { "dependencies" => [{ "name" => "nokogiri", "lockfiles" => ["Gemfile.lock"] }] }
+
+    logged = capture_stdout { described_class.new.send(:log_manifest, "/tmp/manifest.json", manifest) }
+
+    expect(logged).to include("Gemfile.lock")
+    expect(logged).not_to include("more (see the manifest artifact)")
+  end
+
   # A workflow command is only recognised at the start of a line, so JSON's own newline
   # escaping is the guard.
   it "cannot be made to emit a workflow command from lockfile-derived text" do

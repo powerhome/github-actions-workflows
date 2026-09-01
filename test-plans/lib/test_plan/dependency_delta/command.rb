@@ -53,8 +53,27 @@ module TestPlan
       # value can open one.
       def log_manifest(path, manifest)
         puts("::group::Dependency delta manifest (#{path})")
-        puts(JSON.pretty_generate(manifest))
+        puts(JSON.pretty_generate(loggable(manifest)))
         puts("::endgroup::")
+      end
+
+      # playbook_ui is a dependency of every component, which is about 140 Gemfile.locks
+      # in nitro-web -- printed in full they bury the warnings this group exists to show.
+      # The file and the artifact keep the whole list; only the log is trimmed.
+      LOGGED_LOCKFILES = 5
+
+      def loggable(manifest)
+        dependencies = manifest.fetch("dependencies").map do |entry|
+          lockfiles = entry.fetch("lockfiles", [])
+          next entry if lockfiles.length <= LOGGED_LOCKFILES
+
+          entry.merge(
+            "lockfiles" => lockfiles.first(LOGGED_LOCKFILES) +
+              ["...and #{lockfiles.length - LOGGED_LOCKFILES} more (see the manifest artifact)"]
+          )
+        end
+
+        manifest.merge("dependencies" => dependencies)
       end
 
       def write_outputs(change_count, warning_count)

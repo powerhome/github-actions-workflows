@@ -51,7 +51,7 @@ Where a gem and an npm package are linked as one upstream release, the build out
 
 A binary file has no readable diff, so a change to one is recorded as a one-line marker rather than dropped — an icon, image, or font changing is user-visible even when its contents are not. Truncation happens only at file-diff boundaries, and the manifest names every file it dropped in `omitted_from_context`, `excluded_generated`, and `omitted_from_artifact`. An oversized changelog is capped for the provider only; the artifact keeps the whole diff.
 
-A dependency is counted as a warning when the run lost evidence for it — it could not be retrieved, its provider context was truncated, or its source was refused and only the changelog survived. Build output deliberately kept out of a linked release, and an artifact that ran out of room while the provider context did not, are expected and are not counted.
+A dependency is counted as a warning when the run lost evidence for it — it could not be retrieved, its provider context lost a changelog or source diff, or its source was refused and only the changelog survived. Build output deliberately kept out of a linked release, an artifact that ran out of room while the provider context did not, and a context budget that ran out after the changelog and source were in — dropping only tests and documentation off the tail — are expected and are not counted.
 
 Artifacts include:
 
@@ -67,7 +67,7 @@ A Playbook version bump often changes no application code at all — every file 
 
 The result is `dependency-kit-usage.md`, listing the files that use each changed kit. A kit used in more than 25 files is reported as a count instead, since a list that long stops naming pages to visit. A single upgrade typically identifies a couple of dozen changed kits, a handful of them narrow enough to enumerate.
 
-Unreadable lockfiles, missing private sources, failed downloads, and truncation do not fail the plan. A lockfile the action cannot parse is skipped and reported; the remaining lockfiles are still analyzed. Every such case produces a warning in the PR comment, workflow annotation, job summary, and dependency manifest. The manifest is also echoed into the build step's log under a collapsed `Dependency delta manifest` group, so the reason a warning was raised is readable without downloading the artifact from an ephemeral runner.
+Unreadable lockfiles, missing private sources, failed downloads, and truncation do not fail the plan. A lockfile the action cannot parse is skipped and reported; the remaining lockfiles are still analyzed. Every case that cost evidence produces a warning in the PR comment, workflow annotation, job summary, and dependency manifest; every omission is named in the manifest whether or not it counted. The manifest is also echoed into the build step's log under a collapsed `Dependency delta manifest` group, so the reason a warning was raised is readable without downloading the artifact from an ephemeral runner.
 
 ### Private Sources
 

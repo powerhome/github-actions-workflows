@@ -60,8 +60,7 @@ module TestPlan
               remaining_context -= dependency_context.bytesize
 
               if omitted_from_context.any?
-                entry["warnings"] << "Provider context budget of #{kib(budget)} was exhausted; " \
-                  "#{omitted_from_context.length} file diffs were omitted."
+                entry["warnings"] << budget_warning(budget, omitted_from_context)
               end
             end
 
@@ -71,7 +70,10 @@ module TestPlan
                 "release. They remain in the full-delta artifact."
             end
 
-            entry["status"] = omitted_from_context.any? ? "truncated" : "retrieved"
+            # Only lost evidence truncates. A budget that ran out after the changelog and
+            # the source were in, dropping tests and docs off the tail, is the priority
+            # order working -- the warnings still name every omission either way.
+            entry["status"] = omitted_from_context.any?(&:evidence?) ? "truncated" : "retrieved"
 
             if omitted_from_artifact.any?
               entry["warnings"] << "The full-delta artifact reached its #{mib(FULL_LIMIT)} limit; " \
@@ -80,9 +82,9 @@ module TestPlan
             end
 
             entry["context_files"] = candidates.length - omitted_from_context.length
-            entry["omitted_from_context"] = omitted_from_context.sort
+            entry["omitted_from_context"] = omitted_from_context.map(&:path).sort
             entry["excluded_generated"] = excluded.map(&:path).sort
-            entry["omitted_from_artifact"] = omitted_from_artifact.sort
+            entry["omitted_from_artifact"] = omitted_from_artifact.map(&:path).sort
           rescue => e
             entry["status"] = "unavailable"
             entry["degraded"] = true
@@ -163,6 +165,16 @@ module TestPlan
         diffs.reject(&:generated?)
       end
 
+      def budget_warning(budget, omitted)
+        dropped = omitted.count(&:evidence?)
+        return "Provider context budget of #{kib(budget)} was exhausted; #{omitted.length} " \
+          "supporting diffs (tests, documentation, build output) were omitted. Every " \
+          "changelog and source diff was included." if dropped.zero?
+
+        "Provider context budget of #{kib(budget)} was exhausted; #{omitted.length} file " \
+          "diffs were omitted, #{dropped} of them changelog or source."
+      end
+
       def kib(bytes)
         "#{bytes / 1024} KiB"
       end
@@ -229,11 +241,12 @@ module TestPlan
 
       SEPARATOR = "\n".freeze
 
-      # Returns the paths that did not fit, so every omission can be named in the
-      # manifest. `text` selects what a diff contributes: the artifact records the whole
-      # thing, while the provider may be shown a capped form of it.
+      # Returns the diffs that did not fit -- the diffs rather than their paths, because
+      # the caller has to ask what was lost as well as name it. `text` selects what a diff
+      # contributes: the artifact records the whole thing, while the provider may be shown
+      # a capped form of it.
       def append_chunks(target, header, diffs, limit, text)
-        return diffs.map(&:path) if target.bytesize + header.bytesize > limit
+        return diffs if target.bytesize + header.bytesize > limit
 
         omitted = []
         target << header
@@ -242,7 +255,7 @@ module TestPlan
           # The separator counts against the limit too; without it the advertised cap
           # was exceeded by a byte for every diff included.
           if target.bytesize + body.bytesize + SEPARATOR.bytesize > limit
-            omitted << source_diff.path
+            omitted << source_diff
             next
           end
           target << body << SEPARATOR

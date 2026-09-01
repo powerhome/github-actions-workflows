@@ -297,6 +297,70 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(entry.fetch("warnings").join).to include("1 file diffs were omitted")
   end
 
+  # The Playbook case: the budget runs out after the changelog and the source are in, and
+  # what falls off the tail is docs and colocated tests. That is the priority order
+  # working, so it must not raise a warning on the pull request.
+  it "does not truncate a dependency that only lost tests and documentation" do
+    builder = TestPlan::DependencyDelta::SourceDiffBuilder
+    diffs = [
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "CHANGELOG.md", diff: "c" * 1024, priority: builder::PRIORITY_CHANGELOG
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "app/pb_kits/playbook/pb_dropdown/index.tsx", diff: "r" * 1024,
+        priority: builder::PRIORITY_RUNTIME
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "app/pb_kits/playbook/pb_dropdown/dropdown.test.jsx",
+        diff: "t" * (described_class::CONTEXT_TOTAL_LIMIT + 1), priority: builder::PRIORITY_TEST
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "app/pb_kits/playbook/pb_dropdown/docs/example.yml",
+        diff: "d" * (described_class::CONTEXT_TOTAL_LIMIT + 1), priority: builder::PRIORITY_DOC
+      ),
+    ]
+
+    result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
+    entry = result.dig(:manifest, "dependencies", 0)
+
+    expect(entry.fetch("status")).to eq("retrieved")
+    expect(result.dig(:manifest, "warning_count")).to eq(0)
+    # Still named, and still counted -- the omission is reported, it just is not degradation.
+    expect(entry.fetch("omitted_from_context")).to eq(
+      [
+        "app/pb_kits/playbook/pb_dropdown/docs/example.yml",
+        "app/pb_kits/playbook/pb_dropdown/dropdown.test.jsx",
+      ]
+    )
+    expect(entry.fetch("warnings").join).to include(
+      "2 supporting diffs (tests, documentation, build output) were omitted"
+    )
+  end
+
+  it "truncates when the budget cost it a source diff" do
+    builder = TestPlan::DependencyDelta::SourceDiffBuilder
+    diffs = [
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "CHANGELOG.md", diff: "c" * 1024, priority: builder::PRIORITY_CHANGELOG
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1),
+        priority: builder::PRIORITY_RUNTIME
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "spec/huge_spec.rb", diff: "s" * (described_class::CONTEXT_TOTAL_LIMIT + 1),
+        priority: builder::PRIORITY_TEST
+      ),
+    ]
+
+    result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
+    entry = result.dig(:manifest, "dependencies", 0)
+
+    expect(entry.fetch("status")).to eq("truncated")
+    expect(result.dig(:manifest, "warning_count")).to eq(1)
+    expect(entry.fetch("warnings").join).to include("2 file diffs were omitted, 1 of them changelog or source")
+  end
+
   it "gives a lone dependency the whole context budget" do
     # 400 KiB would have been cut to 100 KiB under a fixed per-dependency cap.
     diffs = Array.new(8) { |index| TestPlan::DependencyDelta::SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }

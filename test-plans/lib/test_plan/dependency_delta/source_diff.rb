@@ -21,6 +21,15 @@ module TestPlan
       def generated?
         priority == SourceDiffBuilder::PRIORITY_GENERATED
       end
+
+      # Whether dropping this costs the plan evidence. Tests, documentation and build
+      # output support the changelog and the source rather than stand in for them, so
+      # losing them to a budget is not the same as losing the change itself. An
+      # unclassified diff counts as evidence: a wrong guess should not quietly downgrade
+      # a warning.
+      def evidence?
+        (priority || SourceDiffBuilder::PRIORITY_RUNTIME) <= SourceDiffBuilder::PRIORITY_RUNTIME
+      end
     end
   end
 end
