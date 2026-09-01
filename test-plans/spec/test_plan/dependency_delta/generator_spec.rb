@@ -234,6 +234,32 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(result.fetch(:context)).to include("Same upstream release as yarn:playbook-ui.")
   end
 
+  # Each half spells the same prerelease in its own ecosystem's convention.
+  it "links a release-candidate bump whose halves spell the prerelease differently" do
+    gem_change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "playbook_ui", old_version: "17.1.0",
+      new_version: "17.2.0.pre.rc.0",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+    npm_change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "yarn", name: "playbook-ui", old_version: "17.1.0",
+      new_version: "17.2.0-rc.0",
+      source: "npm", old_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-17.1.0.tgz",
+      new_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-17.2.0-rc.0.tgz",
+      direct: true, lockfiles: ["yarn.lock"]
+    )
+    retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+
+    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
+      index[entry.fetch("name")] = entry
+    end
+
+    expect(entries.fetch("playbook_ui").fetch("related")).to eq(["yarn:playbook-ui"])
+    expect(entries.fetch("playbook-ui").fetch("related")).to eq(["bundler:playbook_ui"])
+  end
+
   it "does not link packages whose versions moved differently" do
     gem_change = TestPlan::DependencyDelta::Change.new(
       ecosystem: "bundler", name: "widget", old_version: "1.0.0", new_version: "2.0.0",

@@ -1,0 +1,31 @@
+name: agentic-pr-review
+
+on:
+  push:
+    paths:
+      - 'agentic-pr-review/**'
+      - '.github/workflows/agentic-pr-review-test.yml'
+
+jobs:
+  specs:
+    runs-on: ubuntu-latest
+    name: Ruby specs
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Run agentic-pr-review specs
+        shell: bash
+        env:
+          # The specs install rspec through bundler/inline, which writes to Gem.dir.
+          # On the runner that is the root-owned system gem home, so point it at a
+          # writable path instead. GEM_PATH is left unset so preinstalled system gems
+          # stay visible.
+          GEM_HOME: ${{ runner.temp }}/agentic-pr-review-gems
+        # No setup-ruby: the action itself runs on the runner's preinstalled Ruby,
+        # so the specs should exercise that same interpreter.
+        run: |
+          set -euo pipefail
+
+          ruby --version
+          export PATH="${GEM_HOME}/bin:${PATH}"
+
+          ruby agentic-pr-review/spec/run_all.rb

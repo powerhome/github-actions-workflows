@@ -1,16 +1,9 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
-
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
+require_relative "spec_helper"
 
 require "json"
-require "rspec/autorun"
 require "tempfile"
 
-require_relative "agent_review_parser"
+require "agent_review_parser"
 
 RSpec.describe AgentReviewParser do
   describe "#summary_body" do

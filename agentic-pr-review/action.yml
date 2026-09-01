@@ -36,22 +36,23 @@ runs:
   steps:
     - name: Create GitHub App token
       id: app_token
-      uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
         app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
 
     - name: Post in-progress status comment
-      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
-      with:
-        github-token: ${{ steps.app_token.outputs.token }}
-        pr-number: ${{ inputs.pull-request-number }}
-        comment-tag: agentic-pr-review-status
-        mode: delete-on-completion
-        message: |
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        COMMENT_MODE: upsert
+        COMMENT_TAG: agentic-pr-review-status
+        COMMENT_BODY: |
           :hourglass_flowing_sand: **Agentic PR Review** — in progress
 
           [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
+      run: ruby "${{ github.action_path }}/scripts/post_comment.rb"
 
     - name: Fetch PR metadata
       id: pr_gate
@@ -125,7 +126,7 @@ runs:
         exec bash "${provider_script}"
 
     - name: Upload agent review JSON
-      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: agentic-pr-review-json
         path: ${{ github.workspace }}/review-agent.json
@@ -140,13 +141,31 @@ runs:
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
       run: ruby "${{ github.action_path }}/scripts/post_review.rb"
 
+    # create, not upsert: this comment carries no tag, so a second failure adds a second
+    # comment. That is what the action this replaced did without one.
     - name: Post failure comment
       if: failure()
-      uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
-      with:
-        github-token: ${{ steps.app_token.outputs.token }}
-        pr-number: ${{ inputs.pull-request-number }}
-        message: |
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        COMMENT_MODE: create
+        COMMENT_BODY: |
           :x: **Agentic PR Review** — failed
 
           [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](https://nitro.powerhrg.com/connect/#rooms/138).
+      run: ruby "${{ github.action_path }}/scripts/post_comment.rb"
+
+    # thollander's delete-on-completion ran in a post step, which a composite action does
+    # not have. always() covers a failed or cancelled job, but a runner that dies outright
+    # now leaves this comment behind.
+    - name: Clear in-progress status comment
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        COMMENT_MODE: delete
+        COMMENT_TAG: agentic-pr-review-status
+      run: ruby "${{ github.action_path }}/scripts/post_comment.rb"

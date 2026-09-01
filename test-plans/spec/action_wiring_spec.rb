@@ -57,6 +57,15 @@ module ActionWiring
     seen
   end
 
+  # Required and optional reads are told apart the way the scripts spell them:
+  # ENV.fetch("X") raises when a step forgot it, ENV.fetch("X", default) and ENV["X"]
+  # tolerate it. Only the required ones are a promise every step has to keep.
+  def ruby_required_env_reads(entry)
+    sources(entry).flat_map do |source|
+      read(source).scan(/ENV\.fetch\("([A-Z_]+)"\)/).flatten
+    end.uniq
+  end
+
   def ruby_env_reads(entry)
     sources(entry).flat_map do |source|
       read(source).scan(/ENV\.fetch\("([A-Z_]+)"|ENV\["([A-Z_]+)"\]/).flatten.compact
@@ -79,6 +88,11 @@ module ActionWiring
 
   def step_running(script)
     steps.find { |step| step.fetch("run", "").include?(script) }
+  end
+
+  # One script can back several steps, each providing its own environment.
+  def steps_running(script)
+    steps.select { |step| step.fetch("run", "").include?(script) }
   end
 
   def profile_output_keys
@@ -123,12 +137,18 @@ end
 RSpec.describe "action.yml wiring" do
   describe "environment" do
     ActionWiring.entry_points.each do |entry|
-      it "#{entry} only reads variables its step provides" do
-        step = ActionWiring.step_running(entry)
-        expect(step).not_to(be_nil, -> { "no action.yml step runs #{entry}" })
+      it "#{entry} is given every variable it requires by every step that runs it" do
+        running = ActionWiring.steps_running(entry)
+        expect(running).not_to(be_empty, -> { "no action.yml step runs #{entry}" })
 
-        provided = step.fetch("env", {}).keys + ActionWiring::AMBIENT
-        expect(ActionWiring.ruby_env_reads(entry) - provided).to be_empty
+        required = ActionWiring.ruby_required_env_reads(entry)
+        missing = running.each_with_object({}) do |step, index|
+          provided = step.fetch("env", {}).keys + ActionWiring::AMBIENT
+          absent = required - provided
+          index[step.fetch("name")] = absent if absent.any?
+        end
+
+        expect(missing).to be_empty
       end
     end
 
@@ -211,11 +231,14 @@ RSpec.describe "action.yml wiring" do
   end
 
   describe "files handed between steps" do
-    it "spells each shared path the same way in every step that touches it" do
+    # Keyed on the file, not the variable name: a producer and its consumer need not
+    # agree on a variable, but they do have to agree on where the file is. Catches a
+    # directory that drifted between them -- workspace against runner.temp.
+    it "spells each shared file the same way in every step that touches it" do
       paths = Hash.new { |hash, key| hash[key] = [] }
       ActionWiring.steps.each do |step|
-        step.fetch("env", {}).each do |name, value|
-          paths[name] << value if value.to_s.include?("github.workspace")
+        step.fetch("env", {}).each_value do |value|
+          paths[File.basename(value.to_s)] << value if value.to_s.include?("github.workspace")
         end
       end
 

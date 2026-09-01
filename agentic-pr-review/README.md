@@ -83,10 +83,34 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
     pull-request-number: ${{ github.event.pull_request.number }}
 ```
 
+## Status comments
+
+The in-progress and failure comments are posted through `gh` by [`scripts/post_comment.rb`](scripts/post_comment.rb) rather than a third-party action. The in-progress comment is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "agentic-pr-review-status" -->`) and cleared by an `always()` step at the end of the run; a comment left by the action this replaced is recognised and adopted. The failure comment carries no marker, so a second failure adds a second comment.
+
+`scripts/github_comment_poster.rb` is a deliberate copy of the same client in `test-plans/`. The two actions are versioned and consumed independently, so a fix belongs in both.
+
 ## Prompt and output
 
 - Base instructions: `prompts/review.md` (JSON-only response with `summary` and optional inline `comments`).
 - If `additional-prompt` is non-empty, it is appended under a short "Additional instructions from the PR comment" section before calling the agent.
+
+## Local Tests
+
+Run the whole suite in one process:
+
+```bash
+ruby agentic-pr-review/spec/run_all.rb
+```
+
+A single file works the same way, since each spec loads the shared helper:
+
+```bash
+ruby agentic-pr-review/spec/github_comment_poster_spec.rb
+```
+
+The specs run on whatever Ruby is on PATH, as CI does -- the action itself runs on the
+runner's preinstalled interpreter. Some specs and scripts use Ruby 3.1+ keyword
+shorthand, so 3.1 is the floor.
 
 ## CLI permissions
 

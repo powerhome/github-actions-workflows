@@ -10,6 +10,7 @@ require_relative "public_downloader"
 require_relative "public_origin"
 require_relative "source_diff"
 require_relative "source_diff_builder"
+require_relative "version_spelling"
 
 module TestPlan
   module DependencyDelta
@@ -101,7 +102,7 @@ module TestPlan
 
         target_ref = resolve_tag(repository, [path], change.new_version)
         target = target_ref && fetch(repository, target_ref, path)
-        return [old_body, target, true] if target && target.include?(change.new_version.to_s)
+        return [old_body, target, true] if target && describes?(target, change.new_version)
 
         head = fetch(repository, DEFAULT_REF, path)
         return [target, head, false] if target
@@ -200,10 +201,19 @@ module TestPlan
 
       # Tag conventions vary even within one project; playbook publishes 17.0.0 and
       # v17.1.0-rc.4 side by side.
+      # A tag is named in the repository's spelling, not RubyGems': trying only the
+      # lockfile's string resolved no tag at all for a gem prerelease.
       def resolve_tag(repository, candidates, version)
-        ["#{version}", "v#{version}"].find do |ref|
+        refs = VersionSpelling.spellings(version).flat_map { |spelling| [spelling, "v#{spelling}"] }
+        refs.find do |ref|
           candidates.any? { |path| fetch(repository, ref, path) }
         end
+      end
+
+      # Whether the tagged changelog already covers the release being tested. The prose
+      # uses the repository's spelling, so a gem's version needs the hyphenated one too.
+      def describes?(body, version)
+        VersionSpelling.spellings(version).any? { |spelling| body.include?(spelling) }
       end
 
       def fetch_any(repository, candidates, ref)

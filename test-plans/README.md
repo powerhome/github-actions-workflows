@@ -67,7 +67,7 @@ A Playbook version bump often changes no application code at all — every file 
 
 The result is `dependency-kit-usage.md`, listing the files that use each changed kit. A kit used in more than 25 files is reported as a count instead, since a list that long stops naming pages to visit. A single upgrade typically identifies a couple of dozen changed kits, a handful of them narrow enough to enumerate.
 
-Unreadable lockfiles, missing private sources, failed downloads, and truncation do not fail the plan. A lockfile the action cannot parse is skipped and reported; the remaining lockfiles are still analyzed. Every such case produces a warning in the PR comment, workflow annotation, job summary, and dependency manifest.
+Unreadable lockfiles, missing private sources, failed downloads, and truncation do not fail the plan. A lockfile the action cannot parse is skipped and reported; the remaining lockfiles are still analyzed. Every such case produces a warning in the PR comment, workflow annotation, job summary, and dependency manifest. The manifest is also echoed into the build step's log under a collapsed `Dependency delta manifest` group, so the reason a warning was raised is readable without downloading the artifact from an ephemeral runner.
 
 ### Private Sources
 
@@ -94,6 +94,7 @@ The pull-request head is untrusted: anyone who can open a pull request controls 
 - Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published. Every provider-derived field, and the pull-request title, is escaped before rendering: mentions cannot notify anyone, and links, images, and inline HTML cannot be injected into a comment the bot signs.
 - Model selection comes from the profile. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
 - Comments are authored with the calling workflow's `GITHUB_TOKEN` so action-authored comments do not retrigger workflows.
+- Comments are posted, updated, and deleted through `gh` rather than a third-party action. Each is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "<tag>" -->`), so one profile keeps one authoritative comment. A comment written by the action this replaced is still recognised and adopted on its next update.
 
 Two residual risks are inherent rather than mitigated. Retrieved dependency source, including changelogs, is third-party text placed in the provider's context; it is supplied as evidence about a version change and the schema bounds what can come back, but it is not trusted input. And a pull request necessarily influences its own test plan through the code it changes — that is the feature. Treat a generated plan as a reviewed starting point, not an authority.
 

@@ -1,6 +1,7 @@
 require_relative "./changelog_source"
 require_relative "./playbook_kit_usage"
 require_relative "./public_dependency_retriever"
+require_relative "./version_spelling"
 
 module TestPlan
   module DependencyDelta
@@ -184,9 +185,18 @@ module TestPlan
         %w[playbook_ui playbook-ui],
       ].freeze
 
+      # Canonical versions, not the lockfile's own strings: the two halves spell a
+      # prerelease differently, so raw comparison failed to link exactly the
+      # release-candidate bumps this exists for.
       def build_related(changes)
         changes
-          .group_by { |change| [linked_release(change), change.old_version, change.new_version] }
+          .group_by do |change|
+            [
+              linked_release(change),
+              VersionSpelling.canonical(change.old_version),
+              VersionSpelling.canonical(change.new_version),
+            ]
+          end
           .each_with_object({}) do |(key, group), related|
             # key is [linked release, old version, new version]; a nil release means the
             # package is not half of a named pair.
