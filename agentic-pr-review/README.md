@@ -94,6 +94,24 @@ The in-progress and failure comments are posted through `gh` by [`scripts/post_c
 - Base instructions: `prompts/review.md` (JSON-only response with `summary` and optional inline `comments`).
 - If `additional-prompt` is non-empty, it is appended under a short "Additional instructions from the PR comment" section before calling the agent.
 
+## Local Tests
+
+Run the whole suite in one process:
+
+```bash
+ruby agentic-pr-review/spec/run_all.rb
+```
+
+A single file works the same way, since each spec loads the shared helper:
+
+```bash
+ruby agentic-pr-review/spec/github_comment_poster_spec.rb
+```
+
+The specs run on whatever Ruby is on PATH, as CI does -- the action itself runs on the
+runner's preinstalled interpreter. Some specs and scripts use Ruby 3.1+ keyword
+shorthand, so 3.1 is the floor.
+
 ## CLI permissions
 
 ### Cursor (read-only)

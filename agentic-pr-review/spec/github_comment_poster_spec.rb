@@ -1,15 +1,8 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
-
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
+require_relative "spec_helper"
 
 require "json"
-require "rspec/autorun"
 
-require_relative "github_comment_poster"
+require "github_comment_poster"
 
 RSpec.describe GitHubCommentPoster do
   # Stands in for gh: records the calls and answers listings from a fixed set of comments.

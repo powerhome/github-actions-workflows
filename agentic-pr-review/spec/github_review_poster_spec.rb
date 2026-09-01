@@ -1,15 +1,8 @@
-#!/usr/bin/env ruby
-require "bundler/inline"
-
-gemfile do
-  source "https://rubygems.org"
-  gem "rspec", "~> 3.13"
-end
+require_relative "spec_helper"
 
 require "json"
-require "rspec/autorun"
 
-require_relative "github_review_poster"
+require "github_review_poster"
 
 RSpec.describe GitHubReviewPoster do
   let(:owner) { "acme" }
