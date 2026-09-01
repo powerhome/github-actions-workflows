@@ -45,7 +45,9 @@ Where a package records its repository, the action also reads that repository's 
 
 For public sources, the action downloads old/new RubyGem or npm archives, or public GitHub revision archives, and creates a deterministic source diff without executing package contents. Retrieval is allowlisted to public HTTPS hosts and enforces archive traversal, link, file-count, expanded-size, download-size, and timeout controls.
 
-Context is prioritized across dependencies as direct, then Git-pinned, then transitive; and within each dependency as changelogs and release notes, runtime source, tests, documentation, and finally generated or vendored files. The 500 KiB context budget is shared out among the dependencies that changed rather than fixed per dependency, so a lone upgrade can use all of it and an upgrade that came in small hands its surplus to the next.
+Context is prioritized across dependencies as direct, then Git-pinned, then transitive, then by how many lockfiles the dependency appears in — blast radius rather than the alphabet, so a gem in a hundred components is funded before one in a single component. Within each dependency the order is changelogs and release notes, runtime source, tests, documentation, and finally generated or vendored files. The 1 MiB context budget is shared out among the dependencies that changed rather than fixed per dependency, so a lone upgrade can use all of it and an upgrade that came in small hands its surplus to the next.
+
+Playbook draws four times an ordinary dependency's slice. A Playbook bump is a pull request whose every file is a lockfile, so the dependency delta is the only evidence there is, where an ordinary gem bump is read alongside the application code that calls it. The packages are named in `Generator::WEIGHTED_PACKAGES` rather than inferred.
 
 Where a gem and an npm package are linked as one upstream release, the build output in either half is kept out of the provider context — it is compiled from source that reaches the model through the other half — while non-generated files such as `package.json` still go through. Everything stays in the full-delta artifact regardless.
 
@@ -58,7 +60,7 @@ Artifacts include:
 - `test-plan-agent.json`
 - `dependency-delta-manifest.json`
 - `dependency-deltas-full.diff` (maximum 10 MiB, written outside the workspace)
-- `dependency-deltas-context.diff` (500 KiB in total, shared out among the dependencies that changed)
+- `dependency-deltas-context.diff` (1 MiB in total, shared out among the dependencies that changed)
 - `dependency-kit-usage.md`
 
 ### Playbook Kit Usage

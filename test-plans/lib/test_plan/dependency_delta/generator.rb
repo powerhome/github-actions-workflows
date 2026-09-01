@@ -7,15 +7,39 @@ module TestPlan
   module DependencyDelta
     class Generator
       FULL_LIMIT = 10 * 1024 * 1024
-      CONTEXT_TOTAL_LIMIT = 500 * 1024
+      CONTEXT_TOTAL_LIMIT = 1024 * 1024
       # Floor on a dependency's share. Below this a slice is too small to say anything
-      # useful, so it is better to spend the budget on the dependencies sorted first --
-      # direct, then Git-pinned -- and let the tail fall off.
+      # useful, so it is better to spend the budget on the dependencies sorted first and
+      # let the tail fall off. The floor is spent ahead of the fair share, so a run with
+      # more than CONTEXT_TOTAL_LIMIT / this many dependencies leaves the tail with
+      # nothing -- which is why the sort puts the widest blast radius first.
       CONTEXT_MINIMUM_PER_DEPENDENCY = 25 * 1024
+
+      # A Playbook bump is the pull request this action exists for, and the one where
+      # pr.diff says least: every file in it is a lockfile, so the dependency delta is the
+      # only evidence there is. An ordinary gem bump is read alongside the application
+      # code that calls it. So Playbook draws a larger slice than an equal split would
+      # give it.
+      #
+      # Named rather than inferred, for the same reason LINKED_RELEASES is: a heuristic
+      # that guessed wrong would starve the dependency the plan is actually about.
+      WEIGHTED_PACKAGES = %w[playbook_ui playbook-ui].freeze
+      WEIGHTED_CONTEXT_SHARE = 4
+      DEFAULT_CONTEXT_SHARE = 1
 
       def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new,
                      kit_usage: PlaybookKitUsage.disabled, problems: [])
-        @changes = changes.sort_by { |change| [change.direct ? 0 : 1, change.source == "git" ? 0 : 1, change.name] }
+        # Blast radius before name. Every dependency here is usually direct and from a
+        # registry, which left the alphabet deciding who got context first -- so a gem in
+        # one component was funded ahead of one in a hundred of them.
+        @changes = changes.sort_by do |change|
+          [
+            change.direct ? 0 : 1,
+            change.source == "git" ? 0 : 1,
+            -change.lockfiles.length,
+            change.name,
+          ]
+        end
         @retriever = retriever
         @changelog = changelog
         @kit_usage = kit_usage
@@ -28,7 +52,7 @@ module TestPlan
         context = +""
         entries = []
         remaining_context = CONTEXT_TOTAL_LIMIT
-        remaining_changes = @changes.length
+        remaining_weight = @changes.sum { |change| context_weight(change) }
 
         @changes.each do |change|
           entry = change.to_h
@@ -52,7 +76,7 @@ module TestPlan
             omitted_from_context = []
 
             if candidates.any?
-              budget = context_budget(remaining_context, remaining_changes)
+              budget = context_budget(remaining_context, remaining_weight, context_weight(change))
               dependency_context = +""
               omitted_from_context =
                 append_chunks(dependency_context, header, candidates, budget, :context_text)
@@ -95,7 +119,7 @@ module TestPlan
             entry["excluded_generated"] = []
             entry["omitted_from_artifact"] = []
           end
-          remaining_changes -= 1
+          remaining_weight -= context_weight(change)
           entries << entry
         end
 
@@ -142,12 +166,17 @@ module TestPlan
         entry.fetch("status") != "retrieved" || entry.fetch("degraded", false)
       end
 
-      # Share what is left among the dependencies still to come, so a lone dependency --
-      # a Playbook bump, typically -- can use the whole budget instead of a fixed slice of
-      # it, and an early dependency that came in small hands its surplus to the next.
-      def context_budget(remaining_context, remaining_changes)
-        share = remaining_context / [remaining_changes, 1].max
+      # Share what is left among the dependencies still to come, weighted, so a lone
+      # dependency can use the whole budget instead of a fixed slice of it, and an early
+      # dependency that came in small hands its surplus to the next. remaining_weight
+      # still counts this dependency, so the last one is handed everything left.
+      def context_budget(remaining_context, remaining_weight, weight)
+        share = remaining_context * weight / [remaining_weight, 1].max
         [[share, CONTEXT_MINIMUM_PER_DEPENDENCY].max, remaining_context].min
+      end
+
+      def context_weight(change)
+        WEIGHTED_PACKAGES.include?(change.name) ? WEIGHTED_CONTEXT_SHARE : DEFAULT_CONTEXT_SHARE
       end
 
       # One upstream release published as a gem and a package: the build output in this
