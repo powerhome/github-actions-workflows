@@ -83,6 +83,12 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
     pull-request-number: ${{ github.event.pull_request.number }}
 ```
 
+## Status comments
+
+The in-progress and failure comments are posted through `gh` by [`scripts/post_comment.rb`](scripts/post_comment.rb) rather than a third-party action. The in-progress comment is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "agentic-pr-review-status" -->`) and cleared by an `always()` step at the end of the run; a comment left by the action this replaced is recognised and adopted. The failure comment carries no marker, so a second failure adds a second comment.
+
+`scripts/github_comment_poster.rb` is a deliberate copy of the same client in `test-plans/`. The two actions are versioned and consumed independently, so a fix belongs in both.
+
 ## Prompt and output
 
 - Base instructions: `prompts/review.md` (JSON-only response with `summary` and optional inline `comments`).

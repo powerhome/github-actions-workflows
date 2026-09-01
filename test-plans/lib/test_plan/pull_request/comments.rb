@@ -14,8 +14,11 @@ module TestPlan
       TAG_PATTERN = /\A[a-z][a-z0-9-]*\z/
       REPOSITORY_PATTERN = %r{\A[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\z}
 
+      # Deliberately not named after this action: agentic-pr-review carries a copy of this
+      # client, and an identical marker means a later extraction would not have to migrate
+      # comment identities. The tag already says which comment it is.
       def self.marker(tag)
-        %(<!-- powerhome/github-actions-workflows test-plan "#{tag}" -->)
+        %(<!-- powerhome/github-actions-workflows "#{tag}" -->)
       end
 
       # thollander's marker. Its comments are still on open pull requests, and not
@@ -104,7 +107,10 @@ module TestPlan
 
         if body
           arguments += ["--input", "-"]
-          input = JSON.generate("body" => body)
+          # utf8 before generating: an inline body read out of the environment is tagged
+          # with the locale's encoding, and JSON.generate on UTF-8 bytes tagged BINARY
+          # warns today and raises under json 3.0. Both inline messages contain an em dash.
+          input = JSON.generate("body" => CommandOutput.utf8(body))
         end
 
         stdout = @runner.call(arguments, input)
