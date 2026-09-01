@@ -8,30 +8,23 @@ module TestPlan
     class Generator
       FULL_LIMIT = 10 * 1024 * 1024
       CONTEXT_TOTAL_LIMIT = 1024 * 1024
-      # Floor on a dependency's share. Below this a slice is too small to say anything
-      # useful, so it is better to spend the budget on the dependencies sorted first and
-      # let the tail fall off. The floor is spent ahead of the fair share, so a run with
-      # more than CONTEXT_TOTAL_LIMIT / this many dependencies leaves the tail with
-      # nothing -- which is why the sort puts the widest blast radius first.
+      # Floor on a dependency's share; below this a slice says nothing useful. Spent
+      # ahead of the fair share, so a run with more than CONTEXT_TOTAL_LIMIT / this many
+      # dependencies leaves its tail with nothing -- hence the blast-radius sort.
       CONTEXT_MINIMUM_PER_DEPENDENCY = 25 * 1024
 
-      # A Playbook bump is the pull request this action exists for, and the one where
-      # pr.diff says least: every file in it is a lockfile, so the dependency delta is the
-      # only evidence there is. An ordinary gem bump is read alongside the application
-      # code that calls it. So Playbook draws a larger slice than an equal split would
-      # give it.
-      #
-      # Named rather than inferred, for the same reason LINKED_RELEASES is: a heuristic
-      # that guessed wrong would starve the dependency the plan is actually about.
+      # A Playbook bump's diff is entirely lockfiles, so the delta is the only evidence
+      # there is; an ordinary gem bump is read alongside the code that calls it. Named
+      # rather than inferred, like LINKED_RELEASES: a wrong guess starves the dependency
+      # the plan is about.
       WEIGHTED_PACKAGES = %w[playbook_ui playbook-ui].freeze
       WEIGHTED_CONTEXT_SHARE = 4
       DEFAULT_CONTEXT_SHARE = 1
 
       def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new,
                      kit_usage: PlaybookKitUsage.disabled, problems: [], out_of_scope: [])
-        # Blast radius before name. Every dependency here is usually direct and from a
-        # registry, which left the alphabet deciding who got context first -- so a gem in
-        # one component was funded ahead of one in a hundred of them.
+        # Blast radius before name: nearly everything here is direct and from a registry,
+        # which left the alphabet deciding who got funded first.
         @changes = changes.sort_by do |change|
           [
             change.direct ? 0 : 1,
@@ -95,9 +88,8 @@ module TestPlan
                 "release. They remain in the full-delta artifact."
             end
 
-            # Only lost evidence truncates. A budget that ran out after the changelog and
-            # the source were in, dropping tests and docs off the tail, is the priority
-            # order working -- the warnings still name every omission either way.
+            # Only lost evidence truncates; a budget that dropped tests and docs off the
+            # tail is the priority order working. Every omission is named either way.
             entry["status"] = omitted_from_context.any?(&:evidence?) ? "truncated" : "retrieved"
 
             if omitted_from_artifact.any?
@@ -131,9 +123,8 @@ module TestPlan
             "version" => 1,
             "dependencies" => entries,
             "lockfile_warnings" => lockfile_warnings,
-            # Recorded rather than silently dropped. These reached no root lockfile, so
-            # nothing deployed resolves them -- but a reader looking for a raise they know
-            # landed needs to find it here rather than conclude it was missed.
+            # Recorded, not silently dropped: a reader looking for a raise they know
+            # landed has to be able to find it here.
             "out_of_scope" => @out_of_scope.map { |change| out_of_scope_entry(change) },
             # Counts anything that cost evidence, which is not the same as anything
             # that produced a warning: build output kept out of a linked release, and
@@ -167,7 +158,6 @@ module TestPlan
         end
       end
 
-      # Compact: these have no delta, and the manifest is echoed into the run log.
       def out_of_scope_entry(change)
         {
           "ecosystem" => change.ecosystem,
@@ -182,10 +172,9 @@ module TestPlan
         entry.fetch("status") != "retrieved" || entry.fetch("degraded", false)
       end
 
-      # Share what is left among the dependencies still to come, weighted, so a lone
-      # dependency can use the whole budget instead of a fixed slice of it, and an early
-      # dependency that came in small hands its surplus to the next. remaining_weight
-      # still counts this dependency, so the last one is handed everything left.
+      # Weighted share of what is left, so an early dependency that came in small hands
+      # its surplus on. remaining_weight still counts this one, so the last dependency is
+      # handed everything left.
       def context_budget(remaining_context, remaining_weight, weight)
         share = remaining_context * weight / [remaining_weight, 1].max
         [[share, CONTEXT_MINIMUM_PER_DEPENDENCY].max, remaining_context].min
@@ -286,10 +275,9 @@ module TestPlan
 
       SEPARATOR = "\n".freeze
 
-      # Returns the diffs that did not fit -- the diffs rather than their paths, because
-      # the caller has to ask what was lost as well as name it. `text` selects what a diff
-      # contributes: the artifact records the whole thing, while the provider may be shown
-      # a capped form of it.
+      # Returns the diffs that did not fit -- the objects, because the caller asks what
+      # was lost as well as naming it. `text` picks the artifact's copy or the provider's
+      # capped one.
       def append_chunks(target, header, diffs, limit, text)
         return diffs if target.bytesize + header.bytesize > limit
 

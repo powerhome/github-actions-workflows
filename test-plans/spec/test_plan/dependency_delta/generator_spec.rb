@@ -297,9 +297,8 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(entry.fetch("warnings").join).to include("1 file diffs were omitted")
   end
 
-  # The Playbook case: the budget runs out after the changelog and the source are in, and
-  # what falls off the tail is docs and colocated tests. That is the priority order
-  # working, so it must not raise a warning on the pull request.
+  # The Playbook case: what falls off the tail is docs and colocated tests, which is the
+  # priority order working -- so it must not warn on the pull request.
   it "does not truncate a dependency that only lost tests and documentation" do
     builder = TestPlan::DependencyDelta::SourceDiffBuilder
     diffs = [
@@ -325,7 +324,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
 
     expect(entry.fetch("status")).to eq("retrieved")
     expect(result.dig(:manifest, "warning_count")).to eq(0)
-    # Still named, and still counted -- the omission is reported, it just is not degradation.
+    # Still named: the omission is reported, it just is not degradation.
     expect(entry.fetch("omitted_from_context")).to eq(
       [
         "app/pb_kits/playbook/pb_dropdown/docs/example.yml",
@@ -395,8 +394,8 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
   end
 
   # The floor is handed out ahead of the fair share, so enough dependencies overdraw the
-  # total and whoever is sorted last is left with nothing. Derived from the constants
-  # rather than written out, so raising the budget moves the cliff without rotting this.
+  # total and the last one gets nothing. Derived from the constants so raising the budget
+  # moves the cliff without rotting this.
   it "spends the budget on the dependencies sorted first and drops the tail" do
     count = (described_class::CONTEXT_TOTAL_LIMIT / described_class::CONTEXT_MINIMUM_PER_DEPENDENCY) + 10
     changes = Array.new(count) do |index|
@@ -424,8 +423,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
   end
 
-  # Skipped deliberately, so it is recorded rather than looking like a raise the run
-  # missed -- but it cost no evidence, so it raises no warning.
+  # Recorded rather than looking like a raise the run missed, but it cost no evidence.
   it "records the dependencies it skipped without counting them as warnings" do
     skipped = TestPlan::DependencyDelta::Change.new(
       ecosystem: "bundler", name: "minitest", old_version: "5.25.5", new_version: "6.0.6",

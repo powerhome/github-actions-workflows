@@ -110,8 +110,7 @@ RSpec.describe TestPlan::Profile do
     end
   end
 
-  # Same containment rule as the main prompt: the variant is a path from a profile
-  # definition and must not reach outside the action.
+  # Same containment rule as the main prompt.
   it "rejects a Playbook prompt outside the action root" do
     Dir.mktmpdir do |directory|
       Dir.mkdir(File.join(directory, "prompts"))

@@ -9,10 +9,7 @@ require_relative "./git_snapshot"
 module TestPlan
   module DependencyDelta
     class Command
-      # Named, not generic. "Some external dependency evidence could not be collected
-      # completely" told a reader that something was wrong but not what or where, so the
-      # next question was always the manifest. The comment says which dependencies and
-      # why; the manifest is still where the file lists live.
+      # The comment names which dependencies and why; the manifest keeps the file lists.
       WARNING_HEADLINE = "Some external dependency evidence is incomplete"
       MANIFEST_POINTER = "The dependency manifest in the workflow run names every omitted file."
       # Past this the sentence stops being readable, and the manifest has the rest.
@@ -58,21 +55,17 @@ module TestPlan
 
     private
 
-      # The runner is ephemeral, so without this the reason for a warning is only in the
-      # artifact, behind a download and an unzip.
-      #
-      # Unescaped is safe here: a workflow command has to start its own line, and
-      # JSON.pretty_generate escapes newlines inside strings, so no lockfile-derived
-      # value can open one.
+      # The runner is ephemeral, so otherwise the reason for a warning is only in the
+      # artifact. Unescaped is safe: a workflow command has to start its own line, and
+      # JSON.pretty_generate escapes newlines inside strings.
       def log_manifest(path, manifest)
         puts("::group::Dependency delta manifest (#{path})")
         puts(JSON.pretty_generate(loggable(manifest)))
         puts("::endgroup::")
       end
 
-      # playbook_ui is a dependency of every component, which is about 140 Gemfile.locks
-      # in nitro-web -- printed in full they bury the warnings this group exists to show.
-      # The file and the artifact keep the whole list; only the log is trimmed.
+      # playbook_ui is in ~140 component Gemfile.locks; printed in full they bury the
+      # warnings. The file and the artifact keep all of them.
       LOGGED_LOCKFILES = 5
 
       def loggable(manifest)
@@ -89,14 +82,9 @@ module TestPlan
         manifest.merge("dependencies" => dependencies)
       end
 
-      # Groups the incomplete dependencies by why they are incomplete, so one reason is
-      # stated once however many dependencies share it.
-      #
-      # Names are escaped here rather than by the formatter: they come from lockfiles the
-      # pull request can edit, and the formatter renders this warning as the Markdown it
-      # was handed. Same policy as the job summary below. Collapsed to one line as well,
-      # because the value is written to GITHUB_OUTPUT, where a newline would end the
-      # value and let a lockfile append outputs of its own.
+      # Names are escaped here, not by the formatter: they come from lockfiles the pull
+      # request can edit, and the formatter renders this as the Markdown it was handed.
+      # One line too -- the value goes to GITHUB_OUTPUT, where a newline would end it.
       def warning_message(manifest)
         grouped = manifest.fetch("dependencies").each_with_object({}) do |entry, groups|
           reason = reason_for(entry)
@@ -137,9 +125,8 @@ module TestPlan
           output.puts("change_count=#{change_count}")
           output.puts("warning_count=#{warning_count}")
           output.puts("generation_warning=#{warning}")
-          # The plan is shaped differently for a Playbook raise, and this step is the
-          # first point in the run that knows there was one: the profile resolved from the
-          # label before any lockfile had been read.
+          # First point in the run that can know: the profile resolved from the label
+          # before any lockfile was read.
           output.puts("playbook_kits_changed=#{kits.any?}")
         end
       end

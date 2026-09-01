@@ -47,8 +47,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("\\[click\\]")
   end
 
-  # The profile resolves from the label before any lockfile is read, so this output is the
-  # first point in the run that can say the plan should be shaped by kit.
+  # First point in the run that can say the plan should be shaped by kit.
   it "reports whether the raise changed Playbook kits" do
     [[%w[dropdown file_upload], "true"], [[], "false"]].each do |kits, expected|
       Tempfile.create("output") do |file|
@@ -112,9 +111,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
       expect(warning).not_to include("gem-5")
     end
 
-    # The formatter renders this warning as the Markdown it was handed, and the value is
-    # written to GITHUB_OUTPUT, where a newline would end it and let the rest be read as
-    # further outputs.
+    # The formatter renders this as handed, and GITHUB_OUTPUT ends the value at a newline.
     it "escapes lockfile-derived names and keeps the whole message on one line" do
       warning = warning_for(
         [{ "name" => "@evil/pkg <img src=q>\nsecond line", "status" => "unavailable", "degraded" => true }]
@@ -161,9 +158,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(logged).to include("components/component0/Gemfile.lock")
     expect(logged).to include("...and 137 more (see the manifest artifact)")
     expect(logged).not_to include("components/component100/Gemfile.lock")
-    # The warning is the reason to read this group at all, so it has to survive.
     expect(logged).to include("budget exhausted")
-    # The manifest written to disk and uploaded keeps every lockfile.
     expect(manifest.dig("dependencies", 0, "lockfiles").length).to eq(142)
   end
 

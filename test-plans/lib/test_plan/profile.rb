@@ -94,11 +94,9 @@ module TestPlan
       resolve_prompt("prompt")
     end
 
-    # Optional. A Playbook raise is the one pull request whose diff is entirely lockfiles,
-    # so its plan is organised by changed kit rather than by feature area -- but that is
-    # not known until the dependency delta has been built, long after this profile
-    # resolved from the label. Declaring the alternative here lets the run choose between
-    # them once it knows. A profile without one keeps its single prompt.
+    # Optional. Whether the raise is Playbook is not known until the dependency delta has
+    # been built, long after this profile resolved from the label, so the alternative is
+    # declared here and chosen later. A profile without one keeps its single prompt.
     def playbook_prompt_path
       return "" unless attributes.key?("playbook_prompt")
 

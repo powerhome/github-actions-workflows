@@ -51,8 +51,7 @@ module TestPlan
         end
       end
 
-      # The kits this upgrade changed. Empty unless the run raised Playbook, which is what
-      # decides whether the plan is shaped by kit or by feature area.
+      # Empty unless the run raised Playbook, which is what shapes the plan by kit.
       def kits
         @kits.keys.sort
       end

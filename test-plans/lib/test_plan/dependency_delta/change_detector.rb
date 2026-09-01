@@ -22,14 +22,10 @@ module TestPlan
       ADD_DEPENDENCY =
         /^[ \t]*(?:[A-Za-z_]\w*\.)?add_(?:runtime_)?dependency\s*\(?\s*["']([^"'\n]+)["']/
 
-      # Only the umbrella application is deployed. A component's own lockfile resolves
-      # that component's test suite, so a raise reaching nothing but component lockfiles
-      # changes nothing a tester can open -- on nitro-web that was 17 of 19 dependencies,
-      # 15 of them one unmounted component's test gems, competing for the context budget
-      # against the Playbook raise the plan was about.
-      #
-      # A repository with a single lockfile is unaffected, because its lockfile is the
-      # root one. A monorepo that does mount its components wants "all".
+      # Only the umbrella application is deployed, so a raise reaching nothing but
+      # component lockfiles changes nothing a tester can open. A single-lockfile
+      # repository is unaffected -- its lockfile is the root one. A monorepo that does
+      # mount its components wants "all".
       UMBRELLA_LOCKFILES = %w[Gemfile.lock yarn.lock].freeze
       SCOPES = %w[umbrella all].freeze
 
@@ -84,9 +80,8 @@ module TestPlan
 
     private
 
-      # Deduplication has to have run first: a raise recorded in both a root lockfile and
-      # a component's is one change, and partitioning before the merge would have judged
-      # the component copy on its own and dropped it.
+      # After deduplication: a raise in both a root and a component lockfile is one
+      # change, and partitioning first would have judged the component copy alone.
       def scoped(changes)
         return changes if @scope == "all"
 

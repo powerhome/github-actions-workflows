@@ -24,8 +24,7 @@ RSpec.describe TestPlan::Variant do
     expect(selection).to eq("name" => "", "prompt_path" => "/action/prompts/cobra_test_plan.md")
   end
 
-  # Adding the variant to one profile must not change how another one runs, and a run
-  # whose profile declares no Playbook prompt has nothing to switch to.
+  # Adding the variant to one profile must not change how another one runs.
   it "keeps the profile's prompt when the profile declares no Playbook variant" do
     selection = described_class.select(
       prompt_path: "/action/prompts/cobra_test_plan.md",
