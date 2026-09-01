@@ -47,6 +47,75 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("\\[click\\]")
   end
 
+  describe "the warning the pull-request comment carries" do
+    def warning_for(dependencies, lockfile_warnings: [])
+      described_class.new.send(
+        :warning_message,
+        "dependencies" => dependencies, "lockfile_warnings" => lockfile_warnings
+      )
+    end
+
+    def truncated(name)
+      { "name" => name, "status" => "truncated", "degraded" => false }
+    end
+
+    it "names the dependencies and why, rather than saying something went wrong" do
+      warning = warning_for(
+        [
+          { "name" => "playbook_ui", "status" => "retrieved", "degraded" => false },
+          truncated("irb"),
+          truncated("minitest"),
+        ]
+      )
+
+      expect(warning).to include("irb, minitest (provider context budget exhausted)")
+      expect(warning).not_to include("playbook_ui")
+    end
+
+    it "states each reason once, however many dependencies share it" do
+      warning = warning_for(
+        [
+          truncated("irb"),
+          truncated("minitest"),
+          { "name" => "internal-gem", "status" => "unavailable", "degraded" => true },
+          { "name" => "proxied-pkg", "status" => "retrieved", "degraded" => true },
+        ],
+        lockfile_warnings: [{ "lockfile" => "a/Gemfile.lock", "warning" => "unparseable" }]
+      )
+
+      expect(warning).to include(
+        "irb, minitest (provider context budget exhausted)",
+        "internal-gem (could not be retrieved)",
+        "proxied-pkg (source refused, changelog only)",
+        "1 lockfile could not be analyzed"
+      )
+    end
+
+    it "stops naming dependencies once the sentence stops being readable" do
+      warning = warning_for((1..7).map { |index| truncated("gem-#{index}") })
+
+      expect(warning).to include("gem-1, gem-2, gem-3, gem-4 and 3 more")
+      expect(warning).not_to include("gem-5")
+    end
+
+    # The formatter renders this warning as the Markdown it was handed, and the value is
+    # written to GITHUB_OUTPUT, where a newline would end it and let the rest be read as
+    # further outputs.
+    it "escapes lockfile-derived names and keeps the whole message on one line" do
+      warning = warning_for(
+        [{ "name" => "@evil/pkg <img src=q>\nsecond line", "status" => "unavailable", "degraded" => true }]
+      )
+
+      expect(warning).not_to include("@evil", "<img")
+      expect(warning).to include("&#64;evil", "&lt;img")
+      expect(warning).not_to include("\n")
+    end
+
+    it "says nothing when every dependency came back whole" do
+      expect(warning_for([{ "name" => "nokogiri", "status" => "retrieved", "degraded" => false }])).to eq("")
+    end
+  end
+
   it "echoes the manifest into a collapsed log group so an ephemeral runner leaves a record" do
     manifest = {
       "version" => 1,

@@ -9,7 +9,17 @@ require_relative "./git_snapshot"
 module TestPlan
   module DependencyDelta
     class Command
-      WARNING_MESSAGE = "Some external dependency evidence could not be collected completely; see the workflow run and dependency manifest."
+      # Named, not generic. "Some external dependency evidence could not be collected
+      # completely" told a reader that something was wrong but not what or where, so the
+      # next question was always the manifest. The comment says which dependencies and
+      # why; the manifest is still where the file lists live.
+      WARNING_HEADLINE = "Some external dependency evidence is incomplete"
+      MANIFEST_POINTER = "The dependency manifest in the workflow run names every omitted file."
+      # Past this the sentence stops being readable, and the manifest has the rest.
+      MAX_NAMED_DEPENDENCIES = 4
+      UNAVAILABLE_REASON = "could not be retrieved"
+      DEGRADED_REASON = "source refused, changelog only"
+      TRUNCATED_REASON = "provider context budget exhausted"
 
       def run
         workspace = ENV.fetch("GITHUB_WORKSPACE")
@@ -37,10 +47,11 @@ module TestPlan
         File.write(kit_usage_path, result.fetch(:kit_usage).to_s, encoding: Encoding::UTF_8)
 
         warning_count = result.dig(:manifest, "warning_count")
-        write_outputs(changes.length, warning_count)
+        warning = warning_count.positive? ? warning_message(result.fetch(:manifest)) : ""
+        write_outputs(changes.length, warning_count, warning)
         write_summary(result.fetch(:manifest))
         log_manifest(manifest_path, result.fetch(:manifest))
-        puts("::warning::#{WARNING_MESSAGE}") if warning_count.positive?
+        puts("::warning::#{warning}") unless warning.empty?
       end
 
     private
@@ -76,11 +87,54 @@ module TestPlan
         manifest.merge("dependencies" => dependencies)
       end
 
-      def write_outputs(change_count, warning_count)
+      # Groups the incomplete dependencies by why they are incomplete, so one reason is
+      # stated once however many dependencies share it.
+      #
+      # Names are escaped here rather than by the formatter: they come from lockfiles the
+      # pull request can edit, and the formatter renders this warning as the Markdown it
+      # was handed. Same policy as the job summary below. Collapsed to one line as well,
+      # because the value is written to GITHUB_OUTPUT, where a newline would end the
+      # value and let a lockfile append outputs of its own.
+      def warning_message(manifest)
+        grouped = manifest.fetch("dependencies").each_with_object({}) do |entry, groups|
+          reason = reason_for(entry)
+          next unless reason
+
+          (groups[reason] ||= []) << escape(entry["name"])
+        end
+
+        parts = grouped.map { |reason, names| "#{name_list(names)} (#{reason})" }
+
+        lockfiles = manifest.fetch("lockfile_warnings").length
+        parts << "#{lockfiles} lockfile#{"s" if lockfiles > 1} could not be analyzed" if lockfiles.positive?
+        return "" if parts.empty?
+
+        single_line("#{WARNING_HEADLINE}: #{parts.join("; ")}. #{MANIFEST_POINTER}")
+      end
+
+      def reason_for(entry)
+        return UNAVAILABLE_REASON if entry.fetch("status") == "unavailable"
+        return DEGRADED_REASON if entry.fetch("degraded", false)
+        return TRUNCATED_REASON if entry.fetch("status") != "retrieved"
+
+        nil
+      end
+
+      def name_list(names)
+        return names.join(", ") if names.length <= MAX_NAMED_DEPENDENCIES
+
+        "#{names.first(MAX_NAMED_DEPENDENCIES).join(", ")} and #{names.length - MAX_NAMED_DEPENDENCIES} more"
+      end
+
+      def single_line(text)
+        text.gsub(/\s+/, " ").strip
+      end
+
+      def write_outputs(change_count, warning_count, warning)
         File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|
           output.puts("change_count=#{change_count}")
           output.puts("warning_count=#{warning_count}")
-          output.puts("generation_warning=#{warning_count.positive? ? WARNING_MESSAGE : ""}")
+          output.puts("generation_warning=#{warning}")
         end
       end
 
