@@ -34,7 +34,10 @@ RSpec.describe "test-plans/action.yml" do
   end
 
   it "clears a stale failure comment on both terminal paths with one step" do
-    clearing = steps.select { |step| step.dig("with", "mode") == "delete" }
+    clearing = steps.select do |step|
+      step.dig("env", "COMMENT_MODE") == "delete" &&
+        step.dig("env", "COMMENT_TAG").to_s.include?("failure_comment_tag")
+    end
     expect(clearing.length).to eq(1)
 
     condition = clearing.first.fetch("if")

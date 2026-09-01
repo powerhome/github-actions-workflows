@@ -39,10 +39,23 @@ module TestPlan
         warning_count = result.dig(:manifest, "warning_count")
         write_outputs(changes.length, warning_count)
         write_summary(result.fetch(:manifest))
+        log_manifest(manifest_path, result.fetch(:manifest))
         puts("::warning::#{WARNING_MESSAGE}") if warning_count.positive?
       end
 
     private
+
+      # The runner is ephemeral, so without this the reason for a warning is only in the
+      # artifact, behind a download and an unzip.
+      #
+      # Unescaped is safe here: a workflow command has to start its own line, and
+      # JSON.pretty_generate escapes newlines inside strings, so no lockfile-derived
+      # value can open one.
+      def log_manifest(path, manifest)
+        puts("::group::Dependency delta manifest (#{path})")
+        puts(JSON.pretty_generate(manifest))
+        puts("::endgroup::")
+      end
 
       def write_outputs(change_count, warning_count)
         File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|

@@ -172,6 +172,34 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     )
   end
 
+  # A gem prerelease is 17.2.0.pre.rc.0; the repository tags it v17.2.0-rc.0.
+  it "resolves a gem prerelease under the repository's hyphenated tag" do
+    downloader = FakeChangelogDownloader.new(
+      {
+        "https://rubygems.org/api/v1/gems/playbook_ui.json" => JSON.generate(
+          "changelog_uri" => "https://github.com/powerhome/playbook/blob/master/playbook/CHANGELOG.md"
+        ),
+      }
+        .merge(raw("v17.1.0", "# 17.1.0\nold notes\n"))
+        .merge(raw("v17.2.0-rc.0", "# 17.2.0-rc.0\nrc notes\n\n# 17.1.0\nold notes\n"))
+    )
+    change = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "playbook_ui", old_version: "17.1.0",
+      new_version: "17.2.0.pre.rc.0",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+
+    diffs = described_class.new(downloader: downloader).diffs_for(change)
+
+    expect(diffs.first.diff).to include("+# 17.2.0-rc.0", "+rc notes")
+    # The tags bracket the upgrade, so the default branch is never read.
+    expect(diffs.first.diff).not_to include("read from the default branch")
+    expect(downloader.requested).not_to include(
+      "https://raw.githubusercontent.com/powerhome/playbook/HEAD/playbook/CHANGELOG.md"
+    )
+  end
+
   it "reads the changelog of a proxied package whose checksum matches the public one" do
     downloader = FakeChangelogDownloader.new(
       npm_metadata.merge(raw("17.0.0", "old\n")).merge(raw("HEAD", "new\n"))
