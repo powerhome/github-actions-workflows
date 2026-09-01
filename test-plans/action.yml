@@ -208,6 +208,16 @@ runs:
         set -euo pipefail
         ruby "${{ github.action_path }}/bin/dependency_delta.rb"
 
+    - name: Select test-plan variant
+      id: variant
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        TEST_PLAN_PROMPT_PATH: ${{ steps.profile.outputs.prompt_path }}
+        TEST_PLAN_PLAYBOOK_PROMPT_PATH: ${{ steps.profile.outputs.playbook_prompt_path }}
+        PLAYBOOK_KITS_CHANGED: ${{ steps.dependency_delta.outputs.playbook_kits_changed }}
+      run: ruby "${{ github.action_path }}/bin/select_variant.rb"
+
     - name: Reset agent instructions to the merge base
       if: steps.pr_metadata.outputs.generate == 'true'
       shell: bash
@@ -224,7 +234,7 @@ runs:
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
         MODEL: ${{ steps.profile.outputs.model }}
         TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
-        TEST_PLAN_PROMPT_PATH: ${{ steps.profile.outputs.prompt_path }}
+        TEST_PLAN_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
       run: |
         set -euo pipefail
 

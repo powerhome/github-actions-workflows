@@ -30,9 +30,10 @@ module TestPlan
         )
         detector = ChangeDetector.new(snapshot)
         changes = detector.detect
+        kit_usage = PlaybookKitUsage.new(workspace: workspace)
         result = Generator.new(
           changes: changes,
-          kit_usage: PlaybookKitUsage.new(workspace: workspace),
+          kit_usage: kit_usage,
           problems: detector.problems
         ).generate
 
@@ -48,7 +49,7 @@ module TestPlan
 
         warning_count = result.dig(:manifest, "warning_count")
         warning = warning_count.positive? ? warning_message(result.fetch(:manifest)) : ""
-        write_outputs(changes.length, warning_count, warning)
+        write_outputs(changes.length, warning_count, warning, kit_usage.kits)
         write_summary(result.fetch(:manifest))
         log_manifest(manifest_path, result.fetch(:manifest))
         puts("::warning::#{warning}") unless warning.empty?
@@ -130,11 +131,15 @@ module TestPlan
         text.gsub(/\s+/, " ").strip
       end
 
-      def write_outputs(change_count, warning_count, warning)
+      def write_outputs(change_count, warning_count, warning, kits)
         File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|
           output.puts("change_count=#{change_count}")
           output.puts("warning_count=#{warning_count}")
           output.puts("generation_warning=#{warning}")
+          # The plan is shaped differently for a Playbook raise, and this step is the
+          # first point in the run that knows there was one: the profile resolved from the
+          # label before any lockfile had been read.
+          output.puts("playbook_kits_changed=#{kits.any?}")
         end
       end
 

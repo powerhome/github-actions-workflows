@@ -47,6 +47,20 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("\\[click\\]")
   end
 
+  # The profile resolves from the label before any lockfile is read, so this output is the
+  # first point in the run that can say the plan should be shaped by kit.
+  it "reports whether the raise changed Playbook kits" do
+    [[%w[dropdown file_upload], "true"], [[], "false"]].each do |kits, expected|
+      Tempfile.create("output") do |file|
+        ENV["GITHUB_OUTPUT"] = file.path
+        described_class.new.send(:write_outputs, 4, 0, "", kits)
+        expect(File.read(file.path)).to include("playbook_kits_changed=#{expected}")
+      ensure
+        ENV.delete("GITHUB_OUTPUT")
+      end
+    end
+  end
+
   describe "the warning the pull-request comment carries" do
     def warning_for(dependencies, lockfile_warnings: [])
       described_class.new.send(

@@ -51,6 +51,12 @@ module TestPlan
         end
       end
 
+      # The kits this upgrade changed. Empty unless the run raised Playbook, which is what
+      # decides whether the plan is shaped by kit or by feature area.
+      def kits
+        @kits.keys.sort
+      end
+
       def report
         return nil if @kits.empty?
 

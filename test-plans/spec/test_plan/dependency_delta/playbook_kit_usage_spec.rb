@@ -118,6 +118,34 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     end
   end
 
+  it "lists the kits it observed, which is what marks the raise as a Playbook one" do
+    workspace({}) do |root|
+      usage = described_class.new(workspace: root)
+      usage.observe(
+        playbook_change,
+        [diff("app/pb_kits/playbook/pb_dropdown/index.tsx"), diff("app/pb_kits/playbook/pb_body/_body.tsx")]
+      )
+
+      expect(usage.kits).to eq(%w[body dropdown])
+    end
+  end
+
+  it "has no kits when nothing Playbook changed" do
+    workspace({}) do |root|
+      usage = described_class.new(workspace: root)
+      usage.observe(
+        TestPlan::DependencyDelta::Change.new(
+          ecosystem: "bundler", name: "nokogiri", old_version: "1.0.0", new_version: "1.0.1",
+          source: "rubygems", old_locator: "https://rubygems.org/",
+          new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+        ),
+        [diff("lib/nokogiri.rb")]
+      )
+
+      expect(usage.kits).to be_empty
+    end
+  end
+
   it "ignores dependencies that are not Playbook" do
     workspace(app) do |root|
       usage = described_class.new(workspace: root)

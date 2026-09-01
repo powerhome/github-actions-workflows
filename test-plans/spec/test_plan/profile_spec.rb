@@ -81,6 +81,59 @@ RSpec.describe TestPlan::Profile do
     end
   end
 
+  it "has no Playbook prompt unless the profile declares one" do
+    profile = TestPlan::Profile.load(action_root: ACTION_ROOT, profile_id: "cobra-test-plan")
+
+    expect(profile.playbook_prompt_path).to eq("")
+    expect(profile.to_h).to have_key("playbook_prompt_path")
+  end
+
+  it "resolves a declared Playbook prompt" do
+    Dir.mktmpdir do |directory|
+      Dir.mkdir(File.join(directory, "prompts"))
+      Dir.mkdir(File.join(directory, "profiles"))
+      File.write(File.join(directory, "prompts", "plan.md"), "prompt")
+      File.write(File.join(directory, "prompts", "playbook.md"), "playbook prompt")
+      File.write(
+        File.join(directory, "profiles", "sample.json"),
+        JSON.generate(
+          "id" => "sample", "display_name" => "Sample", "prompt" => "prompts/plan.md",
+          "playbook_prompt" => "prompts/playbook.md", "model" => "",
+          "comment_tag" => "sample", "status_comment_tag" => "sample-status",
+          "failure_comment_tag" => "sample-failure", "artifact_name" => "sample-artifacts"
+        )
+      )
+
+      profile = TestPlan::Profile.load(action_root: directory, profile_id: "sample")
+
+      expect(profile.playbook_prompt_path).to end_with("prompts/playbook.md")
+    end
+  end
+
+  # Same containment rule as the main prompt: the variant is a path from a profile
+  # definition and must not reach outside the action.
+  it "rejects a Playbook prompt outside the action root" do
+    Dir.mktmpdir do |directory|
+      Dir.mkdir(File.join(directory, "prompts"))
+      Dir.mkdir(File.join(directory, "profiles"))
+      File.write(File.join(directory, "prompts", "plan.md"), "prompt")
+      File.write(File.join(directory, "outside.md"), "prompt")
+      File.write(
+        File.join(directory, "profiles", "sample.json"),
+        JSON.generate(
+          "id" => "sample", "display_name" => "Sample", "prompt" => "prompts/plan.md",
+          "playbook_prompt" => "../outside.md", "model" => "",
+          "comment_tag" => "sample", "status_comment_tag" => "sample-status",
+          "failure_comment_tag" => "sample-failure", "artifact_name" => "sample-artifacts"
+        )
+      )
+
+      expect do
+        TestPlan::Profile.load(action_root: directory, profile_id: "sample")
+      end.to raise_error(RuntimeError, /playbook_prompt is invalid/)
+    end
+  end
+
   it "rejects prompts outside the action root" do
     Dir.mktmpdir do |directory|
       profiles = File.join(directory, "profiles")
