@@ -1,6 +1,7 @@
 require "json"
 
 require_relative "../agent_payload"
+require_relative "./kit_facts"
 
 module TestPlan
   module Playbook
@@ -14,7 +15,7 @@ module TestPlan
       DEFAULT_KIT_CODE = "KIT"
       KIT_CODE_PATTERN = /\A[A-Z][A-Z0-9]{1,5}\z/
 
-      attr_reader :kits, :cross_cutting, :other_dependencies, :discarded
+      attr_reader :kits, :other_dependencies, :discarded
 
       def self.parse_file(path)
         new(File.read(path, encoding: Encoding::UTF_8))
@@ -25,7 +26,6 @@ module TestPlan
         @payload = JSON.parse(extract_json(json_string))
         validate_root!
         @kits = build_kits
-        @cross_cutting = build_cross_cutting
         @other_dependencies = build_other_dependencies
       end
 
@@ -55,11 +55,11 @@ module TestPlan
 
         {
           "name" => name,
+          # The join key into the facts the action computed. An identifier the provider
+          # copies from the evidence heading is checkable in a way a number it reports is
+          # not, which is why the coverage count no longer travels through here at all.
+          "slug" => normalize_text(entry["slug"]).downcase,
           "what_changed" => normalize_text(entry["what_changed"]),
-          # Reported by the provider, which copies it from the evidence file rather than
-          # counting. The coverage tier is derived from it downstream, so the provider
-          # cannot call a sample exhaustive.
-          "use_count" => use_count(entry["use_count"], cases.length),
           "code" => kit_code(entry["code"], name),
           "cases" => cases,
         }
@@ -77,26 +77,9 @@ module TestPlan
         {
           "title" => title,
           "page" => normalize_text(entry["page"]),
-          "source" => normalize_text(entry["source"]),
-          "access" => normalize_text(entry["access"]),
+          "system" => system(entry["system"]),
           "steps" => steps,
         }
-      end
-
-      def build_cross_cutting
-        Array(@payload["cross_cutting"]).each_with_index.filter_map do |entry, index|
-          next discard("cross-cutting entry #{index + 1} was not an object") unless entry.is_a?(Hash)
-
-          area = normalize_text(entry["area"])
-          next discard("cross-cutting entry #{index + 1} had no area") if area.empty?
-
-          {
-            "area" => area,
-            "paths" => unique_strings(Array(entry["paths"])),
-            "risk" => normalize_text(entry["risk"]),
-            "steps" => unique_strings(Array(entry["steps"])),
-          }
-        end
       end
 
       def build_other_dependencies
@@ -116,12 +99,11 @@ module TestPlan
         end
       end
 
-      # Never below the number of cases written: a count that undercounts its own case
-      # list would render as an exhaustive tier while listing more pages than it claims
-      # exist.
-      def use_count(value, case_count)
-        count = value.is_a?(Integer) && value.positive? ? value : 0
-        [count, case_count].max
+      # Which half of the kit the case exercises. Left empty rather than guessed when the
+      # provider did not say, so the plan does not label a React page as Rails.
+      def system(value)
+        candidate = normalize_text(value).downcase
+        KitFacts::SYSTEMS.include?(candidate) ? candidate : ""
       end
 
       def kit_code(value, name)

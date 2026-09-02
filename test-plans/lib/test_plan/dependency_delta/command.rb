@@ -43,12 +43,24 @@ module TestPlan
         File.write(context_path, result.fetch(:context), encoding: Encoding::UTF_8)
 
         kit_usage_path = ENV.fetch("DEPENDENCY_KIT_USAGE_PATH")
-        File.write(kit_usage_path, result.fetch(:kit_usage).to_s, encoding: Encoding::UTF_8)
+        kit_usage = result.fetch(:kit_usage).to_s
+        kit_usage += other_raises_section(changes) unless kit_usage.empty?
+        File.write(kit_usage_path, kit_usage, encoding: Encoding::UTF_8)
+
+        # Written whatever the raise was, so the render step has a file to read and the
+        # artifact upload has nothing to warn about. The provider is never pointed at it:
+        # it exists for the renderer, and a document meant for one reader is a document the
+        # other will reason from.
+        File.write(
+          ENV.fetch("PLAYBOOK_KIT_FACTS_PATH"),
+          JSON.pretty_generate(kit_usage.facts) + "\n",
+          encoding: Encoding::UTF_8
+        )
 
         warning_count = result.dig(:manifest, "warning_count")
         warning = warning_count.positive? ? warning_message(result.fetch(:manifest)) : ""
         write_outputs(changes.length, warning_count, warning, kit_usage.kits)
-        write_summary(result.fetch(:manifest))
+        write_summary(result.fetch(:manifest), kit_usage.facts)
         log_manifest(manifest_path, result.fetch(:manifest))
         puts("::warning::#{warning}") unless warning.empty?
       end
@@ -138,7 +150,26 @@ module TestPlan
         UntrustedText.escape(value.to_s)
       end
 
-      def write_summary(manifest)
+      OTHER_RAISES_HEADING = "# Other dependency raises in this pull request"
+
+      # Listed for the provider here rather than left to the manifest. The manifest also
+      # records the raises this run deliberately skipped, and a provider pointed at it
+      # wrote up twenty component gems nothing deploys.
+      def other_raises_section(changes)
+        others = changes
+          .reject { |change| PlaybookKitUsage::PACKAGE_NAMES.include?(change.name) }
+          .sort_by(&:name)
+        return "\n#{OTHER_RAISES_HEADING}\n\nNone.\n" if others.empty?
+
+        lines = others.map { |c| "- #{c.name} #{c.old_version} -> #{c.new_version}" }
+        "\n#{OTHER_RAISES_HEADING}\n\nTheir source deltas, where one was retrieved, are in the " \
+          "context diff.\n\n#{lines.join("\n")}\n"
+      end
+
+      # Kit counts are passed in rather than read from the manifest: the manifest is a
+      # document the provider can open, and a count it can see is a count it can copy back
+      # as its own. The summary is read by people.
+      def write_summary(manifest, kit_facts = { "kits" => {} })
         summary_path = ENV["GITHUB_STEP_SUMMARY"]
         return if summary_path.to_s.empty?
 
@@ -158,6 +189,18 @@ module TestPlan
               omitted = entry.fetch("omitted_from_context", [])
               omitted.first(10).each { |path| summary.puts("  - omitted from context: #{escape(path)}") }
               summary.puts("  - ...and #{omitted.length - 10} more") if omitted.length > 10
+            end
+          end
+
+          kits = kit_facts.fetch("kits", {})
+          unless kits.empty?
+            summary.puts("- Playbook kits changed: #{kits.length}")
+            kits.each_value do |kit|
+              sites = kit.fetch("call_sites")
+              summary.puts(
+                "  - #{escape(kit.fetch("name"))}: #{sites} call #{sites == 1 ? "site" : "sites"} " \
+                  "(#{escape(kit.fetch("coverage"))})"
+              )
             end
           end
 

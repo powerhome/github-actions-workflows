@@ -137,6 +137,7 @@ runs:
         DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
         DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
+        PLAYBOOK_KIT_FACTS_PATH: ${{ github.workspace }}/playbook-kit-facts.json
         TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
         TEST_PLAN_COMMENT_PATH: ${{ github.workspace }}/test-plan-comment.md
       # The workspace is the pull-request head, so it may already contain a file -- or a
@@ -153,6 +154,7 @@ runs:
           "${DEPENDENCY_DELTA_MANIFEST_PATH}" \
           "${DEPENDENCY_DELTA_CONTEXT_PATH}" \
           "${DEPENDENCY_KIT_USAGE_PATH}" \
+          "${PLAYBOOK_KIT_FACTS_PATH}" \
           "${TEST_PLAN_JSON_PATH}" \
           "${TEST_PLAN_COMMENT_PATH}"
 
@@ -214,6 +216,7 @@ runs:
         DEPENDENCY_DELTA_FULL_PATH: ${{ runner.temp }}/dependency-deltas-full.diff
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
         DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
+        PLAYBOOK_KIT_FACTS_PATH: ${{ github.workspace }}/playbook-kit-facts.json
         DEPENDENCY_SCOPE: ${{ inputs.dependency-scope }}
       run: |
         set -euo pipefail
@@ -284,6 +287,7 @@ runs:
           ${{ runner.temp }}/dependency-deltas-full.diff
           ${{ github.workspace }}/dependency-deltas-context.diff
           ${{ github.workspace }}/dependency-kit-usage.md
+          ${{ github.workspace }}/playbook-kit-facts.json
         if-no-files-found: warn
 
     - name: Render test-plan comment
@@ -295,6 +299,7 @@ runs:
         TEST_PLAN_PROFILE_NAME: ${{ steps.profile.outputs.display_name }}
         TEST_PLAN_GENERATION_WARNING: ${{ steps.dependency_delta.outputs.generation_warning }}
         TEST_PLAN_VARIANT: ${{ steps.variant.outputs.name }}
+        PLAYBOOK_KIT_FACTS_PATH: ${{ github.workspace }}/playbook-kit-facts.json
         PULL_REQUEST_TITLE: ${{ steps.pr_metadata.outputs.title }}
       run: ruby "${{ github.action_path }}/bin/render_test_plan.rb"
 

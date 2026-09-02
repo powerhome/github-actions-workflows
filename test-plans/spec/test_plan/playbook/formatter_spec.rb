@@ -1,112 +1,175 @@
 require_relative "../../spec_helper"
 require "test_plan/playbook/formatter"
+require "test_plan/playbook/kit_facts"
 require "test_plan/playbook/parser"
 
 require "json"
 
 RSpec.describe TestPlan::Playbook::Formatter do
-  def kit(name:, use_count:, cases: 1, code: nil)
+  KF = TestPlan::Playbook::KitFacts
+
+  def kit(name:, slug: nil, cases: 1, code: nil, system: "rails")
     {
-      "name" => name, "code" => code, "use_count" => use_count,
+      "name" => name, "slug" => slug || name.downcase, "code" => code,
       "what_changed" => "Behaviour moved.",
       "cases" => Array.new(cases) do |index|
-        { "title" => "Page #{index + 1}", "page" => "/page/#{index + 1}", "steps" => ["Confirm it still works."] }
+        { "title" => "Page #{index + 1}", "page" => "/page/#{index + 1}", "system" => system,
+          "steps" => ["Confirm it still works."] }
       end,
     }
   end
 
-  def render(payload, warning: "")
+  def facts(*entries)
+    KF.new(KF.document(entries).fetch("kits"))
+  end
+
+  def fact(slug:, name:, coverage:, call_sites:, systems_changed: ["rails"], systems_in_use: ["rails"])
+    { slug: slug, name: name, coverage: coverage, call_sites: call_sites,
+      systems_changed: systems_changed, systems_in_use: systems_in_use }
+  end
+
+  def render(payload, warning: "", kit_facts: KF.none)
     described_class.new(
       parsed: TestPlan::Playbook::Parser.new(JSON.generate(payload)),
       pull_request_title: "Playbook RC 17.2.0.pre.rc.0",
       profile_name: "Cobra Test Plan",
-      generation_warning: warning
+      generation_warning: warning,
+      kit_facts: kit_facts
     ).render
   end
 
   it "leads with the regression framing, because nothing here is a new feature" do
-    output = render({ "kits" => [kit(name: "Dropdown", use_count: 3)] })
+    output = render({ "kits" => [kit(name: "Dropdown")] })
 
     expect(output).to start_with("## ✅ Cobra Test Plan: Playbook RC 17.2.0.pre.rc.0")
     expect(output).to include("> **Every case below is a regression test.**")
-    # There is no separate regression section; the functional cases are it.
     expect(output).not_to include("## Regression Testing")
   end
 
-  it "answers breadth before any case" do
-    output = render({ "kits" => [kit(name: "Dropdown", use_count: 3), kit(name: "Body", use_count: 214, cases: 2)] })
+  # Stakeholders asked for it gone; the cases themselves carry the coverage wording.
+  it "has no coverage table" do
+    output = render({ "kits" => [kit(name: "Dropdown"), kit(name: "Body")] })
 
-    expect(output.index("## Coverage at a Glance")).to be < output.index("## Regression Coverage by Kit")
-    expect(output).to include("| Kit | Uses in app | Coverage | Cases |")
-    expect(output).to include("| Dropdown | 3 | Complete |")
-    expect(output).to include("| Body | 214 | Representative |")
+    expect(output).not_to include("## Coverage at a Glance")
+    expect(output).not_to include("| Kit |")
+    expect(output).to start_with("## ✅")
   end
 
-  # The tier is derived from the count here rather than taken from the provider, so a
-  # sample can never be published as exhaustive.
-  it "calls a narrowly used kit complete and says nothing is sampled" do
-    output = render({ "kits" => [kit(name: "Dropdown", use_count: described_class::COMPLETE_COVERAGE_MAX)] })
+  it "carries only the page and the system on a case" do
+    output = render({ "kits" => [kit(name: "Dropdown", system: "react")] })
 
-    expect(output).to include("· complete coverage")
-    expect(output).to include("every use in this repository is listed below. Nothing is sampled.")
-  end
-
-  it "calls a widely used kit representative and says how many it sampled" do
-    output = render({ "kits" => [kit(name: "Body", use_count: described_class::COMPLETE_COVERAGE_MAX + 1, cases: 3)] })
-
-    expect(output).to include("· representative sample")
-    expect(output).to include("used in 5 files across the application")
-    expect(output).to include("the 3 pages below are a **representative sample**")
-  end
-
-  it "numbers cases from the kit's code" do
-    output = render({ "kits" => [kit(name: "Dropdown", use_count: 3, cases: 2, code: "DRP")] })
-
-    expect(output).to include("#### DRP-1 — Page 1", "#### DRP-2 — Page 2")
-    expect(output).to include("| DRP-1 – DRP-2 |")
-  end
-
-  # A Playbook raise changes no permissions, so access belongs on the case rather than in
-  # a section that would always say "not identified".
-  it "carries access on the case instead of a permissions section" do
-    output = render(
-      { "kits" => [
-        {
-          "name" => "Dropdown", "use_count" => 1,
-          "cases" => [{ "title" => "Filter", "page" => "/x", "access" => "Contact Center — Read", "steps" => ["Open it."] }],
-        },
-      ] }
-    )
-
-    expect(output).to include("**Access:** Contact Center — Read")
+    expect(output).to include("**Page:** /page/1")
+    expect(output).to include("**System:** React")
+    expect(output).not_to include("**Source:**")
+    expect(output).not_to include("**Access:**")
     expect(output).not_to include("## Permissions / Roles")
   end
 
-  describe "beyond the kits" do
-    it "renders cross-cutting changes and other raises" do
+  describe "coverage, decided from what the action counted" do
+    it "says every use is listed when the action found the kit exhaustible" do
       output = render(
-        { "kits" => [kit(name: "Dropdown", use_count: 1)],
-          "cross_cutting" => [
-          { "area" => "Global props / tokens", "paths" => ["tokens/_colors.scss"],
-            "risk" => "Shows as layout drift.", "steps" => ["Spot-check a dense page."] },
-        ],
-          "other_dependencies" => [
-            { "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2", "note" => "Patch bump. No dedicated testing." },
-          ] }
+        { "kits" => [kit(name: "Dropdown", cases: 3)] },
+        kit_facts: facts(fact(slug: "dropdown", name: "Dropdown", coverage: KF::COMPLETE, call_sites: 3))
       )
 
-      expect(output).to include("## Beyond the Kits")
-      expect(output).to include("### Playbook changes not scoped to a kit", "**Global props / tokens**")
-      expect(output).to include("`tokens/_colors.scss`", "Shows as layout drift.")
-      expect(output).to include("### Other dependency raises in this PR")
-      expect(output).to include("- **cgi 0.5.1 → 0.5.2** — Patch bump. No dedicated testing.")
+      expect(output).to include("**Coverage:** #{KF::COMPLETE_SENTENCE}")
     end
 
-    # Says the check ran, rather than leaving a reader to wonder whether it did.
-    it "says so when there is nothing beyond the kits" do
-      output = render({ "kits" => [kit(name: "Dropdown", use_count: 1)] })
+    it "says representative sample when the kit is used widely, and prints no count" do
+      output = render(
+        { "kits" => [kit(name: "Body", cases: 4)] },
+        kit_facts: facts(fact(slug: "body", name: "Body", coverage: KF::REPRESENTATIVE, call_sites: 1106))
+      )
 
-      expect(output).to include("No Playbook changes outside the kits were identified.")
+      expect(output).to include("**Coverage:** #{KF::REPRESENTATIVE_SENTENCE}")
+      # The count stays in the facts file and the job summary, never in the comment.
+      expect(output).not_to include("1106")
+      expect(output).not_to include("4 pages")
+    end
+
+    it "says so when nothing in this repository uses the kit" do
+      output = render(
+        { "kits" => [kit(name: "Dialog")] },
+        kit_facts: facts(
+          fact(slug: "dialog", name: "Dialog", coverage: KF::UNUSED, call_sites: 0, systems_in_use: [])
+        )
+      )
+
+      expect(output).to include(KF::UNUSED_SENTENCE)
+    end
+
+    # Never upgrade coverage on the provider's word alone.
+    it "reads as a sample when no fact matched the kit" do
+      output = render({ "kits" => [kit(name: "Dropdown", slug: "mismatched")] })
+
+      expect(output).to include(KF::REPRESENTATIVE_SENTENCE)
+    end
+
+    # What the parser's old use_count clamp was really protecting: "every use is listed
+    # below" must not appear above a list shorter than the call sites.
+    it "downgrades an exhaustible kit the provider under-covered" do
+      output = render(
+        { "kits" => [kit(name: "Dropdown", cases: 1)] },
+        kit_facts: facts(fact(slug: "dropdown", name: "Dropdown", coverage: KF::COMPLETE, call_sites: 4))
+      )
+
+      expect(output).to include(KF::REPRESENTATIVE_SENTENCE)
+      expect(output).not_to include(KF::COMPLETE_SENTENCE)
+    end
+  end
+
+  describe "which side of the kit changed" do
+    it "names the changed systems on the kit heading" do
+      output = render(
+        { "kits" => [kit(name: "Dropdown")] },
+        kit_facts: facts(
+          fact(slug: "dropdown", name: "Dropdown", coverage: KF::REPRESENTATIVE, call_sites: 20,
+               systems_changed: %w[rails react], systems_in_use: %w[rails react])
+        )
+      )
+
+      expect(output).to include("### Dropdown — Rails and React")
+    end
+
+    it "notes a changed system nothing here renders" do
+      output = render(
+        { "kits" => [kit(name: "Dropdown")] },
+        kit_facts: facts(
+          fact(slug: "dropdown", name: "Dropdown", coverage: KF::REPRESENTATIVE, call_sites: 20,
+               systems_changed: %w[rails react], systems_in_use: ["rails"])
+        )
+      )
+
+      expect(output).to include("changed the React side of this kit, but nothing in this repository renders it")
+    end
+  end
+
+  it "numbers cases from the kit's code" do
+    output = render({ "kits" => [kit(name: "Dropdown", cases: 2, code: "DRP")] })
+
+    expect(output).to include("#### DRP-1 — Page 1", "#### DRP-2 — Page 2")
+  end
+
+  describe "beyond the kits" do
+    it "lists the other dependency raises and nothing else" do
+      output = render(
+        {
+          "kits" => [kit(name: "Dropdown")],
+          "other_dependencies" => [
+            { "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2", "note" => "Patch bump. No dedicated testing." },
+          ],
+        }
+      )
+
+      expect(output).to include("## Other dependency raises in this PR")
+      expect(output).to include("- **cgi 0.5.1 → 0.5.2** — Patch bump. No dedicated testing.")
+      # Playbook's own version constant, packaging and docs site are not a tester's problem.
+      expect(output).not_to include("Playbook changes not scoped to a kit")
+    end
+
+    it "says so when there were none" do
+      output = render({ "kits" => [kit(name: "Dropdown")] })
+
       expect(output).to include("No other dependency raises in this PR.")
     end
   end
@@ -115,8 +178,9 @@ RSpec.describe TestPlan::Playbook::Formatter do
     output = render(
       { "kits" => [
         {
-          "name" => "<img src=q onerror=alert(1)>", "use_count" => 1,
-          "cases" => [{ "title" => "Ping @someone", "page" => "https://example.test/phish", "steps" => ["[click](https://example.test)"] }],
+          "name" => "<img src=q onerror=alert(1)>",
+          "cases" => [{ "title" => "Ping @someone", "page" => "https://example.test/phish",
+                        "steps" => ["[click](https://example.test)"] }],
         },
       ] }
     )
@@ -128,7 +192,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
 
   it "carries the dependency-delta warning and the discard notice" do
     output = render(
-      { "kits" => [kit(name: "Dropdown", use_count: 1), { "name" => "Broken", "cases" => [] }] },
+      { "kits" => [kit(name: "Dropdown"), { "name" => "Broken", "cases" => [] }] },
       warning: "Some external dependency evidence is incomplete: irb (provider context budget exhausted)."
     )
 
@@ -137,8 +201,6 @@ RSpec.describe TestPlan::Playbook::Formatter do
   end
 
   it "says so when no kit survived" do
-    output = render({ "kits" => [] })
-
-    expect(output).to include("No changed Playbook kits were identified for this upgrade.")
+    expect(render({ "kits" => [] })).to include("No changed Playbook kits were identified for this upgrade.")
   end
 end

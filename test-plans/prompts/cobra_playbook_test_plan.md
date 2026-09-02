@@ -1,12 +1,11 @@
 You are generating a manual QA test plan for a pull request that raises the Playbook design system version. Respond with a single JSON object and nothing else.
 
-Every file in this pull request is a lockfile, so `pr.diff` will not tell you what to test. Your evidence is:
+Every file in this pull request is a lockfile, so there is no application diff to read. Your evidence is exactly two files, and everything you write must come from them:
 
-- `dependency-kit-usage.md` — the Playbook kits this upgrade changed, where this repository uses each one, and whether that list is exhaustive or a sample. This is what tells you which pages to cover. It also has a "Changes not scoped to a kit" section when the release changed things that belong to no kit.
+- `dependency-kit-usage.md` — the Playbook kits this upgrade changed, which side of each kit changed (the Rails helper, the React component, or both), where this repository calls that side, and whether the listed call sites are every use or a spread sample. It ends with the other dependencies this pull request raised.
 - `dependency-deltas-context.diff` — the upstream source delta, led by the changelog. Treat the changelog as the most reliable statement of what changed; the source diff is supporting detail.
-- `dependency-delta-manifest.json` — every dependency this pull request raised, including any that are not Playbook.
 
-You may read repository files to understand how a page uses a kit. Do not create coverage for Playbook internals a tester cannot see.
+You may open a repository file named in the evidence to understand how a page uses a kit. Do not go looking for anything else: no other evidence file, no Playbook internals, and nothing off this machine.
 
 ## Everything here is a regression test
 
@@ -14,35 +13,39 @@ The upgrade adds no features to this application. Every case you write is confir
 
 ## Organize by kit
 
-One entry per changed kit that this repository actually uses. Skip a kit the repository never calls — say nothing rather than inventing a page.
+One entry per kit in the evidence. Skip a kit the evidence says nothing here uses — say nothing rather than inventing a page.
 
 For each kit:
 
-- `name` — the kit's display name, for example `Dropdown` or `File Upload`.
-- `code` — 2–6 uppercase letters used to number its cases, for example `DRP`.
+- `name` — the kit's display name, as the evidence heading gives it, for example `File Upload`.
+- `slug` — the kit's identifier, the backticked name in the same heading, for example `file_upload`.
+- `code` — 2–6 uppercase letters used to number its cases, for example `FLU`.
 - `what_changed` — one or two sentences, in product terms, from the changelog and source diff. What behavior moved, not which files.
-- `use_count` — how many files use this kit, copied from `dependency-kit-usage.md`. Copy the number; do not estimate it.
 - `cases` — the pages to test.
 
-How many cases depends on how widely the kit is used, and `dependency-kit-usage.md` tells you which case you are in:
+Do not report how many files use a kit. The evidence tells you whether the call sites listed are all of them or a sample, and the plan says which; you do not need to count anything and must not restate a count.
 
-- **Every use listed** — write a case for each one. The plan will say the coverage is exhaustive.
-- **A sample listed** — choose 3–4 that look most different from each other, preferring pages a tester can reach easily. The plan will say the coverage is representative. Do not apologize for sampling in your text; the plan states it.
+### How many cases, and which
+
+Three or four cases per kit. Choose them for variety, not for convenience:
+
+- **Every call site listed** — cover them, up to four.
+- **A sample listed** — the sample is already spread across components. Pick three or four from it that come from **different components**, because two pages in the same component are usually the same implementation twice.
+- **Both sides of the kit changed and both are in use** — at least one case for each side, inside the same three-or-four budget.
+- **A changed side nothing here renders** — write nothing for it. The plan already says so.
 
 Each case needs:
 
 - `title` — where the tester is going, in words, for example `Contact Center · Reminder Calls filter`.
-- `page` — the route a tester opens, for example `/contact_center/reminder_calls`. Infer it from the source file's controller and routes. Leave empty rather than guessing at one you cannot support.
-- `source` — the repository-relative file that uses the kit, from the evidence.
-- `access` — the role or permission needed to reach the page, if you can tell. Leave empty otherwise.
-- `steps` — what to do and what to confirm. Ground each step in what the kit change could plausibly break on that page.
+- `page` — the route a tester opens, for example `/contact_center/reminder_calls`. Infer it from the call site's controller and routes. Leave empty rather than guessing at one you cannot support.
+- `system` — `rails` or `react`, whichever side of the kit this call site uses. Required; the plan labels every case with it.
+- `steps` — what to do and what to confirm. Ground each step in what this specific change could plausibly break on that page.
 
-## Beyond the kits
+## Other dependency raises
 
-- `cross_cutting` — Playbook changes belonging to no kit: tokens, global props, the `pb_rails` helper layer, React bindings. Use the "Changes not scoped to a kit" section of the evidence. Each entry has `area`, `paths`, `risk`, and optional `steps`. Omit the key entirely if there were none.
-- `other_dependencies` — dependencies in the manifest other than `playbook_ui` and `playbook-ui`. Each has `name`, `from`, `to`, a short `note`, and optional `steps`. A patch bump with no behavioral change gets a note and no steps; say plainly that it needs no dedicated testing. Only escalate to steps when the delta shows something a tester could observe. Omit the key entirely if there were none.
+`other_dependencies` — one entry per dependency listed at the end of the evidence file, each with `name`, `from`, `to`, a short `note`, and optional `steps`. A patch bump with no behavioral change gets a note and no steps; say plainly that it needs no dedicated testing. Only escalate to steps when the delta shows something a tester could observe. Omit the key entirely if the evidence listed none.
 
-Every line in these two lists must trace to a changed path or a raised dependency. Do not add general advice.
+Write about nothing else here. Playbook's own version constant, its packaging, and its documentation site are not a tester's problem, and a release always changes them.
 
 ## Response shape
 
@@ -51,26 +54,23 @@ Every line in these two lists must trace to a changed path or a raised dependenc
   "kits": [
     {
       "name": "Dropdown",
+      "slug": "dropdown",
       "code": "DRP",
       "what_changed": "Dynamic options can now be supplied through a hook.",
-      "use_count": 3,
       "cases": [
         {
           "title": "Contact Center · Reminder Calls filter",
           "page": "/contact_center/reminder_calls",
-          "source": "components/contact_center/app/views/reminder_calls/index.html.erb",
-          "access": "Contact Center — Read",
+          "system": "rails",
           "steps": ["Open the filter dropdown and confirm the options still render."]
+        },
+        {
+          "title": "Admin · Territories",
+          "page": "/admin/territories_branches_locations",
+          "system": "react",
+          "steps": ["Confirm the territory dropdown still applies a selection."]
         }
       ]
-    }
-  ],
-  "cross_cutting": [
-    {
-      "area": "Global props / tokens",
-      "paths": ["app/pb_kits/playbook/tokens/_colors.scss"],
-      "risk": "Applies to every kit; a regression shows as layout drift rather than a broken control.",
-      "steps": ["Spot-check spacing and color on one dense page and one form-heavy page."]
     }
   ],
   "other_dependencies": [

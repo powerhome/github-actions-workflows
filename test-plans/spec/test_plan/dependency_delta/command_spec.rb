@@ -16,10 +16,10 @@ RSpec.describe TestPlan::DependencyDelta::Command do
 
   # Names, versions and paths come from lockfiles the pull request can edit, and the
   # summary is rendered as Markdown in the Actions UI.
-  def summary_for(manifest)
+  def summary_for(manifest, kit_facts = { "kits" => {} })
     Tempfile.create("summary") do |file|
       ENV["GITHUB_STEP_SUMMARY"] = file.path
-      described_class.new.send(:write_summary, manifest)
+      described_class.new.send(:write_summary, manifest, kit_facts)
       File.read(file.path)
     ensure
       ENV.delete("GITHUB_STEP_SUMMARY")
@@ -45,6 +45,22 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).not_to include("https://example.test")
     expect(summary).to include("&lt;img", "&#64;evil", "https&#58;//example.test")
     expect(summary).to include("\\[click\\]")
+  end
+
+  # The counts left the evidence file so the provider has nothing to copy, which makes the
+  # summary the place a person reads them.
+  it "reports each changed kit's call sites in the job summary" do
+    summary = summary_for(
+      { "dependencies" => [], "lockfile_warnings" => [] },
+      "kits" => {
+        "dropdown" => { "name" => "Dropdown", "coverage" => "representative", "call_sites" => 23 },
+        "dialog" => { "name" => "Dialog", "coverage" => "unused", "call_sites" => 0 },
+      }
+    )
+
+    expect(summary).to include("- Playbook kits changed: 2")
+    expect(summary).to include("Dropdown: 23 call sites (representative)")
+    expect(summary).to include("Dialog: 0 call sites (unused)")
   end
 
   # First point in the run that can say the plan should be shaped by kit.
