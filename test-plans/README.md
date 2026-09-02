@@ -76,6 +76,8 @@ A kit is two implementations sharing a name, and a release usually moves only on
 
 Call sites are spread across components before they are sampled. `git grep` answers in lexicographic order, which is the worst order to sample a monorepo in: `pb_body` matched 1106 files and the first twenty were every one of them under `components/accounting/`, so the "sample" covered one corner of the application while the plan called the kit covered. `CallSiteSample` round-robins by component first.
 
+A kit whose usage search could not be completed says so rather than borrowing the representative-sample wording: "testing every use is not practical" is a claim about how widely the kit is used, and a search that did not finish supports no such claim. Publishing it would assert something unknown and bury the failure.
+
 No counts appear in the evidence file or the comment. A kit with four call sites or fewer reads as "every use is listed"; more reads as a representative sample. The action decides that from its own search and carries it to the render step in `playbook-kit-facts.json` — written outside the workspace, since the provider reads the workspace with `Read(**)` and this is the one file whose numbers it must not see — so the provider is never asked to report a number nobody can check — it earlier reported a kit as used in 1083 files, and a count it copies is a count that can be wrong. The counts stay in that facts file, the job summary and the run log.
 
 ### The Playbook plan

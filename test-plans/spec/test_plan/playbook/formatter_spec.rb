@@ -116,6 +116,21 @@ RSpec.describe TestPlan::Playbook::Formatter do
       expect(output).to include(KF::UNUSED_SENTENCE)
     end
 
+    # A grep that failed leaves the plan unable to say how widely the kit is used, and
+    # claiming a representative sample would assert that anyway while hiding the failure.
+    it "says the usage search failed rather than claiming a sample" do
+      output = render(
+        { "kits" => [kit(name: "Dropdown")] },
+        kit_facts: facts(
+          fact(slug: "dropdown", name: "Dropdown", coverage: KF::UNKNOWN, call_sites: 0,
+               systems_in_use: [])
+        )
+      )
+
+      expect(output).to include(KF::UNKNOWN_SENTENCE)
+      expect(output).not_to include(KF::REPRESENTATIVE_SENTENCE)
+    end
+
     # Never upgrade coverage on the provider's word alone.
     it "reads as a sample when no fact matched the kit" do
       output = render({ "kits" => [kit(name: "Dropdown", slug: "mismatched")] })

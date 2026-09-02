@@ -24,6 +24,28 @@ RSpec.describe TestPlan::Playbook::KitFacts do
     end
   end
 
+  describe ".sentence" do
+    it "gives each coverage its own claim" do
+      expect(described_class.sentence(described_class::COMPLETE)).to eq(described_class::COMPLETE_SENTENCE)
+      expect(described_class.sentence(described_class::UNUSED)).to eq(described_class::UNUSED_SENTENCE)
+    end
+
+    # "Testing every use is not practical" is a claim about how widely the kit is used, and
+    # a search that did not finish supports no such claim.
+    it "says the search failed rather than claiming a representative sample" do
+      sentence = described_class.sentence(described_class::UNKNOWN)
+
+      expect(sentence).to eq(described_class::UNKNOWN_SENTENCE)
+      expect(sentence).not_to eq(described_class::REPRESENTATIVE_SENTENCE)
+      expect(sentence).to include("could not be completed")
+    end
+
+    # A corrupt facts file should under-claim, not promise coverage.
+    it "falls back to a representative sample for a value it does not know" do
+      expect(described_class.sentence("something else")).to eq(described_class::REPRESENTATIVE_SENTENCE)
+    end
+  end
+
   it "labels the systems in a fixed order" do
     expect(described_class.systems_label(%w[react rails])).to eq("Rails and React")
     expect(described_class.systems_label(["react"])).to eq("React")

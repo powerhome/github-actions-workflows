@@ -24,6 +24,9 @@ module TestPlan
         "representative sample."
       UNUSED_SENTENCE = "This upgrade changed this kit, but no use of it was found in this " \
         "repository."
+      UNKNOWN_SENTENCE = "The search for uses of this kit could not be completed, so how widely " \
+        "it is used here is unknown. Treat the pages below as a starting point rather than as " \
+        "coverage, and see the workflow run for the reason the search failed."
 
       # A count this action could not complete never reads as exhaustive: an unfinished
       # search and an empty one are opposite claims.
@@ -34,10 +37,18 @@ module TestPlan
         call_sites <= COMPLETE_COVERAGE_MAX ? COMPLETE : REPRESENTATIVE
       end
 
+      # UNKNOWN gets said out loud rather than folded into the representative sentence.
+      # "Testing every use is not practical" is a claim about how widely the kit is used,
+      # and a search that did not finish supports no such claim -- publishing it would both
+      # assert something unknown and bury the fact that evidence collection failed.
+      #
+      # An unrecognised value falls back to the representative sentence, which under-claims
+      # rather than promising coverage a corrupt facts file cannot support.
       def self.sentence(coverage)
         case coverage
         when COMPLETE then COMPLETE_SENTENCE
         when UNUSED then UNUSED_SENTENCE
+        when UNKNOWN then UNKNOWN_SENTENCE
         else REPRESENTATIVE_SENTENCE
         end
       end
