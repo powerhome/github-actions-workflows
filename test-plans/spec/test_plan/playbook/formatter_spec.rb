@@ -14,7 +14,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
       "what_changed" => "Behaviour moved.",
       "cases" => Array.new(cases) do |index|
         { "title" => "Page #{index + 1}", "page" => "/page/#{index + 1}", "system" => system,
-          "steps" => ["Confirm it still works."] }
+          "steps" => ["Open page #{index + 1}.", "Confirm page #{index + 1} still works."] }
       end,
     }
   end
@@ -53,6 +53,24 @@ RSpec.describe TestPlan::Playbook::Formatter do
     expect(output).not_to include("## Coverage at a Glance")
     expect(output).not_to include("| Kit |")
     expect(output).to start_with("## ✅")
+  end
+
+  # The steps are the plan: everything else on a case is just how a tester finds the page.
+  # Nothing asserted them until deleting the line that renders them left the suite green.
+  it "renders every step of every case, in the order they were written" do
+    output = render({ "kits" => [kit(name: "Dropdown", cases: 2)] })
+
+    expect(output).to include("- Open page 1.\n- Confirm page 1 still works.")
+    expect(output).to include("- Open page 2.\n- Confirm page 2 still works.")
+  end
+
+  it "keeps each case's steps under that case rather than pooling them" do
+    output = render({ "kits" => [kit(name: "Dropdown", cases: 2, code: "DRP")] })
+
+    first = output.index("#### DRP-1")
+    second = output.index("#### DRP-2")
+    expect(output.index("Open page 1.")).to be_between(first, second)
+    expect(output.index("Open page 2.")).to be > second
   end
 
   it "carries only the page and the system on a case" do
