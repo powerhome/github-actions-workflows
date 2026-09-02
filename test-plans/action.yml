@@ -230,6 +230,7 @@ runs:
         TEST_PLAN_PROMPT_PATH: ${{ steps.profile.outputs.prompt_path }}
         TEST_PLAN_PLAYBOOK_PROMPT_PATH: ${{ steps.profile.outputs.playbook_prompt_path }}
         PLAYBOOK_KITS_CHANGED: ${{ steps.dependency_delta.outputs.playbook_kits_changed }}
+        LOCKFILE_ONLY: ${{ steps.dependency_delta.outputs.lockfile_only }}
       run: ruby "${{ github.action_path }}/bin/select_variant.rb"
 
     - name: Reset agent instructions to the merge base

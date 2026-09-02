@@ -6,6 +6,11 @@ module TestPlan
   module DependencyDelta
     class GitSnapshot
       DEPENDENCY_FILENAMES = %w[Gemfile.lock yarn.lock package.json].freeze
+      # What a version bump edits, lockfiles plus the declarations above them. A pull
+      # request that changed only these changed no application behaviour, which is the
+      # premise the Playbook plan is written on: it is told there is no application diff
+      # to read, so it must not be chosen for a pull request that has one.
+      DECLARATION_FILENAMES = (DEPENDENCY_FILENAMES + %w[Gemfile .gemspec]).freeze
 
       # A trailing-substring test also accepts "my-package.json" or "custom-Gemfile", which
       # are unrelated files. Names have to match a whole path segment; ".gemspec" stays an
@@ -29,10 +34,26 @@ module TestPlan
         @merge_base_sha ||= git("merge-base", base_sha, head_sha).strip
       end
 
+      def changed_files
+        git("diff", "--name-only", "#{merge_base_sha}..#{head_sha}")
+          .lines.map(&:strip).reject(&:empty?)
+      end
+
       def changed_dependency_files
-        stdout = git("diff", "--name-only", "#{merge_base_sha}..#{head_sha}")
-        stdout.lines.map(&:strip).select do |path|
+        changed_files.select do |path|
           DEPENDENCY_FILENAMES.any? { |name| self.class.matches?(path, name) }
+        end
+      end
+
+      # False for an empty diff as well as a mixed one: "nothing changed" is not the same
+      # claim as "only declarations changed", and only the second one licenses a plan that
+      # never looks at the application.
+      def declarations_only?
+        changed = changed_files
+        return false if changed.empty?
+
+        changed.all? do |path|
+          DECLARATION_FILENAMES.any? { |name| self.class.matches?(path, name) }
         end
       end
 

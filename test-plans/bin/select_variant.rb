@@ -6,7 +6,8 @@ begin
   selection = TestPlan::Variant.select(
     prompt_path: ENV.fetch("TEST_PLAN_PROMPT_PATH"),
     playbook_prompt_path: ENV["TEST_PLAN_PLAYBOOK_PROMPT_PATH"].to_s,
-    playbook_kits_changed: ENV["PLAYBOOK_KITS_CHANGED"].to_s == "true"
+    playbook_kits_changed: ENV["PLAYBOOK_KITS_CHANGED"].to_s == "true",
+    lockfile_only: ENV["LOCKFILE_ONLY"].to_s == "true"
   )
 
   File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|

@@ -1,8 +1,11 @@
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
+require "json"
+require "open3"
 require "stringio"
 require "tempfile"
+require "tmpdir"
 
 RSpec.describe TestPlan::DependencyDelta::Command do
   def capture_stdout
@@ -12,6 +15,82 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     $stdout.string
   ensure
     $stdout = original
+  end
+
+  # Everything else here reaches a private method directly, which is how a reassignment
+  # that left kit_usage holding a String instead of the usage object shipped: run itself
+  # was never called, so nothing noticed that every step would die on String#facts.
+  #
+  # The lockfile resolves from a private registry on purpose, so the retriever refuses it
+  # without reaching the network and the run stays deterministic.
+  describe "#run" do
+    def lockfile(version)
+      <<~LOCK
+        GEM
+          remote: https://gems.powerapp.cloud/
+          specs:
+            widget (#{version})
+
+        DEPENDENCIES
+          widget
+      LOCK
+    end
+
+    def workspace
+      Dir.mktmpdir do |root|
+        File.write(File.join(root, "Gemfile.lock"), lockfile("1.0.0"))
+        Open3.capture3("git", "init", "--quiet", "--initial-branch", "main", ".", chdir: root)
+        Open3.capture3("git", "add", "-A", chdir: root)
+        Open3.capture3("git", "-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "base", chdir: root)
+        base = Open3.capture3("git", "rev-parse", "HEAD", chdir: root).first.strip
+
+        File.write(File.join(root, "Gemfile.lock"), lockfile("2.0.0"))
+        Open3.capture3("git", "add", "-A", chdir: root)
+        Open3.capture3("git", "-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "head", chdir: root)
+        head = Open3.capture3("git", "rev-parse", "HEAD", chdir: root).first.strip
+
+        yield(root, base, head)
+      end
+    end
+
+    def run_command(root, base, head)
+      paths = {
+        "DEPENDENCY_DELTA_MANIFEST_PATH" => File.join(root, "manifest.json"),
+        "DEPENDENCY_DELTA_FULL_PATH" => File.join(root, "full.diff"),
+        "DEPENDENCY_DELTA_CONTEXT_PATH" => File.join(root, "context.diff"),
+        "DEPENDENCY_KIT_USAGE_PATH" => File.join(root, "kit-usage.md"),
+        "PLAYBOOK_KIT_FACTS_PATH" => File.join(root, "kit-facts.json"),
+        "GITHUB_OUTPUT" => File.join(root, "output.txt"),
+        "GITHUB_STEP_SUMMARY" => File.join(root, "summary.md"),
+      }
+      env = paths.merge("GITHUB_WORKSPACE" => root, "BASE_SHA" => base, "HEAD_SHA" => head)
+      original = env.keys.to_h { |key| [key, ENV[key]] }
+
+      env.each { |key, value| ENV[key] = value }
+      capture_stdout { described_class.new.run }
+      paths.transform_values { |path| File.exist?(path) ? File.read(path) : nil }
+    ensure
+      original.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+    end
+
+    it "writes every file and output the later steps read" do
+      workspace do |root, base, head|
+        written = run_command(root, base, head)
+
+        expect(JSON.parse(written.fetch("DEPENDENCY_DELTA_MANIFEST_PATH")))
+          .to include("version" => 1)
+        expect(written.fetch("DEPENDENCY_DELTA_FULL_PATH")).not_to be_nil
+        expect(written.fetch("DEPENDENCY_DELTA_CONTEXT_PATH")).not_to be_nil
+        # No Playbook raise, so the facts document is empty rather than absent -- the
+        # render step reads it unconditionally and the artifact upload expects it.
+        expect(JSON.parse(written.fetch("PLAYBOOK_KIT_FACTS_PATH"))).to eq("version" => 1, "kits" => {})
+        expect(written.fetch("DEPENDENCY_KIT_USAGE_PATH")).to eq("")
+
+        output = written.fetch("GITHUB_OUTPUT")
+        expect(output).to include("change_count=1", "playbook_kits_changed=false")
+        expect(written.fetch("GITHUB_STEP_SUMMARY")).to include("## External dependency delta")
+      end
+    end
   end
 
   # Names, versions and paths come from lockfiles the pull request can edit, and the
@@ -63,13 +142,16 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("Dialog: 0 call sites (unused)")
   end
 
-  # First point in the run that can say the plan should be shaped by kit.
-  it "reports whether the raise changed Playbook kits" do
-    [[%w[dropdown file_upload], "true"], [[], "false"]].each do |kits, expected|
+  # First point in the run that can say the plan should be shaped by kit -- and whether the
+  # pull request is the lockfile-only shape that plan is written for.
+  it "reports whether the raise changed Playbook kits, and whether anything else changed" do
+    [[%w[dropdown file_upload], true], [[], false]].each do |kits, declarations_only|
       Tempfile.create("output") do |file|
         ENV["GITHUB_OUTPUT"] = file.path
-        described_class.new.send(:write_outputs, 4, 0, "", kits)
-        expect(File.read(file.path)).to include("playbook_kits_changed=#{expected}")
+        described_class.new.send(:write_outputs, 4, 0, "", kits, declarations_only)
+        expect(File.read(file.path)).to include(
+          "playbook_kits_changed=#{kits.any?}", "lockfile_only=#{declarations_only}"
+        )
       ensure
         ENV.delete("GITHUB_OUTPUT")
       end

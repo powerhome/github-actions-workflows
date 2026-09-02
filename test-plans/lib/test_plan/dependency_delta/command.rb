@@ -43,9 +43,10 @@ module TestPlan
         File.write(context_path, result.fetch(:context), encoding: Encoding::UTF_8)
 
         kit_usage_path = ENV.fetch("DEPENDENCY_KIT_USAGE_PATH")
-        kit_usage = result.fetch(:kit_usage).to_s
-        kit_usage += other_raises_section(changes) unless kit_usage.empty?
-        File.write(kit_usage_path, kit_usage, encoding: Encoding::UTF_8)
+        # A separate name: kit_usage is the usage object the later writes still need.
+        report = result.fetch(:kit_usage).to_s
+        report += other_raises_section(changes) unless report.empty?
+        File.write(kit_usage_path, report, encoding: Encoding::UTF_8)
 
         # Written whatever the raise was, so the render step has a file to read and the
         # artifact upload has nothing to warn about. The provider is never pointed at it:
@@ -59,7 +60,9 @@ module TestPlan
 
         warning_count = result.dig(:manifest, "warning_count")
         warning = warning_count.positive? ? warning_message(result.fetch(:manifest)) : ""
-        write_outputs(changes.length, warning_count, warning, kit_usage.kits)
+        write_outputs(
+          changes.length, warning_count, warning, kit_usage.kits, snapshot.declarations_only?
+        )
         write_summary(result.fetch(:manifest), kit_usage.facts)
         log_manifest(manifest_path, result.fetch(:manifest))
         puts("::warning::#{warning}") unless warning.empty?
@@ -132,7 +135,7 @@ module TestPlan
         text.gsub(/\s+/, " ").strip
       end
 
-      def write_outputs(change_count, warning_count, warning, kits)
+      def write_outputs(change_count, warning_count, warning, kits, declarations_only)
         File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|
           output.puts("change_count=#{change_count}")
           output.puts("warning_count=#{warning_count}")
@@ -140,6 +143,7 @@ module TestPlan
           # First point in the run that can know: the profile resolved from the label
           # before any lockfile was read.
           output.puts("playbook_kits_changed=#{kits.any?}")
+          output.puts("lockfile_only=#{declarations_only}")
         end
       end
 

@@ -8,8 +8,15 @@ module TestPlan
 
     module_function
 
-    def select(prompt_path:, playbook_prompt_path: "", playbook_kits_changed: false)
-      if playbook_kits_changed && !playbook_prompt_path.to_s.empty?
+    #
+    # Changed kits are not enough on their own. The Playbook plan is told there is no
+    # application diff to read and is pointed at the kit evidence instead, so a pull
+    # request that bumps Playbook *and* touches application code would have had those
+    # changes silently left out. The standard plan reads pr.diff and the kit evidence
+    # both, so it is the right shape for a mixed pull request.
+    def select(prompt_path:, playbook_prompt_path: "", playbook_kits_changed: false,
+               lockfile_only: false)
+      if playbook_kits_changed && lockfile_only && !playbook_prompt_path.to_s.empty?
         return { "name" => PLAYBOOK, "prompt_path" => playbook_prompt_path.to_s }
       end
 

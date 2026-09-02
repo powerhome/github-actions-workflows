@@ -1,6 +1,7 @@
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
+require "fileutils"
 require "open3"
 require "tmpdir"
 
@@ -82,6 +83,67 @@ RSpec.describe TestPlan::DependencyDelta::GitSnapshot do
       expect(snapshot.merge_base_sha).to eq(fork_point)
       expect(snapshot.read(snapshot.merge_base_sha, "Gemfile.lock")).to eq("fork point\n")
       expect(snapshot.changed_dependency_files).to eq(["Gemfile.lock"])
+    end
+  end
+
+  # The Playbook plan is told there is no application diff to read, so it must only be
+  # chosen for a pull request that genuinely has none.
+  describe "#declarations_only?" do
+    def snapshot_for(head_files)
+      Dir.mktmpdir do |directory|
+        git(directory, "init", "--initial-branch", "main", ".")
+        git(directory, "config", "user.email", "test@example.com")
+        git(directory, "config", "user.name", "Test")
+
+        File.write(File.join(directory, "Gemfile.lock"), "base\n")
+        FileUtils.mkdir_p(File.join(directory, "components/sales/app/views"))
+        File.write(File.join(directory, "components/sales/app/views/index.html.erb"), "base\n")
+        git(directory, "add", ".")
+        git(directory, "commit", "-m", "base")
+        base = git(directory, "rev-parse", "HEAD").strip
+
+        head_files.each do |path, content|
+          full = File.join(directory, path)
+          FileUtils.mkdir_p(File.dirname(full))
+          File.write(full, content)
+        end
+        git(directory, "add", "-A")
+        git(directory, "commit", "-m", "head")
+        head = git(directory, "rev-parse", "HEAD").strip
+
+        yield described_class.new(workspace: directory, base_sha: base, head_sha: head)
+      end
+    end
+
+    it "is true for a bump that touched only lockfiles and the declarations above them" do
+      snapshot_for(
+        "Gemfile.lock" => "head\n", "yarn.lock" => "head\n",
+        "package.json" => "{}\n", "Gemfile" => "head\n", "widget.gemspec" => "head\n"
+      ) { |snapshot| expect(snapshot.declarations_only?).to be(true) }
+    end
+
+    it "is false when the pull request also changed application code" do
+      snapshot_for(
+        "Gemfile.lock" => "head\n",
+        "components/sales/app/views/index.html.erb" => "head\n"
+      ) { |snapshot| expect(snapshot.declarations_only?).to be(false) }
+    end
+
+    # "Nothing changed" is not the same claim as "only declarations changed", and only the
+    # second licenses a plan that never looks at the application.
+    it "is false for an empty diff" do
+      Dir.mktmpdir do |directory|
+        git(directory, "init", "--initial-branch", "main", ".")
+        git(directory, "config", "user.email", "test@example.com")
+        git(directory, "config", "user.name", "Test")
+        File.write(File.join(directory, "Gemfile.lock"), "only\n")
+        git(directory, "add", ".")
+        git(directory, "commit", "-m", "only")
+        sha = git(directory, "rev-parse", "HEAD").strip
+
+        snapshot = described_class.new(workspace: directory, base_sha: sha, head_sha: sha)
+        expect(snapshot.declarations_only?).to be(false)
+      end
     end
   end
 
