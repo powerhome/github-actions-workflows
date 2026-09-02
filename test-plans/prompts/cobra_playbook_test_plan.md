@@ -27,9 +27,9 @@ Do not report how many files use a kit. The evidence tells you whether the call 
 
 ### How many cases, and which
 
-Three or four cases per kit. Choose them for variety, not for convenience:
+Up to four cases per kit. Exhaustive kits may have fewer than three; sampled kits should have three or four. Choose them for variety, not for convenience:
 
-- **Every call site listed** — cover them, up to four.
+- **Every call site listed** — cover each listed call site, up to four; do not invent additional cases to reach a minimum.
 - **A sample listed** — the sample is already spread across components. Pick three or four from it that come from **different components**, because two pages in the same component are usually the same implementation twice.
 - **Both sides of the kit changed and both are in use** — at least one case for each side, inside the same three-or-four budget.
 - **A changed side nothing here renders** — write nothing for it. The plan already says so.
