@@ -49,9 +49,12 @@ module TestPlan
         File.write(kit_usage_path, report, encoding: Encoding::UTF_8)
 
         # Written whatever the raise was, so the render step has a file to read and the
-        # artifact upload has nothing to warn about. The provider is never pointed at it:
-        # it exists for the renderer, and a document meant for one reader is a document the
-        # other will reason from.
+        # artifact upload has nothing to warn about.
+        #
+        # Deliberately outside the workspace, like the full delta: the provider runs there
+        # with Read(**), and this file carries the call-site counts the evidence withholds
+        # from it precisely so it has no number to copy back. Not pointing the prompt at a
+        # file it can open is not the same as it not being able to open it.
         File.write(
           ENV.fetch("PLAYBOOK_KIT_FACTS_PATH"),
           JSON.pretty_generate(kit_usage.facts) + "\n",
