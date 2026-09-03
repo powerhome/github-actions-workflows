@@ -22,11 +22,24 @@ module TestPlan
       ADD_DEPENDENCY =
         /^[ \t]*(?:[A-Za-z_]\w*\.)?add_(?:runtime_)?dependency\s*\(?\s*["']([^"'\n]+)["']/
 
-      attr_reader :problems
+      # Only the umbrella application is deployed, so a raise reaching nothing but
+      # component lockfiles changes nothing a tester can open. A single-lockfile
+      # repository is unaffected -- its lockfile is the root one. A monorepo that does
+      # mount its components wants "all".
+      UMBRELLA_LOCKFILES = %w[Gemfile.lock yarn.lock].freeze
+      SCOPES = %w[umbrella all].freeze
 
-      def initialize(snapshot)
+      attr_reader :problems, :out_of_scope
+
+      def initialize(snapshot, scope: "umbrella")
+        unless SCOPES.include?(scope.to_s)
+          raise "Unknown dependency scope: #{scope.inspect} (expected #{SCOPES.join(" or ")})"
+        end
+
         @snapshot = snapshot
+        @scope = scope.to_s
         @problems = []
+        @out_of_scope = []
       end
 
       def detect
@@ -62,10 +75,22 @@ module TestPlan
           )
         end
 
-        deduplicate(changes)
+        scoped(deduplicate(changes))
       end
 
     private
+
+      # After deduplication: a raise in both a root and a component lockfile is one
+      # change, and partitioning first would have judged the component copy alone.
+      def scoped(changes)
+        return changes if @scope == "all"
+
+        in_scope, out = changes.partition do |change|
+          change.lockfiles.any? { |path| UMBRELLA_LOCKFILES.include?(path) }
+        end
+        @out_of_scope = out
+        in_scope
+      end
 
       # An unreadable lockfile costs us evidence for that file only. Recording it as a
       # warning keeps the rest of the delta, and the test plan itself, intact.

@@ -25,6 +25,14 @@ inputs:
     description: Passed to rmacklin/fetch-through-merge-base as deepen_length
     required: false
     default: "30"
+  dependency-scope:
+    description: >-
+      Which lockfiles a dependency raise has to reach to be analyzed. "umbrella" (the
+      default) counts only the root Gemfile.lock and yarn.lock, so a raise confined to an
+      unmounted component's lockfile is recorded and skipped. "all" analyzes every
+      lockfile, which a monorepo that mounts its components wants.
+    required: false
+    default: umbrella
 
 runs:
   using: composite
@@ -41,7 +49,9 @@ runs:
       id: app_token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
-        app-id: ${{ inputs.app-id }}
+        # client-id, not the deprecated app-id: the action resolves both to one value and
+        # hands it to Octokit as the JWT issuer, so the existing App ID secret still works.
+        client-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
 
     - name: Check pull request mergeability
@@ -204,9 +214,22 @@ runs:
         DEPENDENCY_DELTA_FULL_PATH: ${{ runner.temp }}/dependency-deltas-full.diff
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
         DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
+        PLAYBOOK_KIT_FACTS_PATH: ${{ runner.temp }}/playbook-kit-facts.json
+        DEPENDENCY_SCOPE: ${{ inputs.dependency-scope }}
       run: |
         set -euo pipefail
         ruby "${{ github.action_path }}/bin/dependency_delta.rb"
+
+    - name: Select test-plan variant
+      id: variant
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        TEST_PLAN_PROMPT_PATH: ${{ steps.profile.outputs.prompt_path }}
+        TEST_PLAN_PLAYBOOK_PROMPT_PATH: ${{ steps.profile.outputs.playbook_prompt_path }}
+        PLAYBOOK_KITS_CHANGED: ${{ steps.dependency_delta.outputs.playbook_kits_changed }}
+        LOCKFILE_ONLY: ${{ steps.dependency_delta.outputs.lockfile_only }}
+      run: ruby "${{ github.action_path }}/bin/select_variant.rb"
 
     - name: Reset agent instructions to the merge base
       if: steps.pr_metadata.outputs.generate == 'true'
@@ -224,7 +247,7 @@ runs:
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
         MODEL: ${{ steps.profile.outputs.model }}
         TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
-        TEST_PLAN_PROMPT_PATH: ${{ steps.profile.outputs.prompt_path }}
+        TEST_PLAN_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
       run: |
         set -euo pipefail
 
@@ -263,6 +286,7 @@ runs:
           ${{ runner.temp }}/dependency-deltas-full.diff
           ${{ github.workspace }}/dependency-deltas-context.diff
           ${{ github.workspace }}/dependency-kit-usage.md
+          ${{ runner.temp }}/playbook-kit-facts.json
         if-no-files-found: warn
 
     - name: Render test-plan comment
@@ -273,6 +297,8 @@ runs:
         TEST_PLAN_COMMENT_PATH: ${{ github.workspace }}/test-plan-comment.md
         TEST_PLAN_PROFILE_NAME: ${{ steps.profile.outputs.display_name }}
         TEST_PLAN_GENERATION_WARNING: ${{ steps.dependency_delta.outputs.generation_warning }}
+        TEST_PLAN_VARIANT: ${{ steps.variant.outputs.name }}
+        PLAYBOOK_KIT_FACTS_PATH: ${{ runner.temp }}/playbook-kit-facts.json
         PULL_REQUEST_TITLE: ${{ steps.pr_metadata.outputs.title }}
       run: ruby "${{ github.action_path }}/bin/render_test_plan.rb"
 

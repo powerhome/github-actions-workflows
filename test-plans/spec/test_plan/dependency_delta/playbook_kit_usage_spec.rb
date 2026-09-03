@@ -31,8 +31,8 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     )
   end
 
-  def diff(path)
-    TestPlan::DependencyDelta::SourceDiff.new(path: path, diff: "x", priority: 1)
+  def diff(path, priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_RUNTIME)
+    TestPlan::DependencyDelta::SourceDiff.new(path: path, diff: "x", priority: priority)
   end
 
   let(:app) do
@@ -50,13 +50,14 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     }
   end
 
+  # The kit's stylesheet moves both sides of it, so both searches run.
   it "finds Rails and React usage of a changed kit" do
     workspace(app) do |root|
       usage = described_class.new(workspace: root)
-      usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_multi_level_select/_x.tsx")])
+      usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_multi_level_select/_x.scss")])
 
       report = usage.report
-      expect(report).to include("## Multi Level Select (`multi_level_select`) — 2 files")
+      expect(report).to include("## Multi Level Select (`multi_level_select`) — changed in Rails and React")
       expect(report).to include("components/directory/app/views/directory/index.html.erb")
       expect(report).to include("components/ui/app/javascript/Widget.tsx")
       expect(report).not_to include("unrelated.html.erb")
@@ -68,7 +69,7 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       usage = described_class.new(workspace: root)
       usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_phone_number_input/_x.rb")])
 
-      expect(usage.report).to include("Phone Number Input (`phone_number_input`) — 1 file")
+      expect(usage.report).to include("components/hr/app/views/hr/new_hire/_form.html.erb")
     end
   end
 
@@ -77,44 +78,138 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       usage = described_class.new(workspace: root)
       usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_table/_table.rb")])
 
-      expect(usage.report).to include("Table (`table`) — 1 file")
+      expect(usage.report).to include("components/hr/app/views/hr/new_hire/_sub.html.erb")
     end
   end
 
-  it "takes the kit list from the changed paths, ignoring non-kit files" do
-    workspace(app) do |root|
-      usage = described_class.new(workspace: root)
-      usage.observe(playbook_change, [
-        diff("app/pb_kits/playbook/pb_multi_level_select/_x.tsx"),
-        diff("lib/playbook/version.rb"),
-        diff("dist/playbook.css"),
-      ])
+  describe "which side of a kit changed" do
+    it "searches only the Rails side when only the Rails side moved" do
+      workspace(app) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_multi_level_select/_x.html.erb")])
 
-      expect(usage.report.scan(/^## /).length).to eq(1)
+        report = usage.report
+        expect(report).to include("— changed in Rails")
+        expect(report).to include("**Rails call sites**")
+        expect(report).not_to include("**React call sites**")
+        expect(report).not_to include("Widget.tsx")
+      end
+    end
+
+    it "searches only the React side when only the React side moved" do
+      workspace(app) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_multi_level_select/_x.tsx")])
+
+        report = usage.report
+        expect(report).to include("— changed in React")
+        expect(report).to include("Widget.tsx")
+        expect(report).not_to include("**Rails call sites**")
+      end
+    end
+
+    # The changed side is what a tester has to reopen, so a side nobody here renders has
+    # to be said rather than left as an empty list.
+    it "says so when a changed side is not rendered in this repository" do
+      workspace(app) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_table/_table.scss")])
+
+        report = usage.report
+        expect(report).to include("— changed in Rails and React")
+        expect(report).to include("changed the React side of this kit, but nothing in this repository renders it")
+      end
     end
   end
 
-  it "reports a widely used kit as a count rather than a list" do
-    files = (1..30).to_h do |n|
-      ["components/wide/app/views/page_#{n}.html.erb", %(<%= pb_rails("card") %>\n)]
+  # Playbook ships a kit's docs and tests inside the kit directory, so without this a
+  # release that only refreshed the docs site reported the kit as changed.
+  describe "documentation and tests are not the kit changing" do
+    it "does not register a kit whose only change is a doc example" do
+      workspace(app) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [
+          diff("app/pb_kits/playbook/pb_icon/docs/_icon_class.md",
+               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
+          diff("app/pb_kits/playbook/pb_icon/icon.test.js",
+               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_TEST),
+        ])
+
+        expect(usage.kits).to be_empty
+        expect(usage.report).to be_nil
+      end
     end
 
-    workspace(files) do |root|
-      usage = described_class.new(workspace: root)
-      usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+    it "still registers a kit that changed source alongside its docs" do
+      workspace(app) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [
+          diff("app/pb_kits/playbook/pb_table/docs/_table_docs.md",
+               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
+          diff("app/pb_kits/playbook/pb_table/_table.rb"),
+        ])
 
-      report = usage.report
-      expect(report).to include("Card (`card`) — 30 files", "Used too widely to list")
-      expect(report).not_to include("page_1.html.erb")
+        expect(usage.kits).to eq(["table"])
+      end
     end
   end
 
-  it "says so when a changed kit is not used here at all" do
-    workspace(app) do |root|
-      usage = described_class.new(workspace: root)
-      usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_dialog/_dialog.rb")])
+  describe "coverage" do
+    def card_workspace(component_count:, per_component:)
+      (1..component_count).flat_map do |component|
+        (1..per_component).map do |index|
+          ["components/c#{component}/app/views/page_#{index}.html.erb", %(<%= pb_rails("card") %>\n)]
+        end
+      end.to_h
+    end
 
-      expect(usage.report).to include("Dialog (`dialog`) — 0 files", "No usage found")
+    it "calls a widely used kit a representative sample and prints no count" do
+      workspace(card_workspace(component_count: 10, per_component: 3)) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+
+        report = usage.report
+        expect(report).to include("Testing every use is not practical")
+        # Nothing for the provider to copy back as a count it cannot be checked on.
+        expect(report).not_to match(/\b30 files\b/)
+        expect(report.scan(/^- components/).length).to eq(described_class::SAMPLE_SIZE)
+      end
+    end
+
+    # The bug stakeholders caught: every Icon example came from one component.
+    it "spreads the sample across components rather than taking the first alphabetically" do
+      files = card_workspace(component_count: 1, per_component: 20)
+        .transform_keys { |path| path.sub("components/c1", "components/accounting") }
+        .merge(card_workspace(component_count: 9, per_component: 1))
+
+      workspace(files) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+
+        listed = usage.report.scan(/^- (\S+)/).flatten
+        components = listed.map { |path| TestPlan::DependencyDelta::CallSiteSample.component(path) }
+        expect(components.uniq.length).to eq(described_class::SAMPLE_SIZE)
+      end
+    end
+
+    it "says every use is listed for a narrowly used kit" do
+      workspace(card_workspace(component_count: 3, per_component: 1)) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+
+        report = usage.report
+        expect(report).to include("Every use in this repository is listed below.")
+        expect(report.scan(/^- components/).length).to eq(3)
+      end
+    end
+
+    it "says so when a changed kit is not used here at all" do
+      workspace(app) do |root|
+        usage = described_class.new(workspace: root)
+        usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_dialog/_dialog.rb")])
+
+        expect(usage.report).to include("no use of it was found in this repository")
+      end
     end
   end
 
@@ -166,7 +261,7 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
           report = usage.report
         end
 
-        expect(report).to include("Card (`card`) — search failed")
+        expect(report).to include("Card (`card`) — changed in Rails · search failed")
         expect(report).not_to include("No usage found")
         expect(logged).to include("::warning::Playbook kit usage search failed:", "exited 128")
       end
@@ -189,6 +284,8 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       end
     end
 
+    # A kit whose stylesheet moved is searched on both sides, so one side can come back
+    # while the other fails.
     it "does not report the half of a kit's search that did run" do
       ok = ["components/ui/app/javascript/Widget.tsx\n", "", instance_double(Process::Status, exitstatus: 0)]
       failed = ["", "fatal: bad pattern\n", instance_double(Process::Status, exitstatus: 128)]
@@ -199,7 +296,7 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
         report = nil
 
         annotations do
-          usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.rb")])
+          usage.observe(playbook_change, [diff("app/pb_kits/playbook/pb_card/_card.scss")])
           report = usage.report
         end
 

@@ -58,6 +58,7 @@ module TestPlan
       end
 
       prompt_path
+      playbook_prompt_path
       self
     end
 
@@ -90,13 +91,16 @@ module TestPlan
     end
 
     def prompt_path
-      candidate = File.expand_path(attributes.fetch("prompt"), action_root)
-      action_prefix = "#{action_root}#{File::SEPARATOR}"
-      unless candidate.start_with?(action_prefix) && File.file?(candidate)
-        raise "Test-plan profile prompt is invalid: #{attributes.fetch("prompt").inspect}"
-      end
+      resolve_prompt("prompt")
+    end
 
-      candidate
+    # Optional. Whether the raise is Playbook is not known until the dependency delta has
+    # been built, long after this profile resolved from the label, so the alternative is
+    # declared here and chosen later. A profile without one keeps its single prompt.
+    def playbook_prompt_path
+      return "" unless attributes.key?("playbook_prompt")
+
+      resolve_prompt("playbook_prompt")
     end
 
     def to_h
@@ -109,7 +113,23 @@ module TestPlan
         "failure_comment_tag" => failure_comment_tag,
         "artifact_name" => artifact_name,
         "prompt_path" => prompt_path,
+        "playbook_prompt_path" => playbook_prompt_path,
       }
+    end
+
+  private
+
+    def resolve_prompt(field)
+      value = attributes.fetch(field)
+      raise "Test-plan profile #{field} must be a string" unless value.is_a?(String)
+
+      candidate = File.expand_path(value, action_root)
+      action_prefix = "#{action_root}#{File::SEPARATOR}"
+      unless candidate.start_with?(action_prefix) && File.file?(candidate)
+        raise "Test-plan profile #{field} is invalid: #{value.inspect}"
+      end
+
+      candidate
     end
   end
 end

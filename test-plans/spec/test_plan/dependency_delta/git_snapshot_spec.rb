@@ -1,6 +1,7 @@
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
+require "fileutils"
 require "open3"
 require "tmpdir"
 
@@ -82,6 +83,108 @@ RSpec.describe TestPlan::DependencyDelta::GitSnapshot do
       expect(snapshot.merge_base_sha).to eq(fork_point)
       expect(snapshot.read(snapshot.merge_base_sha, "Gemfile.lock")).to eq("fork point\n")
       expect(snapshot.changed_dependency_files).to eq(["Gemfile.lock"])
+    end
+  end
+
+  # The Playbook plan is told there is no application diff to read, so it must only be
+  # chosen for a pull request that genuinely has none. A filename cannot answer that: this
+  # repository pins Playbook exactly, so a real bump edits several package.json files and a
+  # gemspec -- and so does adding an npm script.
+  describe "#declarations_only?" do
+    BASE_FILES = {
+      "Gemfile.lock" => "base\n",
+      "Gemfile" => %(gem "rack", "2.2.23"\n),
+      "components/theme/package.json" => %({\n  "dependencies": { "playbook-ui": "17.2.0-rc.0" },\n  "scripts": { "build": "vite build" }\n}\n),
+      "components/theme/theme.gemspec" => %(  s.add_dependency "playbook_ui", "17.2.0.pre.rc.0"\n),
+      "components/sales/app/views/index.html.erb" => "base\n",
+    }.freeze
+
+    def snapshot_for(head_files)
+      Dir.mktmpdir do |directory|
+        git(directory, "init", "--initial-branch", "main", ".")
+        git(directory, "config", "user.email", "test@example.com")
+        git(directory, "config", "user.name", "Test")
+
+        BASE_FILES.each do |path, content|
+          full = File.join(directory, path)
+          FileUtils.mkdir_p(File.dirname(full))
+          File.write(full, content)
+        end
+        git(directory, "add", ".")
+        git(directory, "commit", "-m", "base")
+        base = git(directory, "rev-parse", "HEAD").strip
+
+        head_files.each do |path, content|
+          full = File.join(directory, path)
+          FileUtils.mkdir_p(File.dirname(full))
+          File.write(full, content)
+        end
+        git(directory, "add", "-A")
+        git(directory, "commit", "-m", "head")
+        head = git(directory, "rev-parse", "HEAD").strip
+
+        yield described_class.new(workspace: directory, base_sha: base, head_sha: head)
+      end
+    end
+
+    # What a real Playbook bump looks like here: lockfiles, plus the exact pins above them.
+    it "is true for a bump that moved only version literals" do
+      snapshot_for(
+        "Gemfile.lock" => "head\n",
+        "components/theme/package.json" => %({\n  "dependencies": { "playbook-ui": "17.2.0-rc.1" },\n  "scripts": { "build": "vite build" }\n}\n),
+        "components/theme/theme.gemspec" => %(  s.add_dependency "playbook_ui", "17.2.0.pre.rc.1"\n)
+      ) { |snapshot| expect(snapshot.declarations_only?).to be(true) }
+    end
+
+    it "is false when the pull request also changed application code" do
+      snapshot_for(
+        "Gemfile.lock" => "head\n",
+        "components/sales/app/views/index.html.erb" => "head\n"
+      ) { |snapshot| expect(snapshot.declarations_only?).to be(false) }
+    end
+
+    # The cases a filename check would have waved through.
+    it "is false when a manifest gained an npm script alongside the bump" do
+      snapshot_for(
+        "Gemfile.lock" => "head\n",
+        "components/theme/package.json" => %({\n  "dependencies": { "playbook-ui": "17.2.0-rc.1" },\n  "scripts": { "build": "vite build", "postinstall": "./setup.sh" }\n}\n)
+      ) { |snapshot| expect(snapshot.declarations_only?).to be(false) }
+    end
+
+    it "is false when the Gemfile changed how a gem is loaded" do
+      snapshot_for(
+        "Gemfile.lock" => "head\n",
+        "Gemfile" => %(gem "rack", "2.2.23", require: false\n)
+      ) { |snapshot| expect(snapshot.declarations_only?).to be(false) }
+    end
+
+    it "is false when a dependency was renamed rather than raised" do
+      snapshot_for(
+        "components/theme/package.json" => %({\n  "dependencies": { "playbook-evil": "17.2.0-rc.0" },\n  "scripts": { "build": "vite build" }\n}\n)
+      ) { |snapshot| expect(snapshot.declarations_only?).to be(false) }
+    end
+
+    it "is false when a declaration file was added outright" do
+      snapshot_for("components/new/package.json" => %({ "dependencies": {} }\n)) do |snapshot|
+        expect(snapshot.declarations_only?).to be(false)
+      end
+    end
+
+    # "Nothing changed" is not the same claim as "only versions changed", and only the
+    # second licenses a plan that never looks at the application.
+    it "is false for an empty diff" do
+      Dir.mktmpdir do |directory|
+        git(directory, "init", "--initial-branch", "main", ".")
+        git(directory, "config", "user.email", "test@example.com")
+        git(directory, "config", "user.name", "Test")
+        File.write(File.join(directory, "Gemfile.lock"), "only\n")
+        git(directory, "add", ".")
+        git(directory, "commit", "-m", "only")
+        sha = git(directory, "rev-parse", "HEAD").strip
+
+        snapshot = described_class.new(workspace: directory, base_sha: sha, head_sha: sha)
+        expect(snapshot.declarations_only?).to be(false)
+      end
     end
   end
 

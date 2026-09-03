@@ -87,7 +87,9 @@ RSpec.describe "providers/cursor.sh" do
   it "installs the read-only CLI permissions into the workspace" do
     run_provider(mode: "ok") do |result|
       config = File.join(result[:workspace], ".cursor", "cli-config.json")
-      expect(File.read(config)).to include("Read(**)", "Shell(*)")
+      # The web denials matter as much as the shell one: everything the plan says has to
+      # come from evidence this action assembled, not from a page the agent went and found.
+      expect(File.read(config)).to include("Read(**)", "Shell(*)", "WebFetch(*)", "WebSearch(*)")
     end
   end
 

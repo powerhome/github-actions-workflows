@@ -167,7 +167,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
     # 100 KiB chunks pack the 10 MiB artifact budget to within ~40 KiB, so the 50 KiB
     # chunk that follows no longer fits the artifact -- while still fitting the
-    # 100 KiB per-dependency and 500 KiB total provider-context budgets.
+    # per-dependency and total provider-context budgets.
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve) do |change|
       if change.name == "aaa-big"
@@ -297,6 +297,69 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(entry.fetch("warnings").join).to include("1 file diffs were omitted")
   end
 
+  # The Playbook case: what falls off the tail is docs and colocated tests, which is the
+  # priority order working -- so it must not warn on the pull request.
+  it "does not truncate a dependency that only lost tests and documentation" do
+    builder = TestPlan::DependencyDelta::SourceDiffBuilder
+    diffs = [
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "CHANGELOG.md", diff: "c" * 1024, priority: builder::PRIORITY_CHANGELOG
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "app/pb_kits/playbook/pb_dropdown/index.tsx", diff: "r" * 1024,
+        priority: builder::PRIORITY_RUNTIME
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "app/pb_kits/playbook/pb_dropdown/dropdown.test.jsx",
+        diff: "t" * (described_class::CONTEXT_TOTAL_LIMIT + 1), priority: builder::PRIORITY_TEST
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "app/pb_kits/playbook/pb_dropdown/docs/example.yml",
+        diff: "d" * (described_class::CONTEXT_TOTAL_LIMIT + 1), priority: builder::PRIORITY_DOC
+      ),
+    ]
+
+    result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
+    entry = result.dig(:manifest, "dependencies", 0)
+
+    expect(entry.fetch("status")).to eq("retrieved")
+    expect(result.dig(:manifest, "warning_count")).to eq(0)
+    # Still named: the omission is reported, it just is not degradation.
+    expect(entry.fetch("omitted_from_context")).to eq(
+      [
+        "app/pb_kits/playbook/pb_dropdown/docs/example.yml",
+        "app/pb_kits/playbook/pb_dropdown/dropdown.test.jsx",
+      ]
+    )
+    expect(entry.fetch("warnings").join).to include(
+      "2 supporting diffs (tests, documentation, build output) were omitted"
+    )
+  end
+
+  it "truncates when the budget cost it a source diff" do
+    builder = TestPlan::DependencyDelta::SourceDiffBuilder
+    diffs = [
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "CHANGELOG.md", diff: "c" * 1024, priority: builder::PRIORITY_CHANGELOG
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1),
+        priority: builder::PRIORITY_RUNTIME
+      ),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "spec/huge_spec.rb", diff: "s" * (described_class::CONTEXT_TOTAL_LIMIT + 1),
+        priority: builder::PRIORITY_TEST
+      ),
+    ]
+
+    result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
+    entry = result.dig(:manifest, "dependencies", 0)
+
+    expect(entry.fetch("status")).to eq("truncated")
+    expect(result.dig(:manifest, "warning_count")).to eq(1)
+    expect(entry.fetch("warnings").join).to include("2 file diffs were omitted, 1 of them changelog or source")
+  end
+
   it "gives a lone dependency the whole context budget" do
     # 400 KiB would have been cut to 100 KiB under a fixed per-dependency cap.
     diffs = Array.new(8) { |index| TestPlan::DependencyDelta::SourceDiff.new(path: "lib/#{index}.rb", diff: "x" * (50 * 1024)) }
@@ -330,8 +393,12 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(entry).to include("status" => "retrieved", "context_files" => 8)
   end
 
+  # The floor is handed out ahead of the fair share, so enough dependencies overdraw the
+  # total and the last one gets nothing. Derived from the constants so raising the budget
+  # moves the cliff without rotting this.
   it "spends the budget on the dependencies sorted first and drops the tail" do
-    changes = Array.new(30) do |index|
+    count = (described_class::CONTEXT_TOTAL_LIMIT / described_class::CONTEXT_MINIMUM_PER_DEPENDENCY) + 10
+    changes = Array.new(count) do |index|
       TestPlan::DependencyDelta::Change.new(
         ecosystem: "bundler", name: format("gem-%02d", index), old_version: "1.0.0",
         new_version: "2.0.0", source: "rubygems", old_locator: "https://rubygems.org/",
@@ -340,7 +407,12 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     end
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve) do |candidate|
-      [TestPlan::DependencyDelta::SourceDiff.new(path: "#{candidate.name}.rb", diff: "x" * (24 * 1024))]
+      [
+        TestPlan::DependencyDelta::SourceDiff.new(
+          path: "#{candidate.name}.rb",
+          diff: "x" * (described_class::CONTEXT_MINIMUM_PER_DEPENDENCY - 1024)
+        ),
+      ]
     end
 
     result = generator(changes: changes, retriever: retriever).generate
@@ -349,6 +421,76 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(entries.first.fetch("context_files")).to eq(1)
     expect(entries.last.fetch("context_files")).to eq(0)
     expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
+  end
+
+  # Recorded rather than looking like a raise the run missed, but it cost no evidence.
+  it "records the dependencies it skipped without counting them as warnings" do
+    skipped = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "minitest", old_version: "5.25.5", new_version: "6.0.6",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: false,
+      lockfiles: ["components/pigment/Gemfile.lock"]
+    )
+    retriever = double("retriever", retrieve: [])
+
+    result = generator(changes: [change], retriever: retriever, out_of_scope: [skipped]).generate
+
+    expect(result.dig(:manifest, "out_of_scope")).to eq(
+      [
+        {
+          "ecosystem" => "bundler", "name" => "minitest", "old_version" => "5.25.5",
+          "new_version" => "6.0.6", "lockfiles" => ["components/pigment/Gemfile.lock"],
+        },
+      ]
+    )
+    expect(result.dig(:manifest, "warning_count")).to eq(0)
+  end
+
+  it "gives Playbook a larger slice of the context than an equal split would" do
+    playbook = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "playbook_ui", old_version: "17.1.0",
+      new_version: "17.2.0.pre.rc.0", source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+    others = Array.new(9) do |index|
+      TestPlan::DependencyDelta::Change.new(
+        ecosystem: "bundler", name: format("gem-%02d", index), old_version: "1.0.0",
+        new_version: "2.0.0", source: "rubygems", old_locator: "https://rubygems.org/",
+        new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+      )
+    end
+    # Bigger than an equal tenth of the budget, smaller than Playbook's weighted slice.
+    retriever = double("retriever")
+    allow(retriever).to receive(:retrieve) do |candidate|
+      [TestPlan::DependencyDelta::SourceDiff.new(path: "#{candidate.name}.rb", diff: "x" * (200 * 1024))]
+    end
+
+    result = generator(changes: [playbook, *others], retriever: retriever).generate
+    entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
+      index[entry.fetch("name")] = entry
+    end
+
+    expect(entries.fetch("playbook_ui")).to include("status" => "retrieved", "context_files" => 1)
+    expect(entries.fetch("gem-00")).to include("status" => "truncated", "context_files" => 0)
+  end
+
+  it "funds the dependency in the most lockfiles before one the alphabet favours" do
+    narrow = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "aaa-narrow", old_version: "1.0.0", new_version: "2.0.0",
+      source: "rubygems", old_locator: "https://rubygems.org/",
+      new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
+    )
+    wide = TestPlan::DependencyDelta::Change.new(
+      ecosystem: "bundler", name: "zzz-wide", old_version: "1.0.0", new_version: "2.0.0",
+      source: "rubygems", old_locator: "https://rubygems.org/", new_locator: "https://rubygems.org/",
+      direct: true, lockfiles: Array.new(140) { |index| "components/component#{index}/Gemfile.lock" }
+    )
+    retriever = double("retriever", retrieve: [])
+
+    names = generator(changes: [narrow, wide], retriever: retriever)
+      .generate.dig(:manifest, "dependencies").map { |entry| entry.fetch("name") }
+
+    expect(names).to eq(%w[zzz-wide aaa-narrow])
   end
 
   it "keeps the build output of a linked release out of the provider context" do

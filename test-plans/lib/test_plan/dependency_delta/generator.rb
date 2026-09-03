@@ -7,19 +7,37 @@ module TestPlan
   module DependencyDelta
     class Generator
       FULL_LIMIT = 10 * 1024 * 1024
-      CONTEXT_TOTAL_LIMIT = 500 * 1024
-      # Floor on a dependency's share. Below this a slice is too small to say anything
-      # useful, so it is better to spend the budget on the dependencies sorted first --
-      # direct, then Git-pinned -- and let the tail fall off.
+      CONTEXT_TOTAL_LIMIT = 1024 * 1024
+      # Floor on a dependency's share; below this a slice says nothing useful. Spent
+      # ahead of the fair share, so a run with more than CONTEXT_TOTAL_LIMIT / this many
+      # dependencies leaves its tail with nothing -- hence the blast-radius sort.
       CONTEXT_MINIMUM_PER_DEPENDENCY = 25 * 1024
 
+      # A Playbook bump's diff is entirely lockfiles, so the delta is the only evidence
+      # there is; an ordinary gem bump is read alongside the code that calls it. Named
+      # rather than inferred, like LINKED_RELEASES: a wrong guess starves the dependency
+      # the plan is about.
+      WEIGHTED_PACKAGES = %w[playbook_ui playbook-ui].freeze
+      WEIGHTED_CONTEXT_SHARE = 4
+      DEFAULT_CONTEXT_SHARE = 1
+
       def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new,
-                     kit_usage: PlaybookKitUsage.disabled, problems: [])
-        @changes = changes.sort_by { |change| [change.direct ? 0 : 1, change.source == "git" ? 0 : 1, change.name] }
+                     kit_usage: PlaybookKitUsage.disabled, problems: [], out_of_scope: [])
+        # Blast radius before name: nearly everything here is direct and from a registry,
+        # which left the alphabet deciding who got funded first.
+        @changes = changes.sort_by do |change|
+          [
+            change.direct ? 0 : 1,
+            change.source == "git" ? 0 : 1,
+            -change.lockfiles.length,
+            change.name,
+          ]
+        end
         @retriever = retriever
         @changelog = changelog
         @kit_usage = kit_usage
         @problems = problems
+        @out_of_scope = out_of_scope
         @related = build_related(@changes)
       end
 
@@ -28,7 +46,7 @@ module TestPlan
         context = +""
         entries = []
         remaining_context = CONTEXT_TOTAL_LIMIT
-        remaining_changes = @changes.length
+        remaining_weight = @changes.sum { |change| context_weight(change) }
 
         @changes.each do |change|
           entry = change.to_h
@@ -52,7 +70,7 @@ module TestPlan
             omitted_from_context = []
 
             if candidates.any?
-              budget = context_budget(remaining_context, remaining_changes)
+              budget = context_budget(remaining_context, remaining_weight, context_weight(change))
               dependency_context = +""
               omitted_from_context =
                 append_chunks(dependency_context, header, candidates, budget, :context_text)
@@ -60,8 +78,7 @@ module TestPlan
               remaining_context -= dependency_context.bytesize
 
               if omitted_from_context.any?
-                entry["warnings"] << "Provider context budget of #{kib(budget)} was exhausted; " \
-                  "#{omitted_from_context.length} file diffs were omitted."
+                entry["warnings"] << budget_warning(budget, omitted_from_context)
               end
             end
 
@@ -71,7 +88,9 @@ module TestPlan
                 "release. They remain in the full-delta artifact."
             end
 
-            entry["status"] = omitted_from_context.any? ? "truncated" : "retrieved"
+            # Only lost evidence truncates; a budget that dropped tests and docs off the
+            # tail is the priority order working. Every omission is named either way.
+            entry["status"] = omitted_from_context.any?(&:evidence?) ? "truncated" : "retrieved"
 
             if omitted_from_artifact.any?
               entry["warnings"] << "The full-delta artifact reached its #{mib(FULL_LIMIT)} limit; " \
@@ -80,9 +99,9 @@ module TestPlan
             end
 
             entry["context_files"] = candidates.length - omitted_from_context.length
-            entry["omitted_from_context"] = omitted_from_context.sort
+            entry["omitted_from_context"] = omitted_from_context.map(&:path).sort
             entry["excluded_generated"] = excluded.map(&:path).sort
-            entry["omitted_from_artifact"] = omitted_from_artifact.sort
+            entry["omitted_from_artifact"] = omitted_from_artifact.map(&:path).sort
           rescue => e
             entry["status"] = "unavailable"
             entry["degraded"] = true
@@ -93,7 +112,7 @@ module TestPlan
             entry["excluded_generated"] = []
             entry["omitted_from_artifact"] = []
           end
-          remaining_changes -= 1
+          remaining_weight -= context_weight(change)
           entries << entry
         end
 
@@ -104,6 +123,9 @@ module TestPlan
             "version" => 1,
             "dependencies" => entries,
             "lockfile_warnings" => lockfile_warnings,
+            # Recorded, not silently dropped: a reader looking for a raise they know
+            # landed has to be able to find it here.
+            "out_of_scope" => @out_of_scope.map { |change| out_of_scope_entry(change) },
             # Counts anything that cost evidence, which is not the same as anything
             # that produced a warning: build output kept out of a linked release, and
             # an artifact that ran out of room while the provider context did not, are
@@ -136,16 +158,30 @@ module TestPlan
         end
       end
 
+      def out_of_scope_entry(change)
+        {
+          "ecosystem" => change.ecosystem,
+          "name" => change.name,
+          "old_version" => change.old_version,
+          "new_version" => change.new_version,
+          "lockfiles" => change.lockfiles.sort,
+        }
+      end
+
       def incomplete?(entry)
         entry.fetch("status") != "retrieved" || entry.fetch("degraded", false)
       end
 
-      # Share what is left among the dependencies still to come, so a lone dependency --
-      # a Playbook bump, typically -- can use the whole budget instead of a fixed slice of
-      # it, and an early dependency that came in small hands its surplus to the next.
-      def context_budget(remaining_context, remaining_changes)
-        share = remaining_context / [remaining_changes, 1].max
+      # Weighted share of what is left, so an early dependency that came in small hands
+      # its surplus on. remaining_weight still counts this one, so the last dependency is
+      # handed everything left.
+      def context_budget(remaining_context, remaining_weight, weight)
+        share = remaining_context * weight / [remaining_weight, 1].max
         [[share, CONTEXT_MINIMUM_PER_DEPENDENCY].max, remaining_context].min
+      end
+
+      def context_weight(change)
+        WEIGHTED_PACKAGES.include?(change.name) ? WEIGHTED_CONTEXT_SHARE : DEFAULT_CONTEXT_SHARE
       end
 
       # One upstream release published as a gem and a package: the build output in this
@@ -161,6 +197,16 @@ module TestPlan
         return diffs if related.empty?
 
         diffs.reject(&:generated?)
+      end
+
+      def budget_warning(budget, omitted)
+        dropped = omitted.count(&:evidence?)
+        return "Provider context budget of #{kib(budget)} was exhausted; #{omitted.length} " \
+          "supporting diffs (tests, documentation, build output) were omitted. Every " \
+          "changelog and source diff was included." if dropped.zero?
+
+        "Provider context budget of #{kib(budget)} was exhausted; #{omitted.length} file " \
+          "diffs were omitted, #{dropped} of them changelog or source."
       end
 
       def kib(bytes)
@@ -229,11 +275,11 @@ module TestPlan
 
       SEPARATOR = "\n".freeze
 
-      # Returns the paths that did not fit, so every omission can be named in the
-      # manifest. `text` selects what a diff contributes: the artifact records the whole
-      # thing, while the provider may be shown a capped form of it.
+      # Returns the diffs that did not fit -- the objects, because the caller asks what
+      # was lost as well as naming it. `text` picks the artifact's copy or the provider's
+      # capped one.
       def append_chunks(target, header, diffs, limit, text)
-        return diffs.map(&:path) if target.bytesize + header.bytesize > limit
+        return diffs if target.bytesize + header.bytesize > limit
 
         omitted = []
         target << header
@@ -242,7 +288,7 @@ module TestPlan
           # The separator counts against the limit too; without it the advertised cap
           # was exceeded by a byte for every diff included.
           if target.bytesize + body.bytesize + SEPARATOR.bytesize > limit
-            omitted << source_diff.path
+            omitted << source_diff
             next
           end
           target << body << SEPARATOR
