@@ -165,7 +165,7 @@ runs:
 
     - name: Fetch through merge-base
       if: steps.pr_metadata.outputs.generate == 'true'
-      uses: rmacklin/fetch-through-merge-base@98594af01ba0825b881902a5dcadbf87bb46d084 # v0
+      uses: rmacklin/fetch-through-merge-base@bfe4d03a86f9afa52bc1a70e9814fc92a07f7b75 # v0
       with:
         base_ref: ${{ steps.pr_metadata.outputs.base_sha }}
         head_ref: ${{ steps.pr_metadata.outputs.head_sha }}
