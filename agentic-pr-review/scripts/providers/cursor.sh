@@ -35,11 +35,53 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ACTION_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 CLI_CONFIG_TEMPLATE="${ACTION_ROOT}/config/cli-config.json"
+LANGFUSE_HOOKS_ROOT="${ACTION_ROOT}/config/langfuse-hooks"
+
+setup_langfuse_hooks() {
+  local destination="${GITHUB_WORKSPACE}/.cursor"
+  local source="${LANGFUSE_HOOKS_ROOT}"
+
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "npm is required to install Langfuse hook dependencies" >&2
+    exit 1
+  fi
+
+  if [[ ! -f "${source}/hooks.json" ]]; then
+    echo "Langfuse hooks configuration not found at ${source}/hooks.json" >&2
+    exit 1
+  fi
+
+  mkdir -p "${destination}"
+  cp "${source}/hooks.json" "${destination}/hooks.json"
+  rm -rf "${destination}/hooks"
+  cp -R "${source}/hooks" "${destination}/hooks"
+
+  pushd "${destination}/hooks" >/dev/null
+  npm ci --ignore-scripts --no-audit --no-fund --prefer-offline --no-progress
+  popd >/dev/null
+}
 
 cd "${GITHUB_WORKSPACE}"
 
 mkdir -p .cursor
 cp "${CLI_CONFIG_TEMPLATE}" .cursor/cli-config.json
+
+LANGFUSE_ENABLED=false
+if [[ -n "${LANGFUSE_SECRET_KEY:-}" || -n "${LANGFUSE_PUBLIC_KEY:-}" || -n "${LANGFUSE_BASE_URL:-}" ]]; then
+  if [[ -z "${LANGFUSE_SECRET_KEY:-}" || -z "${LANGFUSE_PUBLIC_KEY:-}" ]]; then
+    echo "Langfuse tracing skipped: LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY are both required" >&2
+  else
+    LANGFUSE_ENABLED=true
+  fi
+fi
+
+if [[ "${LANGFUSE_ENABLED}" == "true" ]]; then
+  export LANGFUSE_SECRET_KEY LANGFUSE_PUBLIC_KEY
+  if [[ -n "${LANGFUSE_BASE_URL:-}" ]]; then
+    export LANGFUSE_BASE_URL
+  fi
+  setup_langfuse_hooks
+fi
 
 PROMPT="$(cat "${REVIEW_PROMPT_PATH}")"
 if [[ -n "${REVIEW_ADDITIONAL_INSTRUCTIONS:-}" ]]; then
