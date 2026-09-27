@@ -20,6 +20,10 @@ begin
   # was asked for rather than in whichever one the response happens to resemble.
   variant = ENV["TEST_PLAN_VARIANT"].to_s
   kit_facts_path = ENV.fetch("PLAYBOOK_KIT_FACTS_PATH")
+  manifest_path = ENV.fetch("DEPENDENCY_DELTA_MANIFEST_PATH")
+  # Read only by the shapes that list version changes. The standard plan renders from the
+  # response alone, and should not fail over a file it never reads.
+  read_manifest = -> { JSON.parse(File.read(manifest_path, encoding: Encoding::UTF_8)) }
 
   options = {
     pull_request_title: pull_request_title,
@@ -29,19 +33,18 @@ begin
 
   if variant == TestPlan::Variant::PLAYBOOK
     parsed = TestPlan::Playbook::Parser.parse_file(json_path)
-    manifest = JSON.parse(File.read(ENV.fetch("DEPENDENCY_DELTA_MANIFEST_PATH"), encoding: Encoding::UTF_8))
     # Coverage wording comes from what the action counted, not from what the provider
     # reported. KitFacts.load_file never raises: a plan rendered without facts reads as a
     # sample throughout, which under-claims rather than overstating.
     comment = TestPlan::Playbook::Formatter.new(
       parsed: parsed, kit_facts: TestPlan::Playbook::KitFacts.load_file(kit_facts_path),
-      manifest: manifest, **options
+      manifest: read_manifest.call, **options
     ).render
   elsif variant == TestPlan::Variant::DEPENDENCY
     parsed = TestPlan::Dependency::Parser.parse_file(json_path)
-    manifest_path = ENV.fetch("DEPENDENCY_DELTA_MANIFEST_PATH")
-    manifest = JSON.parse(File.read(manifest_path, encoding: Encoding::UTF_8))
-    comment = TestPlan::Dependency::Formatter.new(parsed: parsed, manifest: manifest, **options).render
+    comment = TestPlan::Dependency::Formatter.new(
+      parsed: parsed, manifest: read_manifest.call, **options
+    ).render
   else
     parsed = TestPlan::Parser.parse_file(json_path)
     comment = TestPlan::Formatter.new(parsed: parsed, **options).render

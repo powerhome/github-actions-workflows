@@ -27,10 +27,11 @@ inputs:
     default: "30"
   dependency-scope:
     description: >-
-      Which Gemfile.lock raises to analyze. "umbrella" (the default) counts raises that
-      reach the root Gemfile.lock and all yarn.lock files, recording component-only gem
-      raises as skipped except Playbook raises. "all" also analyzes raises confined to
-      component Gemfile.lock files.
+      Which gem raises to analyze. "umbrella" (the default) counts raises that reach the
+      root Gemfile.lock, recording component-only gem raises as skipped; "all" analyzes
+      those too. It does not govern Yarn: every changed yarn.lock is analyzed under both
+      values, because a component's UI code is served by the deployed application. A
+      Playbook raise is always analyzed, wherever its lockfile lives.
     required: false
     default: umbrella
 
