@@ -4,8 +4,8 @@ require "test_plan/dependency_delta"
 require "json"
 
 RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
-  # Stands in for the network: keyed by URL, values are file bodies. Anything not
-  # listed 404s, which is how a missing tag or changelog actually presents.
+  # Keyed by URL; anything not listed 404s, which is how a missing tag or changelog
+  # actually presents.
   class FakeChangelogDownloader
     attr_reader :requested
 
@@ -42,8 +42,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     )
   end
 
-  # Both versions are looked up: the changelog diff starts at the old version's tag, so
-  # the old side has to be shown to be this package too.
+  # The diff starts at the old version's tag, so that side has to be shown to be this
+  # package too.
   let(:npm_metadata) do
     {
       "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate(
@@ -110,9 +110,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
     added = diff.lines.select { |line| line.start_with?("+") }.join
 
     expect(added).to include("the upgrade")
-    # The upgraded-to tag holds everything up to but not including its own release, so
-    # it is the baseline; reading from the upgraded-from tag would have added 17.0.0's
-    # notes, which describe behaviour already installed. They remain as diff context.
+    # The upgraded-to tag holds everything up to but not including its own release, so it
+    # is the baseline; the upgraded-from tag would add 17.0.0's already-installed notes.
     expect(added).not_to include("17.0.0 notes")
     # The default branch can carry later releases too, so the notes say so.
     expect(diff).to start_with("[These notes were read from the default branch")
@@ -146,8 +145,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
   end
 
   it "takes both repository and path from a gem's changelog_uri" do
-    # playbook_ui keeps its changelog under playbook/, not at the repository root, so
-    # the URI has to supply the path as well.
+    # playbook_ui keeps its changelog under playbook/, so the URI supplies the path too.
     downloader = FakeChangelogDownloader.new(
       {
         "https://rubygems.org/api/v1/gems/playbook_ui.json" => JSON.generate(
@@ -213,9 +211,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
   end
 
   it "refuses when only the new side proves to be the public package" do
-    # Source retrieval rejects the old side, and a changelog survives a refused
-    # download, so the public project's history would stand in for the private old
-    # version's release notes.
+    # A changelog survives a refused download, so the public project's history would
+    # stand in for the private old version's release notes.
     downloader = FakeChangelogDownloader.new(
       npm_metadata.merge(raw("17.0.0", "old\n")).merge(raw("HEAD", "new\n"))
     )
@@ -228,9 +225,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
   end
 
   it "refuses the changelog of a private package that only shares a public name" do
-    # Source retrieval rejects this package for the same reason, and a changelog
-    # survives a refused download -- so without this check the provider would be handed
-    # an unrelated project's release notes precisely when it has nothing else.
+    # A changelog survives the refused download, so the provider would be handed an
+    # unrelated project's release notes precisely when it has nothing else.
     downloader = FakeChangelogDownloader.new(
       npm_metadata.merge(raw("17.0.0", "old\n")).merge(raw("HEAD", "new\n"))
     )
@@ -268,8 +264,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       direct: true, lockfiles: ["yarn.lock"]
     )
 
-    # The lockfile pins an exact revision, so reading past it describes commits the
-    # dependency does not contain.
+    # The lockfile pins a revision, so reading past it describes commits not in use.
     diff = described_class.new(downloader: downloader).diffs_for(change).first.diff
     expect(diff).to include("+notes through bbbbbbb")
     expect(diff).not_to include("this pin does not include")
@@ -308,8 +303,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
 
     source_diff = described_class.new(downloader: downloader).diffs_for(npm_change).first
 
-    # The provider sees a capped diff; the artifact keeps the whole thing, so the
-    # notice's pointer to the artifact is true.
+    # The artifact keeps the whole diff, so the notice's pointer to it is true.
     expect(source_diff.context_text.bytesize)
       .to be <= described_class::MAX_DIFF_BYTES + described_class::TRUNCATION_NOTICE.bytesize
     expect(source_diff.context_text).to end_with(described_class::TRUNCATION_NOTICE)

@@ -38,9 +38,8 @@ RSpec.describe TestPlan::UntrustedText do
     end
   end
 
-  # GitHub renders a code span's contents literally: it decodes no entity, honours no
-  # backslash, autolinks no URL, resolves no mention and interprets no tag. Escaping
-  # inside one publishes the escape itself.
+  # GitHub renders a code span's contents literally -- no entity decoded, no mention
+  # resolved, no tag interpreted -- so escaping inside one publishes the escape itself.
   describe "inside a closed code span" do
     it "leaves the characters a reader was meant to see" do
       expect(escape("Confirm `a < b` holds")).to eq("Confirm `a < b` holds")

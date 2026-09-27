@@ -22,21 +22,18 @@ module TestPlan
         @dependencies = payload.fetch("dependencies").each_with_index.filter_map do |entry, index|
           dependency(entry, index + 1)
         end
-        # Optional, like the application checks beside them. A response that traced no use
-        # to a tester-visible workflow was told to send an empty array, and one that sent
-        # no array at all means the same thing: the plan still has every version change
-        # the manifest recorded, and the regression section says plainly that nothing was
-        # established. Failing the run there would discard a usable plan over a key.
+        # Optional, like the application checks beside them: a response that traced no use
+        # was told to send an empty array, and sending no array means the same. The plan
+        # still has every version change the manifest recorded.
         @regression_tests = check_list(payload["regression_tests"] || [], "regression test", dependency: true)
         @application_checks = check_list(payload["application_checks"] || [], "application check")
       end
 
     private
 
-      # The fields the formatter matches a manifest raise on, and only those. `source` is
-      # an internal enum the provider sees only in the manifest and no reader of the plan
-      # ever sees, so requiring it back would cost a response its note over a field that
-      # decides nothing.
+      # What the formatter matches on, and only that. `source` is an internal enum no
+      # reader of the plan sees, so requiring it back costs a response its note for
+      # nothing.
       IDENTITY_FIELDS = %w[ecosystem name from to].freeze
 
       def dependency(entry, position)

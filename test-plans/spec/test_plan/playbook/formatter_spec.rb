@@ -55,8 +55,8 @@ RSpec.describe TestPlan::Playbook::Formatter do
     expect(output).to start_with("## ✅")
   end
 
-  # The steps are the plan: everything else on a case is just how a tester finds the page.
-  # Nothing asserted them until deleting the line that renders them left the suite green.
+  # Nothing asserted the steps until deleting the line that renders them left the suite
+  # green.
   it "renders every step of every case, in the order they were written" do
     output = render({ "kits" => [kit(name: "Dropdown", cases: 2)] })
 
@@ -116,8 +116,8 @@ RSpec.describe TestPlan::Playbook::Formatter do
       expect(output).to include(KF::UNUSED_SENTENCE)
     end
 
-    # A grep that failed leaves the plan unable to say how widely the kit is used, and
-    # claiming a representative sample would assert that anyway while hiding the failure.
+    # A failed grep cannot say how widely the kit is used, and a representative sample
+    # claims it anyway while hiding the failure.
     it "says the usage search failed rather than claiming a sample" do
       output = render(
         { "kits" => [kit(name: "Dropdown")] },
@@ -138,8 +138,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
       expect(output).to include(KF::REPRESENTATIVE_SENTENCE)
     end
 
-    # What the parser's old use_count clamp was really protecting: "every use is listed
-    # below" must not appear above a list shorter than the call sites.
+    # "Every use is listed below" must not appear above a list shorter than the call sites.
     it "downgrades an exhaustible kit the provider under-covered" do
       output = render(
         { "kits" => [kit(name: "Dropdown", cases: 1)] },
@@ -222,8 +221,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
     expect(output).not_to include("No other dependency raises in this PR.")
   end
 
-  # Every non-Playbook raise in the manifest, and only those: one the response invented
-  # has no raise to attach to, and one it forgot still has to appear.
+  # One the response invented has no raise to attach to; one it forgot still appears.
   it "ignores an other-dependency entry the manifest does not list" do
     parsed = TestPlan::Playbook::Parser.new(JSON.generate(
       "kits" => [],
@@ -254,8 +252,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
     expect(output).to include("## Playbook version changes", "Playbook version details were unavailable.")
   end
 
-  # The npm half of the same upstream release. Both names are the Playbook raise, and
-  # neither belongs in the closing list of other dependencies.
+  # The npm half of the same release: also the Playbook raise, not an other dependency.
   it "recognises the npm package as a Playbook raise" do
     parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
     output = described_class.new(

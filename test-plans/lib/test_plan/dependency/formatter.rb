@@ -2,10 +2,8 @@ require_relative "../plan_document"
 
 module TestPlan
   module Dependency
-    # Renders a version-raise plan: what moved, and how a tester exercises the behavior
-    # that already depended on it. The list of raises is the manifest's, not the
-    # provider's, so a raise the response omitted still appears and one it invented does
-    # not.
+    # The list of raises is the manifest's, not the provider's, so a raise the response
+    # omitted still appears and one it invented does not.
     class Formatter
       include PlanDocument
 
@@ -34,10 +32,8 @@ module TestPlan
 
     private
 
-      # A case naming a dependency this pull request did not raise is not testing the
-      # raise, so it is dropped -- but dropped out loud. Every other omission this plan
-      # makes is named in the notice, and a plan that quietly published fewer cases than
-      # were generated would read as complete.
+      # Dropped -- it is not testing the raise -- but dropped out loud, since a plan that
+      # quietly published fewer cases than were generated reads as complete.
       def partition_regression_tests
         names = @manifest_dependencies.map { |entry| entry.fetch("name") }
 
@@ -63,10 +59,8 @@ module TestPlan
         lines.join("\n")
       end
 
-      # Matched on the raise's identity as a reader would state it. Deliberately not on
-      # `source`: that is an internal enum the provider only ever sees in the manifest,
-      # and a response that spelled it "rubygems.org" would have lost its note and its
-      # steps for a field no reader of the plan can see.
+      # Deliberately not matched on `source`: an internal enum the provider sees only in
+      # the manifest, where spelling it "rubygems.org" would cost this raise its note.
       def annotation_for(entry)
         @parsed.dependencies.find do |candidate|
           candidate.fetch("ecosystem") == entry.fetch("ecosystem") &&
@@ -76,9 +70,8 @@ module TestPlan
         end
       end
 
-      # Silence is not evidence of no change, and the two reasons for it are different
-      # things to a tester: nothing was retrieved, or something was and nothing was said
-      # about it.
+      # Silence is not evidence of no change, and its two reasons differ to a tester:
+      # nothing was retrieved, or something was and nothing was said about it.
       def note_for(entry, annotation)
         note = annotation ? annotation.fetch("note") : ""
         return note unless note.empty?

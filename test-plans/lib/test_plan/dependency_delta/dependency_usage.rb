@@ -6,14 +6,12 @@ require_relative "./call_site_sample"
 
 module TestPlan
   module DependencyDelta
-    # A bounded list of likely application call sites for raised packages. A textual
-    # match is only a lead: the provider still has to read the file and trace its route.
+    # Leads, not routes: the provider still has to read the file and trace it.
     class DependencyUsage
       SEARCHED_EXTENSIONS = %w[*.rb *.erb *.haml *.js *.jsx *.ts *.tsx].freeze
       MAX_FILES_PER_PACKAGE = 8
-      # Nothing a tester opens. Build output earns its place here alongside the rest: a
-      # committed bundle inlines its dependencies, so it matches every package name and
-      # would spend a package's whole sample on one generated file.
+      # Nothing a tester opens. Build output included: a committed bundle inlines its
+      # dependencies, matching every package name searched for.
       NON_APPLICATION_SEGMENTS = %w[
         spec test tests __tests__ vendor node_modules docs documentation dist build
       ].freeze

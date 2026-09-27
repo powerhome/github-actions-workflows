@@ -9,16 +9,14 @@ require "test_plan/playbook/parser"
 
 require "json"
 
-# The heading and the discard notice are shared rather than copied, so these hold for
-# every plan shape at once. Kept together in one place because the point of the shared
-# module is that a reader cannot find one shape wording these differently.
+# Asserted against every plan shape at once, because the point of sharing these is that
+# no shape can word them differently.
 RSpec.describe TestPlan::PlanDocument do
   STANDARD_PAYLOAD = {
     "permissions" => { "required" => "no", "roles" => [], "changes" => [], "subject_actions" => [] },
     "feature_areas" => [], "regression_tests" => []
   }.freeze
 
-  # Each entry renders one plan shape from a response carrying two unusable parts.
   SHAPES = {
     "standard" => lambda do |**options|
       payload = STANDARD_PAYLOAD.merge("feature_areas" => ["not an object", "also not an object"])
@@ -66,8 +64,8 @@ RSpec.describe TestPlan::PlanDocument do
         expect(output).not_to include("@everyone")
       end
 
-      # Parts the schema could not use are dropped rather than failing the run, so the
-      # plan has to say it is not the whole of what was generated.
+      # Unusable parts are dropped rather than failing the run, so the plan has to say it
+      # is not the whole of what was generated.
       it "says how many parts of the response it could not use" do
         expect(render(shape)).to include("> ⚠️ 2 parts of the generated response could not be used:")
       end

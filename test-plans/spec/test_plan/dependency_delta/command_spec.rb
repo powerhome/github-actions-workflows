@@ -18,11 +18,9 @@ RSpec.describe TestPlan::DependencyDelta::Command do
   end
 
   # Everything else here reaches a private method directly, which is how a reassignment
-  # that left kit_usage holding a String instead of the usage object shipped: run itself
-  # was never called, so nothing noticed that every step would die on String#facts.
-  #
-  # The lockfile resolves from a private registry on purpose, so the retriever refuses it
-  # without reaching the network and the run stays deterministic.
+  # leaving kit_usage holding a String shipped: run was never called, so nothing noticed
+  # every step would die on String#facts. The lockfile resolves from a private registry
+  # on purpose, so the retriever refuses it without reaching the network.
   describe "#run" do
     def lockfile(version)
       <<~LOCK
@@ -82,8 +80,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
           .to include("version" => 1)
         expect(written.fetch("DEPENDENCY_DELTA_FULL_PATH")).not_to be_nil
         expect(written.fetch("DEPENDENCY_DELTA_CONTEXT_PATH")).not_to be_nil
-        # No Playbook raise, so the facts document is empty rather than absent -- the
-        # render step reads it unconditionally and the artifact upload expects it.
+        # Empty rather than absent: the render step reads it unconditionally.
         expect(JSON.parse(written.fetch("PLAYBOOK_KIT_FACTS_PATH"))).to eq("version" => 1, "kits" => {})
         expect(written.fetch("DEPENDENCY_KIT_USAGE_PATH")).to eq("")
         expect(written.fetch("DEPENDENCY_USAGE_PATH")).to include("# Dependency usage candidates", "## widget")
@@ -95,8 +92,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     end
   end
 
-  # Names, versions and paths come from lockfiles the pull request can edit, and the
-  # summary is rendered as Markdown in the Actions UI.
+  # The summary renders as Markdown and its values come from lockfiles the PR can edit.
   def summary_for(manifest, kit_facts = { "kits" => {} })
     Tempfile.create("summary") do |file|
       ENV["GITHUB_STEP_SUMMARY"] = file.path
@@ -128,8 +124,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("\\[click\\]")
   end
 
-  # The counts left the evidence file so the provider has nothing to copy, which makes the
-  # summary the place a person reads them.
+  # The counts left the evidence file, so the summary is where a person reads them.
   it "reports each changed kit's call sites in the job summary" do
     summary = summary_for(
       { "dependencies" => [], "lockfile_warnings" => [] },
@@ -144,8 +139,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("Dialog: 0 call sites (unused)")
   end
 
-  # A Playbook raise selects the Playbook plan whatever else the pull request did, so this
-  # is the whole of what the variant step needs to know.
+  # A Playbook raise selects the Playbook plan whatever else the pull request did.
   it "reports a Playbook raise however many other dependencies came with it" do
     changes = [
       TestPlan::DependencyDelta::Change.new(name: "cgi"),
@@ -286,8 +280,8 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(logged).not_to include("more (see the manifest artifact)")
   end
 
-  # A workflow command is only recognised at the start of a line, so JSON's own newline
-  # escaping is the guard.
+  # A workflow command is only recognised at a line start, so JSON's newline escaping
+  # is the guard.
   it "cannot be made to emit a workflow command from lockfile-derived text" do
     manifest = { "dependencies" => [{ "name" => "x\n::error::owned" }] }
 

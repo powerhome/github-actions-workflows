@@ -1,26 +1,18 @@
 require_relative "untrusted_text"
 
 module TestPlan
-  # The parts every plan shape renders identically: the heading testers find the comment
-  # by, the notice naming what the response cost, and the escaping every provider-derived
-  # string goes through.
+  # The heading, discard notice and escaping every plan shape renders identically. Shared
+  # rather than copied, so the wording cannot drift between shapes that are not equally
+  # covered.
   #
-  # Shared rather than copied. Three formatters each carrying their own heading and their
-  # own discard notice is three places for the wording to drift, and the copies were not
-  # equally covered -- a change to the discard truncation could reach one plan shape and
-  # not the others without a spec noticing.
-  #
-  # Includers set @profile_name, @pull_request_title, and @generation_warning, each
-  # already through normalize_text.
+  # Includers set @profile_name, @pull_request_title and @generation_warning, each already
+  # through normalize_text.
   module PlanDocument
-    # Past this the notice stops being readable, and the count still says how many there
-    # were.
+    # Past this the notice stops being readable; the count still says how many there were.
     MAX_NAMED_DISCARDS = 5
 
   private
 
-    # The sections every plan opens with, in order: what it is, then anything that
-    # qualifies what follows.
     def preamble
       sections = [heading]
       sections << "> ⚠️ #{@generation_warning}" unless @generation_warning.empty?
@@ -34,9 +26,8 @@ module TestPlan
       "## ✅ #{name}#{title_suffix}"
     end
 
-    # Everything the response offered that the plan could not publish. Overridden where a
-    # formatter drops parts of its own, so one notice accounts for every omission rather
-    # than only the ones the parser made.
+    # Overridden where a formatter drops parts of its own, so one notice accounts for
+    # every omission and not only the parser's.
     def discarded
       @parsed.discarded
     end

@@ -22,17 +22,12 @@ module TestPlan
         [ecosystem, name, old_version, new_version, source, *source_identity]
       end
 
-      # Registry URLs are mirror detail, not identity: the same raise recorded through
-      # different remotes in different component lockfiles is still one raise, and keying
-      # on the raw URLs left it undeduplicated and downloaded twice.
-      #
-      # What is identity is the artifact. A checksum settles it outright, and mirrors of
-      # one package share theirs, so proxied copies still collapse. Without a checksum
-      # the registry host is the best evidence there is -- enough to keep a private
-      # package from collapsing into a public one of the same name and version, which
-      # would have applied whichever entry came first to both.
-      #
-      # For Git the repository is identity, normalized so equivalent spellings collapse.
+      # The artifact is identity, not the registry URL: one raise recorded through
+      # different remotes in different lockfiles stayed undeduplicated and downloaded
+      # twice. A checksum settles it and mirrors share theirs, so proxied copies collapse;
+      # without one the registry host is enough to keep a private package from collapsing
+      # into a public one of the same name and version. For Git it is the repository,
+      # normalized so equivalent spellings collapse.
       def source_identity
         if source == "git"
           return [

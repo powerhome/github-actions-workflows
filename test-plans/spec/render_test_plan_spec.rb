@@ -5,11 +5,8 @@ require "open3"
 require "tmpdir"
 
 RSpec.describe "bin/render_test_plan.rb" do
-  # Every write and read in this action pins UTF-8, because the plan carries characters
-  # the renderer puts there itself -- the heading's check mark, the arrow between two
-  # versions. A spec that read the comment back at the locale's encoding would pass or
-  # fail on whether the machine running it had LANG set, which is not a property of the
-  # renderer.
+  # Read back as UTF-8, not at the locale's encoding: the plan carries the heading's check
+  # mark and the arrow between versions, so otherwise this passes or fails on LANG.
   def render(variant:, payload:, dependencies:, expect_success: true)
     Dir.mktmpdir do |directory|
       json_path = File.join(directory, "response.json")
@@ -51,9 +48,8 @@ RSpec.describe "bin/render_test_plan.rb" do
     expect(output).not_to include("## Functional / Features to Test")
   end
 
-  # The provider was told to send empty arrays, and a response that sends no array at all
-  # means the same thing. Failing here would throw away every version change the manifest
-  # recorded over a key nobody reads.
+  # Failing here throws away every version change the manifest recorded over a key the
+  # provider was only ever told to send empty.
   it "renders the dependency variant when the response omits its optional arrays" do
     output = render(
       variant: "dependency",
@@ -84,8 +80,7 @@ RSpec.describe "bin/render_test_plan.rb" do
     expect(output).to include("## Additional Playbook Regression Testing", "### Existing control")
   end
 
-  # The standard plan renders from the response alone. Its manifest is written whatever
-  # the raise was, but a shape that never reads it should not fail over it.
+  # A shape that never reads the manifest should not fail over it.
   it "renders the standard variant without reading the manifest" do
     output = render(
       variant: "",

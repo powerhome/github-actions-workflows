@@ -40,8 +40,7 @@ RSpec.describe TestPlan::Dependency::Formatter do
     expect(output).not_to include("Other dependency raises", "Applicable Functional Cases")
   end
 
-  # The two silences mean different things to a tester: nothing was retrieved, or
-  # something was and the response said nothing about it.
+  # Nothing was retrieved, or something was and the response said nothing about it.
   it "tells an unavailable delta apart from a retrieved one nobody wrote up" do
     output = render("dependencies" => [], "regression_tests" => [])
 
@@ -49,8 +48,7 @@ RSpec.describe TestPlan::Dependency::Formatter do
     expect(output).to include("**cgi (bundler) 0.5.1 → 0.5.2** — Upstream delta unavailable")
   end
 
-  # Matching on the manifest's internal `source` enum would have cost this raise its note
-  # for a field no reader of the plan ever sees.
+  # Matching on the manifest's internal `source` enum would cost this raise its note.
   it "attaches a note that did not echo the manifest's source" do
     output = render(
       "dependencies" => [
@@ -94,8 +92,7 @@ RSpec.describe TestPlan::Dependency::Formatter do
     expect(output).not_to include("Applicable Functional Cases")
   end
 
-  # Dropped, because it is not testing the raise -- but dropped out loud. A plan that
-  # quietly published fewer cases than were generated would read as complete.
+  # Dropped out loud: a plan publishing fewer cases than were generated reads as complete.
   it "drops a regression test naming an unraised dependency and says so" do
     output = render(
       "dependencies" => [],

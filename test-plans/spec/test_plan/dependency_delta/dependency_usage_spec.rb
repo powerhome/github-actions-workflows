@@ -42,8 +42,7 @@ RSpec.describe TestPlan::DependencyDelta::DependencyUsage do
     end
   end
 
-  # A committed bundle inlines its dependencies, so it matches every package name. Left
-  # in, it would spend a package's whole sample on one generated file.
+  # A committed bundle inlines its dependencies, matching every package name searched for.
   it "excludes build output and vendored code" do
     files = {
       "app/menu.rb" => "require 'widget'\n",
@@ -62,8 +61,8 @@ RSpec.describe TestPlan::DependencyDelta::DependencyUsage do
     end
   end
 
-  # git grep exits 1 for "searched fine, matched nothing", which is the opposite of a
-  # failure: it licenses saying so, where a real failure does not.
+  # git grep exits 1 for "matched nothing", which licenses saying so where a failure does
+  # not.
   it "says a package matched nothing when the search found nothing" do
     workspace("app/menu.rb" => "require 'something_else'\n") do |directory|
       report = described_class.new(workspace: directory).report([change("widget")])
@@ -91,8 +90,7 @@ RSpec.describe TestPlan::DependencyDelta::DependencyUsage do
     end
   end
 
-  # Lexicographic order is the worst order to sample a monorepo in: the first eight
-  # matches would be eight files in one component.
+  # Lexicographically, the first eight matches are eight files in one component.
   it "spreads the sample across components rather than taking it off the front" do
     files = {}
     %w[accounting billing contact_center].each do |component|

@@ -49,18 +49,14 @@ module TestPlan
         )
 
         kit_usage_path = ENV.fetch("DEPENDENCY_KIT_USAGE_PATH")
-        # A separate name: kit_usage is the usage object the later writes still need.
         report = result.fetch(:kit_usage).to_s
         report += other_raises_section(changes) unless report.empty?
         File.write(kit_usage_path, report, encoding: Encoding::UTF_8)
 
-        # Written whatever the raise was, so the render step has a file to read and the
-        # artifact upload has nothing to warn about.
-        #
-        # Deliberately outside the workspace, like the full delta: the provider runs there
-        # with Read(**), and this file carries the call-site counts the evidence withholds
-        # from it precisely so it has no number to copy back. Not pointing the prompt at a
-        # file it can open is not the same as it not being able to open it.
+        # Written whatever the raise was, so the render step always has a file to read.
+        # Outside the workspace deliberately: the provider reads the workspace with
+        # Read(**), and this carries the call-site counts withheld from it so it has no
+        # number to copy back.
         File.write(
           ENV.fetch("PLAYBOOK_KIT_FACTS_PATH"),
           JSON.pretty_generate(kit_usage.facts) + "\n",
@@ -77,8 +73,8 @@ module TestPlan
 
     private
 
-      # The runner is ephemeral, so otherwise the reason for a warning is only in the
-      # artifact. Unescaped is safe: a workflow command has to start its own line, and
+      # The runner is ephemeral, so otherwise the reason is only in the artifact.
+      # Unescaped is safe: a workflow command must start its own line, and
       # JSON.pretty_generate escapes newlines inside strings.
       def log_manifest(path, manifest)
         puts("::group::Dependency delta manifest (#{path})")
@@ -86,8 +82,8 @@ module TestPlan
         puts("::endgroup::")
       end
 
-      # playbook_ui is in ~140 component Gemfile.locks; printed in full they bury the
-      # warnings. The file and the artifact keep all of them.
+      # playbook_ui is in ~140 component Gemfile.locks, which printed in full bury the
+      # warnings. The artifact keeps all of them.
       LOGGED_LOCKFILES = 5
 
       def loggable(manifest)
@@ -104,9 +100,8 @@ module TestPlan
         manifest.merge("dependencies" => dependencies)
       end
 
-      # Names are escaped here, not by the formatter: they come from lockfiles the pull
-      # request can edit, and the formatter renders this as the Markdown it was handed.
-      # One line too -- the value goes to GITHUB_OUTPUT, where a newline would end it.
+      # Escaped here, not by the formatter, which renders this as Markdown it was handed.
+      # One line: the value goes to GITHUB_OUTPUT, where a newline would end it.
       def warning_message(manifest)
         grouped = manifest.fetch("dependencies").each_with_object({}) do |entry, groups|
           reason = reason_for(entry)
@@ -142,8 +137,8 @@ module TestPlan
         text.gsub(/\s+/, " ").strip
       end
 
-      # First point in the run that can say which plan shape the pull request calls for:
-      # the profile resolved from the label before any lockfile had been read.
+      # First point in the run that can say which plan shape the pull request calls for;
+      # the profile resolved from the label before any lockfile was read.
       def write_outputs(changes, warning_count, warning)
         File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|
           output.puts("change_count=#{changes.length}")
@@ -153,17 +148,14 @@ module TestPlan
         end
       end
 
-      # Names, versions, paths and warning text all originate in lockfiles the pull
-      # request can edit, or in messages built from them, and the summary is rendered as
-      # Markdown. Same policy as the comment.
+      # The summary renders as Markdown and its values come from lockfiles the pull
+      # request can edit. Same policy as the comment.
       def escape(value)
         UntrustedText.escape(value.to_s)
       end
 
       OTHER_RAISES_HEADING = "# Other dependency raises in this pull request"
 
-      # Keep a concise list beside the kit evidence. The manifest is authoritative and
-      # separates in-scope raises from component-only gems the run skipped.
       def other_raises_section(changes)
         others = changes
           .reject { |change| Playbook::PACKAGE_NAMES.include?(change.name) }
@@ -175,9 +167,8 @@ module TestPlan
           "context diff.\n\n#{lines.join("\n")}\n"
       end
 
-      # Kit counts are passed in rather than read from the manifest: the manifest is a
-      # document the provider can open, and a count it can see is a count it can copy back
-      # as its own. The summary is read by people.
+      # Counts are passed in rather than read from the manifest, which the provider can
+      # open: a count it can see is a count it can copy back as its own.
       def write_summary(manifest, kit_facts = { "kits" => {} })
         summary_path = ENV["GITHUB_STEP_SUMMARY"]
         return if summary_path.to_s.empty?

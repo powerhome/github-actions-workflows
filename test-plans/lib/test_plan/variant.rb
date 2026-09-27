@@ -1,7 +1,7 @@
 module TestPlan
-  # Which shape of plan to ask the provider for. The profile resolves from the label
-  # before any lockfile is read, so only the dependency delta knows what was raised.
-  # The choice is named so the render step can follow it.
+  # The profile resolves from the label before any lockfile is read, so only the
+  # dependency delta knows what was raised. Named so the render step follows the same
+  # choice the provider was given.
   module Variant
     PLAYBOOK = "playbook".freeze
     DEPENDENCY = "dependency".freeze

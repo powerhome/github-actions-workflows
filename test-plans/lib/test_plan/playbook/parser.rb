@@ -5,8 +5,7 @@ require_relative "./kit_facts"
 
 module TestPlan
   module Playbook
-    # Organizes a Playbook raise by changed kit rather than feature area. The pull request
-    # may also contain application edits, which get their own compatibility checks.
+    # Organizes a Playbook raise by changed kit rather than feature area.
     class Parser
       include AgentPayload
 
@@ -55,9 +54,8 @@ module TestPlan
 
         {
           "name" => name,
-          # The join key into the facts the action computed. An identifier the provider
-          # copies from the evidence heading is checkable in a way a number it reports is
-          # not, which is why the coverage count no longer travels through here at all.
+          # The join key into the facts the action computed: an identifier the provider
+          # copies is checkable in a way a number it reports is not.
           "slug" => normalize_text(entry["slug"]).downcase,
           "what_changed" => normalize_text(entry["what_changed"]),
           "code" => kit_code(entry["code"], name),
@@ -99,8 +97,7 @@ module TestPlan
         end
       end
 
-      # Which half of the kit the case exercises. Left empty rather than guessed when the
-      # provider did not say, so the plan does not label a React page as Rails.
+      # Empty rather than guessed, so the plan does not label a React page as Rails.
       def system(value)
         candidate = normalize_text(value).downcase
         KitFacts::SYSTEMS.include?(candidate) ? candidate : ""

@@ -4,9 +4,8 @@ require_relative "./packages"
 
 module TestPlan
   module Playbook
-    # Renders the kit-organised plan. The coverage tier is decided here from the use
-    # count rather than taken from the provider, so a sample can never be published as
-    # exhaustive.
+    # The coverage tier is decided here from the use count rather than taken from the
+    # provider, so a sample can never be published as exhaustive.
     class Formatter
       include PlanDocument
 
@@ -115,8 +114,6 @@ module TestPlan
         lines.join("\n")
       end
 
-      # A kit is two implementations sharing a name, so which one a case exercises is the
-      # difference between a tester opening the right page and the wrong one.
       def case_metadata(scenario)
         rows = []
         page = sanitize(scenario.fetch("page"))
@@ -126,9 +123,8 @@ module TestPlan
         rows.empty? ? ["**Page:** Not identified from this change."] : rows
       end
 
-      # Only the dependency raises. A Playbook release also moves its own version constant,
-      # its packaging and its documentation site, and writing those up spent tokens on
-      # changes no tester can act on.
+      # Only the dependency raises: a release also moves Playbook's own version constant,
+      # packaging and docs site, which no tester can act on.
       def beyond_section
         lines = ["## Other dependency raises in this PR", ""]
         entries = other_dependencies
@@ -145,9 +141,8 @@ module TestPlan
         lines.join("\n")
       end
 
-      # Driven by the manifest, not the response: a raise the provider forgot to write up
-      # still has to appear, and one it invented has nowhere to appear. The response only
-      # supplies the note and steps, matched to a raise by name and version.
+      # Driven by the manifest, not the response: a raise the provider forgot still
+      # appears and one it invented does not. The response supplies only note and steps.
       def other_dependencies
         return @parsed.other_dependencies if @manifest_dependencies.empty?
 
@@ -183,10 +178,9 @@ module TestPlan
         @kit_facts.for(slug: kit.fetch("slug"), name: kit.fetch("name"))
       end
 
-      # Never upgraded on the provider's word. Without a matching fact the plan reads as a
-      # sample, which under-claims; and a kit the action found exhaustible is downgraded
-      # anyway when the provider wrote fewer cases than there are call sites, because
-      # "every use is listed below" would then be false.
+      # Never upgraded on the provider's word. No matching fact reads as a sample, and an
+      # exhaustible kit is downgraded anyway when the provider wrote fewer cases than
+      # there are call sites, since "every use is listed below" would then be false.
       def coverage(kit)
         fact = fact_for(kit)
         return KitFacts::REPRESENTATIVE unless fact

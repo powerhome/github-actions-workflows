@@ -14,28 +14,18 @@ require_relative "version_spelling"
 
 module TestPlan
   module DependencyDelta
-    # Published packages routinely omit the changelog: neither the playbook_ui gem nor
-    # the playbook-ui tarball ships one, though the repository keeps a detailed file.
-    # For a manual QA plan that file is the single highest-signal artifact available --
-    # it names behaviour changes in product terms, where a source diff only shows the
-    # code and leaves the model to infer intent.
+    # The highest-signal artifact for a QA plan: it names behaviour changes in product
+    # terms where a source diff leaves intent to be inferred. Read from the repository
+    # because published packages routinely omit it -- neither the playbook_ui gem nor the
+    # playbook-ui tarball ships one.
     #
-    # So fetch it from the repository instead. The old side is read at the upgraded-from
-    # tag and the new side at the default branch rather than the upgraded-to tag,
-    # because a generated changelog is usually committed after its release is tagged --
-    # playbook's 17.1.0 tag still describes 17.0.0 as the newest release. Reading the
-    # default branch trades a chance of including unreleased notes for not missing the
-    # release being tested.
-    #
-    # Diffing the two files rather than parsing them keeps this format-agnostic; no
-    # project's heading convention has to be understood.
+    # Diffed rather than parsed, so no project's heading convention has to be understood.
     class ChangelogSource
       FILENAMES = %w[CHANGELOG.md CHANGELOG.markdown CHANGELOG CHANGES.md HISTORY.md].freeze
       DEFAULT_REF = "HEAD".freeze
-      # A single diff larger than a dependency's context budget is dropped whole, so cap
-      # what the provider sees and keep the head, which is the newest release in the
-      # newest-first layout nearly every changelog uses. The artifact keeps the whole
-      # diff, so the notice below points somewhere the content actually is.
+      # A diff larger than a dependency's context budget is dropped whole, so cap it and
+      # keep the head -- the newest release, in the newest-first layout nearly every
+      # changelog uses. The artifact keeps the whole diff.
       MAX_DIFF_BYTES = 64 * 1024
       TRUNCATION_NOTICE = "\n[The changelog diff was truncated here; see the full-delta artifact.]\n".freeze
 
@@ -43,8 +33,7 @@ module TestPlan
         @downloader = downloader
       end
 
-      # Never raises: a missing repository, tag, or changelog is an absence of evidence,
-      # not a failure of the run.
+      # Never raises: missing evidence is not a failed run.
       def diffs_for(change)
         repository, candidates = resolve_source(change)
         return [] if repository.nil? || candidates.empty?
@@ -78,23 +67,12 @@ module TestPlan
 
     private
 
-      # Returns the baseline, the new side, and whether the pair is bounded by the
-      # upgrade. Both ends matter: notes for the version already installed are as much
-      # noise as notes for a version that is not.
-      #
-      # A Git-pinned dependency names both revisions, so it brackets itself.
-      #
-      # For a registry release the upgraded-to tag decides which pattern the project
-      # follows, and the answer differs for each:
-      #
-      #   Changelog committed before tagging -- the tag already describes its own
-      #   release, so the two tags bracket the upgrade exactly.
-      #
-      #   Committed after tagging -- the tag holds everything up to but not including
-      #   its own release, which makes it the right *baseline*, not the new side.
-      #   Reading from the upgraded-from tag instead would carry the old release's own
-      #   notes, describing behaviour already installed. The default branch supplies the
-      #   notes themselves, along with anything released since, which the notice says.
+      # Returns [baseline, new side, bounded?]. Which refs bracket the upgrade depends on
+      # when the project commits its changelog, which the upgraded-to tag reveals:
+      # committed before tagging, that tag describes its own release and the two tags
+      # bracket it exactly; committed after tagging, it holds everything up to but not
+      # including its own release, making it the baseline rather than the new side, with
+      # the default branch supplying the notes plus anything released since.
       def compare(change, repository, path, old_body)
         if change.source == "git"
           return [old_body, fetch(repository, change.new_version.to_s, path), true]
@@ -116,13 +94,9 @@ module TestPlan
           "#{change.new_version} may appear below and are not part of this upgrade.]\n\n"
       end
 
-      # Returns the repository and the changelog paths worth trying, in order.
-      #
-      # npm records the repository, and a monorepo's subdirectory with it. RubyGems
-      # exposes it only when a gem sets source_code_uri or changelog_uri; a
-      # changelog_uri is better still, because it names the file rather than leaving us
-      # to guess that it sits at the repository root -- playbook keeps its under
-      # playbook/.
+      # npm records the repository and a monorepo's subdirectory. RubyGems exposes it
+      # only through source_code_uri or changelog_uri, the latter naming the file rather
+      # than leaving its location to be guessed -- playbook keeps its under playbook/.
       def resolve_source(change)
         case change.source
         when "npm"
@@ -144,20 +118,14 @@ module TestPlan
         FILENAMES.map { |name| directory ? "#{directory}/#{name}" : name }
       end
 
-      # The version document is only this package's if the lockfile entry is the public
-      # package at all. Without that check a private package sharing a name with a
-      # public one would be handed the unrelated project's changelog -- and it would be
-      # handed it precisely when source retrieval had already refused the package for
-      # the same reason, since a changelog survives a refused download.
+      # Both sides are checked, because a changelog survives a refused download: a private
+      # package sharing a name with a public one would otherwise be handed the unrelated
+      # project's release notes exactly when source retrieval had already refused it.
       def npm_repository(change)
         payload = fetch_json(
           "https://registry.npmjs.org/#{URI.encode_www_form_component(change.name)}/" \
             "#{URI.encode_www_form_component(change.new_version)}"
         )
-        # Both sides, not just the new one. The changelog diff starts at the old
-        # version's tag, so an old entry that came from a private package would have
-        # this repository's history presented as its release notes -- and would, since a
-        # changelog survives the refused download of that side.
         unless PublicOrigin.npm_public?(payload["dist"].to_h, change.new_locator, change.new_integrity)
           return [nil, nil]
         end
@@ -199,10 +167,8 @@ module TestPlan
         [nil, nil]
       end
 
-      # Tag conventions vary even within one project; playbook publishes 17.0.0 and
-      # v17.1.0-rc.4 side by side.
-      # A tag is named in the repository's spelling, not RubyGems': trying only the
-      # lockfile's string resolved no tag at all for a gem prerelease.
+      # Tags are named in the repository's spelling, not RubyGems', and conventions vary
+      # within one project: playbook publishes 17.0.0 and v17.1.0-rc.4 side by side.
       def resolve_tag(repository, candidates, version)
         refs = VersionSpelling.spellings(version).flat_map { |spelling| [spelling, "v#{spelling}"] }
         refs.find do |ref|
@@ -210,8 +176,7 @@ module TestPlan
         end
       end
 
-      # Whether the tagged changelog already covers the release being tested. The prose
-      # uses the repository's spelling, so a gem's version needs the hyphenated one too.
+      # Whether the tagged changelog already covers the release being tested.
       def describes?(body, version)
         VersionSpelling.spellings(version).any? { |spelling| body.include?(spelling) }
       end

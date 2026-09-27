@@ -7,9 +7,8 @@ require "stringio"
 require "tmpdir"
 
 RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
-  # A real git repository, because the search runs through `git grep` and its POSIX ERE
-  # dialect is the thing most likely to break: \s and (?:...) are unsupported there and
-  # match nothing rather than erroring.
+  # A real git repository, because git grep's POSIX ERE dialect is what breaks: \s and
+  # (?:...) are unsupported there and match nothing rather than erroring.
   def workspace(files)
     Dir.mktmpdir do |root|
       files.each do |path, content|
@@ -108,8 +107,7 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       end
     end
 
-    # The changed side is what a tester has to reopen, so a side nobody here renders has
-    # to be said rather than left as an empty list.
+    # A changed side nobody renders has to be said, not left as an empty list.
     it "says so when a changed side is not rendered in this repository" do
       workspace(app) do |root|
         usage = described_class.new(workspace: root)
@@ -122,8 +120,8 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     end
   end
 
-  # Playbook ships a kit's docs and tests inside the kit directory, so without this a
-  # release that only refreshed the docs site reported the kit as changed.
+  # Playbook ships docs and tests inside the kit directory, so a release that only
+  # refreshed the docs site reported the kit as changed.
   describe "documentation and tests are not the kit changing" do
     it "does not register a kit whose only change is a doc example" do
       workspace(app) do |root|
@@ -237,9 +235,8 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     end
   end
 
-  # "No usage found" is the one conclusion this file exists to support -- it tells a
-  # tester there is nothing to open for a changed kit. Reaching it because the search
-  # never ran is worse than producing no report at all.
+  # "No usage found" tells a tester there is nothing to open, so reaching it because the
+  # search never ran is worse than no report at all.
   describe "when the search cannot run" do
     def annotations
       original = $stdout

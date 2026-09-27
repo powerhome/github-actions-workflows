@@ -39,9 +39,8 @@ RSpec.describe TestPlan::Dependency::Parser do
     expect { parse([]) }.to raise_error(/must be an object/)
   end
 
-  # Both case lists are optional. The provider was told to send an empty array when it
-  # traced nothing, and a response that sends no array at all is saying the same thing --
-  # the manifest still supplies every version change the plan is really about.
+  # Sending no array says what an empty array says, and the manifest still supplies every
+  # version change the plan is really about.
   it "accepts a response carrying version entries alone" do
     parsed = parse("dependencies" => payload.fetch("dependencies"))
 
@@ -51,8 +50,8 @@ RSpec.describe TestPlan::Dependency::Parser do
     expect(parsed.discarded).to be_empty
   end
 
-  # `source` is an internal enum the provider only ever sees in the manifest. Requiring it
-  # back would cost a response its note and steps over a field no reader of the plan sees.
+  # `source` is an internal enum no reader of the plan sees, so requiring it back costs a
+  # response its note and steps for nothing.
   it "keeps a version entry that did not echo the manifest's source" do
     parsed = parse("dependencies" => [
       { "ecosystem" => "yarn", "name" => "widget", "from" => "1.0.0", "to" => "2.0.0", "note" => "Changed." },

@@ -276,8 +276,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       direct: true, lockfiles: ["b/yarn.lock"]
     )
 
-    # Collapsing these would apply one entry's provenance to both, either feeding the
-    # private dependency unrelated public source or suppressing valid public evidence.
+    # Collapsing these applies one entry's provenance to both, either feeding the private
+    # dependency unrelated public source or suppressing valid public evidence.
     expect(public_change.key).not_to eq(private_change.key)
   end
 
@@ -329,8 +329,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
     snapshot = FakeSnapshot.new(
       "merge_base" => { "Gemfile.lock" => lock.call("1.0.0") },
-      # The base branch raised the gem further after this PR forked. That raise
-      # belongs to the base branch, not to this PR.
+      # Raised further on the base branch after this PR forked, so not this PR's raise.
       "base_tip" => { "Gemfile.lock" => lock.call("3.0.0") },
       "head" => { "Gemfile.lock" => lock.call("2.0.0") }
     )
@@ -374,9 +373,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     expect(detector.problems.first.message).to include("Unable to parse broken/Gemfile.lock")
   end
 
-  # Which names count as direct decides ordering and how much of the context budget a
-  # raise gets, so reading a manifest loosely both promotes dependencies nobody declared
-  # and, through the quote pairing, demotes ones somebody did.
+  # Directness decides ordering and context budget, so reading a manifest loosely both
+  # promotes dependencies nobody declared and demotes ones somebody did.
   describe "reading direct dependencies out of a manifest" do
     def bumping(manifests)
       lock = lambda do |version|
@@ -412,9 +410,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
 
     it "still sees a declaration that follows prose containing an apostrophe" do
-      # The comment bundler's own `gem` template writes. Unanchored, its apostrophe
-      # opened a quote whose capture ran to the next one in the file -- the opening
-      # quote of the declaration below -- swallowing the name it was looking for.
+      # Bundler's own template comment. Unanchored, its apostrophe opened a quote whose
+      # capture ran to the declaration below, swallowing the name it was looking for.
       changes = bumping(
         "Gemfile" => <<~GEMFILE
           # Specify your gem's dependencies in widget.gemspec

@@ -30,8 +30,8 @@ module TestPlan
       ).tap(&:validate!)
 
       # The file is chosen by the requested id, so a definition declaring a different one
-      # would publish under a name nothing asked for -- and the blocked message tells the
-      # author to reapply a label named after it, which would then be the wrong label.
+      # publishes under a name nothing asked for -- and the blocked message would then
+      # tell the author to reapply the wrong label.
       unless profile.id == profile_id
         raise "Test-plan profile #{profile_id} declares a different id: #{profile.id.inspect}"
       end
@@ -90,9 +90,8 @@ module TestPlan
       resolve_prompt("prompt")
     end
 
-    # Optional. Whether the raise is Playbook is not known until the dependency delta has
-    # been built, long after this profile resolved from the label, so the alternative is
-    # declared here and chosen later. A profile without one keeps its single prompt.
+    # Optional: what was raised is not known until the delta is built, long after this
+    # profile resolved from the label, so alternatives are declared here and chosen later.
     def playbook_prompt_path
       return "" unless attributes.key?("playbook_prompt")
 

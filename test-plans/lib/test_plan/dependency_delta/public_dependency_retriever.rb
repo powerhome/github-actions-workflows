@@ -42,9 +42,8 @@ module TestPlan
 
     private
 
-      # A gem is only the public gem if the lockfile actually resolved it from rubygems.org.
-      # Gemfile.lock carries no checksum we could fall back on, so anything else is treated
-      # as a private source and reported rather than guessed at.
+      # Gemfile.lock carries no checksum to fall back on, so a gem resolved from anywhere
+      # but rubygems.org is reported as private rather than guessed at.
       def retrieve_gems(change, directory, old_root, new_root)
         PublicOrigin.rubygems_public!(change)
 
@@ -68,10 +67,9 @@ module TestPlan
         @extractor.extract_gzip(new_archive, new_root)
       end
 
-      # Packages resolved straight from npm are public by definition. A package resolved
-      # through a private registry may still be a proxied copy of the public one, so accept
-      # it only when the lockfile's own checksum matches the public artifact -- otherwise we
-      # would hand the provider a same-named package's unrelated source.
+      # A package from a private registry may be a proxied copy of the public one, so it
+      # is accepted only when the lockfile's checksum matches the public artifact --
+      # otherwise the provider gets a same-named package's unrelated source.
       def public_npm_tarball(change, version, locator, integrity)
         dist = @downloader.npm_dist(change.name, version)
         PublicOrigin.npm_public!(change, version, dist, locator, integrity)
@@ -79,9 +77,8 @@ module TestPlan
         dist.fetch("tarball")
       end
 
-      # Each revision has to come from the repository that actually recorded it. When a
-      # dependency moves to a fork or a transferred repository, fetching the old revision
-      # from the new repository 404s and loses a delta that is public on both sides.
+      # Each revision comes from the repository that recorded it: across a fork or a
+      # transfer, fetching the old revision from the new repository 404s.
       def retrieve_git(change, directory, old_root, new_root)
         old_repository = github_repository(change.old_locator) || github_repository(change.new_locator)
         new_repository = github_repository(change.new_locator) || github_repository(change.old_locator)
@@ -109,12 +106,11 @@ module TestPlan
         "https://codeload.github.com/#{repository}/tar.gz/#{URI.encode_www_form_component(revision)}"
       end
 
-      # npm tarballs wrap their contents in "package/" and GitHub archives in
-      # "<repo>-<revision>/"; a gem's data archive has no wrapper at all. Descending
-      # whenever a root happened to hold a single directory meant a gem containing only
-      # "lib/" was entered, and -- worse -- one side could be entered while the other was
-      # not, offsetting the two roots so every file read as removed and re-added. Strip a
-      # wrapper only for the sources that have one, and only when both sides agree.
+      # npm tarballs wrap contents in "package/" and GitHub archives in
+      # "<repo>-<revision>/"; a gem's data archive has no wrapper. Descending whenever a
+      # root held a single directory entered a gem containing only "lib/", and could enter
+      # one side and not the other, offsetting the roots so every file read as removed and
+      # re-added. Only known wrappers, and only when both sides agree.
       def content_roots(source, old_root, new_root)
         return [old_root, new_root] if source == "rubygems"
 
