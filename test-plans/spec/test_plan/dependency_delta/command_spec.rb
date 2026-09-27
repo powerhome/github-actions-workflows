@@ -293,7 +293,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
       ]
     )
 
-    expect(summary).to include("1 raised dependency reached no root lockfile")
+    expect(summary).to include("1 raised dependency reached no root Gemfile.lock")
     expect(summary).to include("minitest: 5.25.5 -> 6.0.6")
   end
 

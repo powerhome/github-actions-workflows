@@ -27,10 +27,9 @@ inputs:
     default: "30"
   dependency-scope:
     description: >-
-      Which lockfiles a dependency raise has to reach to be analyzed. "umbrella" (the
-      default) counts only the root Gemfile.lock and yarn.lock, so a raise confined to an
-      unmounted component's lockfile is recorded and skipped. "all" analyzes every
-      lockfile, which a monorepo that mounts its components wants.
+      Which Gemfile.lock raises to analyze. "umbrella" (the default) counts raises that
+      reach the root Gemfile.lock and all yarn.lock files, recording component-only gem
+      raises as skipped. "all" also analyzes raises confined to component Gemfile.lock files.
     required: false
     default: umbrella
 

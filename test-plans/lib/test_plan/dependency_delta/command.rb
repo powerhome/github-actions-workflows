@@ -221,7 +221,7 @@ module TestPlan
 
           summary.puts(
             "- #{out_of_scope.length} raised #{out_of_scope.length == 1 ? "dependency" : "dependencies"} " \
-              "reached no root lockfile and were not analyzed"
+              "reached no root Gemfile.lock and were not analyzed"
           )
           out_of_scope.each do |entry|
             summary.puts(

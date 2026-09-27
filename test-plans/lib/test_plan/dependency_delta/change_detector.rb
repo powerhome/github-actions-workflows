@@ -22,11 +22,10 @@ module TestPlan
       ADD_DEPENDENCY =
         /^[ \t]*(?:[A-Za-z_]\w*\.)?add_(?:runtime_)?dependency\s*\(?\s*["']([^"'\n]+)["']/
 
-      # Only the umbrella application is deployed, so a raise reaching nothing but
-      # component lockfiles changes nothing a tester can open. A single-lockfile
-      # repository is unaffected -- its lockfile is the root one. A monorepo that does
-      # mount its components wants "all".
-      UMBRELLA_LOCKFILES = %w[Gemfile.lock yarn.lock].freeze
+      # Component Gemfile.lock files include gems used only by component test suites.
+      # Yarn lockfiles in UI components resolve code the deployed application serves,
+      # so every changed yarn.lock is in scope even when the root one did not change.
+      ROOT_GEM_LOCKFILE = "Gemfile.lock"
       SCOPES = %w[umbrella all].freeze
 
       attr_reader :problems, :out_of_scope
@@ -80,13 +79,13 @@ module TestPlan
 
     private
 
-      # After deduplication: a raise in both a root and a component lockfile is one
+      # After deduplication: a gem raise in both root and component lockfiles is one
       # change, and partitioning first would have judged the component copy alone.
       def scoped(changes)
         return changes if @scope == "all"
 
         in_scope, out = changes.partition do |change|
-          change.lockfiles.any? { |path| UMBRELLA_LOCKFILES.include?(path) }
+          change.ecosystem == "yarn" || change.lockfiles.include?(ROOT_GEM_LOCKFILE)
         end
         @out_of_scope = out
         in_scope
