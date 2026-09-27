@@ -8,11 +8,9 @@ module TestPlan
   # any of them can carry an @mention that notifies people, a link or image pointing
   # anywhere, or inline HTML, published under the bot's name.
   #
-  # The surrounding structure is always built by this action, so untrusted text never
-  # needs to carry markup and is neutralised wholesale. The entities render as the
-  # characters they replace, so a reader still sees exactly what was written; breaking
-  # the scheme separator is what stops a bare URL from autolinking, which escaping
-  # bracket syntax alone does not.
+  # The surrounding structure is built by this action. Backticks are retained for
+  # inline code; other markup is neutralised. The entities render as the characters
+  # they replace, while breaking the scheme separator stops bare URLs from autolinking.
   module UntrustedText
     module_function
 
@@ -20,7 +18,6 @@ module TestPlan
       return "" unless value.is_a?(String)
 
       value
-        .delete("`")
         .gsub("&", "&amp;")
         .gsub("<", "&lt;")
         .gsub(">", "&gt;")

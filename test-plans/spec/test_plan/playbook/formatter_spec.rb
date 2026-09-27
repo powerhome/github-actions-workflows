@@ -223,6 +223,17 @@ RSpec.describe TestPlan::Playbook::Formatter do
     expect(output).to include("\\[click\\]")
   end
 
+  it "preserves backticks in pages and steps" do
+    entry = kit(name: "Dropdown")
+    entry["cases"][0]["page"] = "`/page/1`"
+    entry["cases"][0]["steps"] = ["Open `/page/1`."]
+
+    output = render({ "kits" => [entry] })
+
+    expect(output).to include("**Page:** `/page/1`")
+    expect(output).to include("- Open `/page/1`.")
+  end
+
   it "carries the dependency-delta warning and the discard notice" do
     output = render(
       { "kits" => [kit(name: "Dropdown"), { "name" => "Broken", "cases" => [] }] },
