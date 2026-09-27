@@ -68,7 +68,7 @@ module TestPlan
 
         warning_count = result.dig(:manifest, "warning_count")
         warning = warning_count.positive? ? warning_message(result.fetch(:manifest)) : ""
-        write_outputs(changes, warning_count, warning, kit_usage.kits, snapshot.declarations_only?)
+        write_outputs(changes, warning_count, warning)
         write_summary(result.fetch(:manifest), kit_usage.facts)
         log_manifest(manifest_path, result.fetch(:manifest))
         puts("::warning::#{warning}") unless warning.empty?
@@ -141,16 +141,14 @@ module TestPlan
         text.gsub(/\s+/, " ").strip
       end
 
-      def write_outputs(changes, warning_count, warning, kits, declarations_only)
+      # First point in the run that can say which plan shape the pull request calls for:
+      # the profile resolved from the label before any lockfile had been read.
+      def write_outputs(changes, warning_count, warning)
         File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|
           output.puts("change_count=#{changes.length}")
           output.puts("warning_count=#{warning_count}")
           output.puts("generation_warning=#{warning}")
           output.puts("playbook_raised=#{changes.any? { |change| PlaybookKitUsage::PACKAGE_NAMES.include?(change.name) }}")
-          # First point in the run that can know: the profile resolved from the label
-          # before any lockfile was read.
-          output.puts("playbook_kits_changed=#{kits.any?}")
-          output.puts("lockfile_only=#{declarations_only}")
         end
       end
 

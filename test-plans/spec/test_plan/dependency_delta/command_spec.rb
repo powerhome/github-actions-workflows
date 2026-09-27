@@ -89,7 +89,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
         expect(written.fetch("DEPENDENCY_USAGE_PATH")).to include("# Dependency usage candidates", "## widget")
 
         output = written.fetch("GITHUB_OUTPUT")
-        expect(output).to include("change_count=1", "playbook_kits_changed=false", "playbook_raised=false")
+        expect(output).to include("change_count=1", "playbook_raised=false")
         expect(written.fetch("GITHUB_STEP_SUMMARY")).to include("## External dependency delta")
       end
     end
@@ -144,20 +144,34 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("Dialog: 0 call sites (unused)")
   end
 
-  # A Playbook raise selects the Playbook plan even when no changed kit could be found.
-  it "reports a Playbook raise separately from changed kits" do
-    [[%w[dropdown file_upload], true], [[], false]].each do |kits, declarations_only|
-      Tempfile.create("output") do |file|
-        ENV["GITHUB_OUTPUT"] = file.path
-        changes = [TestPlan::DependencyDelta::Change.new(name: "playbook_ui")]
-        described_class.new.send(:write_outputs, changes, 0, "", kits, declarations_only)
-        expect(File.read(file.path)).to include(
-          "change_count=1", "playbook_raised=true",
-          "playbook_kits_changed=#{kits.any?}", "lockfile_only=#{declarations_only}"
-        )
-      ensure
-        ENV.delete("GITHUB_OUTPUT")
-      end
+  # A Playbook raise selects the Playbook plan whatever else the pull request did, so this
+  # is the whole of what the variant step needs to know.
+  it "reports a Playbook raise however many other dependencies came with it" do
+    changes = [
+      TestPlan::DependencyDelta::Change.new(name: "cgi"),
+      TestPlan::DependencyDelta::Change.new(name: "playbook_ui"),
+    ]
+
+    expect(written_outputs(changes)).to include("change_count=2", "playbook_raised=true")
+  end
+
+  it "reports no Playbook raise when none of the changes is one" do
+    changes = [TestPlan::DependencyDelta::Change.new(name: "playbook-adjacent")]
+
+    expect(written_outputs(changes)).to include("change_count=1", "playbook_raised=false")
+  end
+
+  it "writes no change count and no Playbook raise when nothing was raised in scope" do
+    expect(written_outputs([])).to include("change_count=0", "playbook_raised=false")
+  end
+
+  def written_outputs(changes)
+    Tempfile.create("output") do |file|
+      ENV["GITHUB_OUTPUT"] = file.path
+      described_class.new.send(:write_outputs, changes, 0, "")
+      File.read(file.path, encoding: Encoding::UTF_8)
+    ensure
+      ENV.delete("GITHUB_OUTPUT")
     end
   end
 
