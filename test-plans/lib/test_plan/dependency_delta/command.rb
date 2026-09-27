@@ -1,5 +1,6 @@
 require "json"
 
+require_relative "../playbook/packages"
 require_relative "../untrusted_text"
 require_relative "./change_detector"
 require_relative "./dependency_usage"
@@ -148,7 +149,7 @@ module TestPlan
           output.puts("change_count=#{changes.length}")
           output.puts("warning_count=#{warning_count}")
           output.puts("generation_warning=#{warning}")
-          output.puts("playbook_raised=#{changes.any? { |change| PlaybookKitUsage::PACKAGE_NAMES.include?(change.name) }}")
+          output.puts("playbook_raised=#{changes.any? { |change| Playbook::PACKAGE_NAMES.include?(change.name) }}")
         end
       end
 
@@ -165,7 +166,7 @@ module TestPlan
       # separates in-scope raises from component-only gems the run skipped.
       def other_raises_section(changes)
         others = changes
-          .reject { |change| PlaybookKitUsage::PACKAGE_NAMES.include?(change.name) }
+          .reject { |change| Playbook::PACKAGE_NAMES.include?(change.name) }
           .sort_by(&:name)
         return "\n#{OTHER_RAISES_HEADING}\n\nNone.\n" if others.empty?
 

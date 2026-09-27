@@ -1,6 +1,7 @@
 require "json"
 require "set"
 require_relative "./bundler_change_detector"
+require_relative "../playbook/packages"
 require_relative "./playbook_kit_usage"
 require_relative "./yarn_change_detector"
 
@@ -88,7 +89,7 @@ module TestPlan
 
         in_scope, out = changes.partition do |change|
           change.ecosystem == "yarn" || change.lockfiles.include?(ROOT_GEM_LOCKFILE) ||
-            PlaybookKitUsage::PACKAGE_NAMES.include?(change.name)
+            Playbook::PACKAGE_NAMES.include?(change.name)
         end
         @out_of_scope = out
         in_scope

@@ -2,6 +2,7 @@ require "open3"
 
 require_relative "../command_output"
 require_relative "../playbook/kit_facts"
+require_relative "../playbook/packages"
 require_relative "./call_site_sample"
 
 module TestPlan
@@ -19,7 +20,6 @@ module TestPlan
     # matching release-note headings is guesswork. On the 17.0.0 -> 17.1.0 delta the
     # paths yield materially more kits than the prose does.
     class PlaybookKitUsage
-      PACKAGE_NAMES = %w[playbook_ui playbook-ui].freeze
       KIT_PATH = %r{(?:\A|/)app/pb_kits/playbook/pb_([a-z0-9_]+)/}
       # A kit used this few times can be covered exhaustively, and the plan says so. Past
       # it the plan tests a sample and says that instead, so SAMPLE_SIZE has to leave
@@ -50,7 +50,7 @@ module TestPlan
       # Called for every dependency the generator retrieves; ignores all but Playbook.
       def observe(change, diffs)
         return unless @workspace
-        return unless PACKAGE_NAMES.include?(change.name)
+        return unless Playbook::PACKAGE_NAMES.include?(change.name)
 
         diffs.each do |diff|
           # A doc example or a test moving is not the kit changing. Playbook ships both

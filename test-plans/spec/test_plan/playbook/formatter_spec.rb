@@ -218,8 +218,55 @@ RSpec.describe TestPlan::Playbook::Formatter do
       ] }
     ).render
 
-    expect(output).to include("**cgi 0.5.1 → 0.5.2**")
+    expect(output).to include("**cgi 0.5.1 → 0.5.2** — Raised alongside the Playbook upgrade.")
     expect(output).not_to include("No other dependency raises in this PR.")
+  end
+
+  # Every non-Playbook raise in the manifest, and only those: one the response invented
+  # has no raise to attach to, and one it forgot still has to appear.
+  it "ignores an other-dependency entry the manifest does not list" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate(
+      "kits" => [],
+      "other_dependencies" => [
+        { "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2", "note" => "Matched." },
+        { "name" => "invented", "from" => "1.0.0", "to" => "2.0.0", "note" => "Not in the manifest." },
+      ]
+    ))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [
+        { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
+        { "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" },
+      ] }
+    ).render
+
+    expect(output).to include("**cgi 0.5.1 → 0.5.2** — Matched.")
+    expect(output).not_to include("invented", "Not in the manifest.")
+  end
+
+  it "says the Playbook version is unavailable rather than inventing one" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [{ "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" }] }
+    ).render
+
+    expect(output).to include("## Playbook version changes", "Playbook version details were unavailable.")
+  end
+
+  # The npm half of the same upstream release. Both names are the Playbook raise, and
+  # neither belongs in the closing list of other dependencies.
+  it "recognises the npm package as a Playbook raise" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [
+        { "name" => "playbook-ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
+      ] }
+    ).render
+
+    expect(output).to include("## Playbook version changes", "playbook-ui 17.0.0 → 17.1.0")
+    expect(output).to include("No other dependency raises in this PR.")
   end
 
   describe "beyond the kits" do
