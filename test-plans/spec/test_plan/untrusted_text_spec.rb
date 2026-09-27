@@ -67,6 +67,35 @@ RSpec.describe TestPlan::UntrustedText do
     end
   end
 
+  # Markdown reads \\` as an escaped backtick, so it opens nothing and what looked like a
+  # span is ordinary text. Trusting it passed \\``@team`` through whole, mention and all.
+  describe "backticks behind a backslash" do
+    BACKSLASH = 92.chr
+
+    it "neutralises a span whose opening run may be escaped" do
+      expect(escape("#{BACKSLASH}``@team``")).to eq("&#92;&#96;&#96;&#64;team&#96;&#96;")
+      expect(escape("#{BACKSLASH}`@team`")).to eq("&#92;&#96;&#64;team&#96;")
+    end
+
+    # An escaped backslash does leave a real span. Telling the two apart means counting
+    # backslashes, and over-escaping costs only formatting.
+    it "neutralises a span behind an escaped backslash too" do
+      expect(escape("#{BACKSLASH * 2}`@team`")).to eq("&#92;&#92;&#96;&#64;team&#96;")
+    end
+
+    it "still reads a span that follows the backslashed one" do
+      expect(escape("#{BACKSLASH}` and `@ok`")).to eq("&#92;&#96; and `@ok`")
+    end
+
+    # An entity renders as a backslash without acting as one, so provider text cannot
+    # escape the markup this adds.
+    it "neutralises a backslash standing before the escaping it adds" do
+      expect(escape("#{BACKSLASH}@team")).to eq("&#92;&#64;team")
+      expect(escape("#{BACKSLASH}[link](https://example.test)"))
+        .to eq("&#92;\\[link\\](https&#58;//example.test)")
+    end
+  end
+
   # A response cannot open a code block that swallows the plan rendered below it.
   describe "backticks that close nothing" do
     it "neutralises a lone backtick" do

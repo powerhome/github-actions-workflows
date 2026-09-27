@@ -14,11 +14,18 @@ module TestPlan
   # escaping inside one publishes the escape itself: `items[0]` as `items\[0\]`.
   #
   # A backtick that closes nothing is not inline code and is neutralised, so a response
-  # cannot open a fence that swallows the plan below it.
+  # cannot open a fence that swallows the plan below it. Neither is one behind a
+  # backslash, which Markdown may read as escaped -- see CODE_SPAN.
   module UntrustedText
     # CommonMark's inline code span. The lookarounds pin both runs to their full length,
     # so a span can never be closed by part of a longer run.
-    CODE_SPAN = /(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)/
+    #
+    # A backslash disqualifies an opening run as surely as a backtick does. Markdown reads
+    # \` as an escaped backtick, so it opens nothing, and the rest of what looked like a
+    # span is ordinary text: \``@team`` was passed through whole and the mention notified
+    # people. An escaped backslash does leave a real span, but telling the two apart means
+    # counting backslashes, and over-escaping costs only formatting.
+    CODE_SPAN = /(?<![`\\])(`+)(?!`)(.+?)(?<!`)\1(?!`)/
 
     module_function
 
@@ -44,6 +51,9 @@ module TestPlan
         .gsub(">", "&gt;")
         .gsub("@", "&#64;")
         .gsub("`", "&#96;")
+        # An entity renders as a backslash without acting as one, so provider text cannot
+        # escape the markup this adds, or the delimiter of a span it sits in front of.
+        .gsub("\\", "&#92;")
         .gsub(/([\[\]])/) { "\\#{Regexp.last_match(1)}" }
         .gsub(%r{\b(https?|ftp)://}i) { "#{Regexp.last_match(1)}&#58;//" }
         .gsub(/\bwww\./i) { "www&#46;" }
