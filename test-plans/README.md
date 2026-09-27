@@ -46,7 +46,7 @@ For public sources, the action downloads old/new RubyGem or npm archives, or pub
 
 Context is prioritized across dependencies as direct, then Git-pinned, then transitive, then by how many lockfiles the dependency appears in — blast radius rather than the alphabet, so a gem in a hundred components is funded before one in a single component. Within each dependency the order is changelogs and release notes, runtime source, tests, documentation, and finally generated or vendored files. The 1 MiB context budget is shared out among the dependencies that changed rather than fixed per dependency, so a lone upgrade can use all of it and an upgrade that came in small hands its surplus to the next.
 
-Playbook draws four times an ordinary dependency's slice because its kit changes can affect many application call sites. The packages are named in `Generator::WEIGHTED_PACKAGES` rather than inferred.
+Playbook draws four times an ordinary dependency's slice because its kit changes can affect many application call sites. The packages are named in `Playbook::PACKAGE_NAMES` rather than inferred, and that one list also decides scope, plan selection, and release linking, so a name cannot reach one of them and not the others.
 
 Where a gem and an npm package are linked as one upstream release, the build output in either half is kept out of the provider context — it is compiled from source that reaches the model through the other half — while non-generated files such as `package.json` still go through. Everything stays in the full-delta artifact regardless.
 

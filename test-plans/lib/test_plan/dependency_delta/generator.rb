@@ -1,3 +1,4 @@
+require_relative "../playbook/packages"
 require_relative "./changelog_source"
 require_relative "./playbook_kit_usage"
 require_relative "./public_dependency_retriever"
@@ -14,9 +15,8 @@ module TestPlan
       CONTEXT_MINIMUM_PER_DEPENDENCY = 25 * 1024
 
       # Playbook's kit changes reach many call sites, where an ordinary gem bump is read
-      # alongside the code calling it. Named rather than inferred, like LINKED_RELEASES:
-      # a wrong guess starves the dependency the plan is about.
-      WEIGHTED_PACKAGES = %w[playbook_ui playbook-ui].freeze
+      # alongside the code calling it.
+      WEIGHTED_PACKAGES = Playbook::PACKAGE_NAMES
       WEIGHTED_CONTEXT_SHARE = 4
       DEFAULT_CONTEXT_SHARE = 1
 
@@ -209,12 +209,13 @@ module TestPlan
       # the artifacts genuinely differ -- and the link only stops the provider covering
       # the same change twice.
       #
-      # Named rather than inferred: matching on normalised names and equal versions would
-      # link an unrelated widget_ui gem and widget-ui package that happened to bump
-      # together, and linking drops each half's build output, so a wrong link silently
-      # costs both of them their evidence.
+      # A list of groups, so another linked pair can be added beside Playbook's. Named
+      # rather than inferred: matching on normalised names and equal versions would link
+      # an unrelated widget_ui gem and widget-ui package that happened to bump together,
+      # and linking drops each half's build output, so a wrong link silently costs both
+      # of them their evidence.
       LINKED_RELEASES = [
-        %w[playbook_ui playbook-ui],
+        Playbook::PACKAGE_NAMES,
       ].freeze
 
       # Canonical versions, not the lockfile's strings: the two halves spell a prerelease
