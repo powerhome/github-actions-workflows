@@ -1,5 +1,6 @@
-require_relative "../untrusted_text"
+require_relative "../plan_document"
 require_relative "./kit_facts"
+require_relative "./packages"
 
 module TestPlan
   module Playbook
@@ -7,6 +8,8 @@ module TestPlan
     # count rather than taken from the provider, so a sample can never be published as
     # exhaustive.
     class Formatter
+      include PlanDocument
+
       REGRESSION_BANNER = "**Every kit case below is a regression test.** The Playbook raise " \
         "calls for confirming that existing behavior still holds."
       NO_KITS_MESSAGE = "No changed Playbook kits were identified for this upgrade."
@@ -21,15 +24,13 @@ module TestPlan
         @generation_warning = normalize_text(generation_warning)
         @case_identifiers = build_case_identifiers
         @manifest_dependencies = manifest.fetch("dependencies")
-        @playbook_raises = @manifest_dependencies.select do |entry|
-          %w[playbook_ui playbook-ui].include?(entry.fetch("name"))
+        @playbook_raises, @other_raises = @manifest_dependencies.partition do |entry|
+          PACKAGE_NAMES.include?(entry.fetch("name"))
         end
       end
 
       def render
-        sections = [heading]
-        sections << "> ⚠️ #{@generation_warning}" unless @generation_warning.empty?
-        sections << discarded_notice unless @parsed.discarded.empty?
+        sections = preamble
         sections.concat(
           [
             "> #{REGRESSION_BANNER}",
@@ -41,8 +42,16 @@ module TestPlan
             beyond_section,
           ]
         )
-        sections.concat(["---", checks_section("Additional Playbook Regression Testing", @parsed.regression_tests)]) unless @parsed.regression_tests.empty?
-        sections.concat(["---", checks_section("Application Compatibility Checks", @parsed.application_checks)]) unless @parsed.application_checks.empty?
+        unless @parsed.regression_tests.empty?
+          sections.concat(
+            ["---", checks_section("Additional Playbook Regression Testing", @parsed.regression_tests)]
+          )
+        end
+        unless @parsed.application_checks.empty?
+          sections.concat(
+            ["---", checks_section("Application Compatibility Checks", @parsed.application_checks)]
+          )
+        end
 
         "#{sections.join("\n\n")}\n"
       end
@@ -69,21 +78,6 @@ module TestPlan
           check.fetch("steps").each { |step| lines << "- #{sanitize(step)}" }
           lines << ""
         end
-        lines.join("\n")
-      end
-
-      def heading
-        name = @profile_name.empty? ? "Test Plan" : @profile_name
-        title_suffix = @pull_request_title.empty? ? "" : ": #{sanitize(@pull_request_title)}"
-        "## ✅ #{name}#{title_suffix}"
-      end
-
-      def discarded_notice
-        discarded = @parsed.discarded
-        count = discarded.length
-        lines = ["> ⚠️ #{count} #{count == 1 ? "part" : "parts"} of the generated response could not be used:"]
-        discarded.first(5).each { |reason| lines << "> - #{sanitize(reason)}" }
-        lines << "> - ...and #{count - 5} more" if count > 5
         lines.join("\n")
       end
 
@@ -151,23 +145,25 @@ module TestPlan
         lines.join("\n")
       end
 
+      # Driven by the manifest, not the response: a raise the provider forgot to write up
+      # still has to appear, and one it invented has nowhere to appear. The response only
+      # supplies the note and steps, matched to a raise by name and version.
       def other_dependencies
         return @parsed.other_dependencies if @manifest_dependencies.empty?
 
-        @manifest_dependencies.reject { |entry| %w[playbook_ui playbook-ui].include?(entry.fetch("name")) }
-          .map do |entry|
-            name = entry.fetch("name")
-            from = entry.fetch("old_version")
-            to = entry.fetch("new_version")
-            annotation = @parsed.other_dependencies.find do |candidate|
-              candidate.fetch("name") == name && candidate.fetch("from") == from && candidate.fetch("to") == to
-            end
-            {
-              "name" => name, "from" => from, "to" => to,
-              "note" => annotation&.fetch("note") || "No behavior-specific note was provided.",
-              "steps" => annotation&.fetch("steps") || [],
-            }
+        @other_raises.map do |entry|
+          name = entry.fetch("name")
+          from = entry.fetch("old_version")
+          to = entry.fetch("new_version")
+          annotation = @parsed.other_dependencies.find do |candidate|
+            candidate.fetch("name") == name && candidate.fetch("from") == from && candidate.fetch("to") == to
           end
+          {
+            "name" => name, "from" => from, "to" => to,
+            "note" => annotation ? annotation.fetch("note") : "",
+            "steps" => annotation ? annotation.fetch("steps") : [],
+          }
+        end
       end
 
       def version_range(entry)
@@ -224,14 +220,6 @@ module TestPlan
             identifiers[scenario.object_id] = "#{code}-#{code_counts[code]}"
           end
         end
-      end
-
-      def sanitize(value)
-        UntrustedText.escape(value)
-      end
-
-      def normalize_text(value)
-        value.to_s.strip.gsub(/\s+/, " ")
       end
     end
   end

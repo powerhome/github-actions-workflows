@@ -59,6 +59,35 @@ module TestPlan
       end
     end
 
+    # A list of tester-facing cases: a title, an optional page, and steps. Every plan
+    # shape that carries one carries the same shape, so they are read the same way and a
+    # response cannot be usable in one plan and not another for a reason nobody chose.
+    #
+    # `dependency: true` additionally requires each case to name what it is testing, which
+    # only the dependency plan groups by.
+    def check_list(entries, label, dependency: false)
+      unless entries.is_a?(Array)
+        discard("#{label} list was not an array")
+        return []
+      end
+
+      entries.each_with_index.filter_map do |entry, index|
+        next discard("#{label} #{index + 1} was not an object") unless entry.is_a?(Hash)
+
+        title = normalize_text(entry["title"])
+        steps = string_list(entry["steps"])
+        next discard("#{label} #{index + 1} had no title or usable steps") if title.empty? || steps.nil? || steps.empty?
+
+        check = { "title" => title, "page" => normalize_text(entry["page"]), "steps" => steps }
+        next check unless dependency
+
+        name = normalize_text(entry["dependency"])
+        next discard("#{label} #{index + 1} named no dependency") if name.empty?
+
+        check.merge("dependency" => name)
+      end
+    end
+
     # Always nil, so a caller can `return discard(...)` and drop the entry in one line.
     def discard(reason)
       @discarded << reason

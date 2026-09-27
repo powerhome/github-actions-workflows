@@ -25,8 +25,8 @@ module TestPlan
         validate_root!
         @kits = build_kits
         @other_dependencies = build_other_dependencies
-        @regression_tests = build_checks(@payload["regression_tests"] || [], "regression test")
-        @application_checks = build_checks(@payload["application_checks"] || [], "application check")
+        @regression_tests = check_list(@payload["regression_tests"] || [], "regression test")
+        @application_checks = check_list(@payload["application_checks"] || [], "application check")
       end
 
     private
@@ -96,23 +96,6 @@ module TestPlan
             "note" => normalize_text(entry["note"]),
             "steps" => unique_strings(Array(entry["steps"])),
           }
-        end
-      end
-
-      def build_checks(entries, label)
-        unless entries.is_a?(Array)
-          discard("#{label} list was not an array")
-          return []
-        end
-
-        entries.each_with_index.filter_map do |entry, index|
-          next discard("#{label} #{index + 1} was not an object") unless entry.is_a?(Hash)
-
-          title = normalize_text(entry["title"])
-          steps = string_list(entry["steps"])
-          next discard("#{label} #{index + 1} had no title or usable steps") if title.empty? || steps.nil? || steps.empty?
-
-          { "title" => title, "page" => normalize_text(entry["page"]), "steps" => steps }
         end
       end
 
