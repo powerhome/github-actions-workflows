@@ -11,7 +11,12 @@ module TestPlan
     class DependencyUsage
       SEARCHED_EXTENSIONS = %w[*.rb *.erb *.haml *.js *.jsx *.ts *.tsx].freeze
       MAX_FILES_PER_PACKAGE = 8
-      NON_APPLICATION_SEGMENTS = %w[spec test tests __tests__ vendor node_modules docs documentation].freeze
+      # Nothing a tester opens. Build output earns its place here alongside the rest: a
+      # committed bundle inlines its dependencies, so it matches every package name and
+      # would spend a package's whole sample on one generated file.
+      NON_APPLICATION_SEGMENTS = %w[
+        spec test tests __tests__ vendor node_modules docs documentation dist build
+      ].freeze
 
       def initialize(workspace:)
         @workspace = workspace
