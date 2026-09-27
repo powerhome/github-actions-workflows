@@ -42,7 +42,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
     output = render({ "kits" => [kit(name: "Dropdown")] })
 
     expect(output).to start_with("## ✅ Cobra Test Plan: Playbook RC 17.2.0.pre.rc.0")
-    expect(output).to include("> **Every case below is a regression test.**")
+    expect(output).to include("> **Every kit case below is a regression test.**")
     expect(output).not_to include("## Regression Testing")
   end
 
@@ -181,6 +181,45 @@ RSpec.describe TestPlan::Playbook::Formatter do
     output = render({ "kits" => [kit(name: "Dropdown", cases: 2, code: "DRP")] })
 
     expect(output).to include("#### DRP-1 — Page 1", "#### DRP-2 — Page 2")
+  end
+
+  it "lists the Playbook raise and covers non-kit regressions and application edits" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate(
+      "kits" => [],
+      "regression_tests" => [
+        { "title" => "Existing control", "page" => "/control",
+          "steps" => ["Open the control.", "Confirm it still works."] },
+      ],
+      "application_checks" => [
+        { "title" => "Adjusted call site", "page" => "/control",
+          "steps" => ["Open the control.", "Confirm the adjusted integration works."] },
+      ]
+    ))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [
+        { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
+      ] }
+    ).render
+
+    expect(output).to include("## Playbook version changes", "playbook_ui 17.0.0 → 17.1.0")
+    expect(output).to include("No changed Playbook kits were identified")
+    expect(output).to include("## Additional Playbook Regression Testing", "### Existing control")
+    expect(output).to include("## Application Compatibility Checks", "### Adjusted call site")
+  end
+
+  it "lists other manifest raises even when the provider omits them" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [
+        { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
+        { "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" },
+      ] }
+    ).render
+
+    expect(output).to include("**cgi 0.5.1 → 0.5.2**")
+    expect(output).not_to include("No other dependency raises in this PR.")
   end
 
   describe "beyond the kits" do

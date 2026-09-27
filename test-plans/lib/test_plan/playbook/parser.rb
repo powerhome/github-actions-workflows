@@ -5,17 +5,15 @@ require_relative "./kit_facts"
 
 module TestPlan
   module Playbook
-    # A Playbook raise is a pull request whose every file is a lockfile, so its plan is
-    # organised by the kits the upgrade changed rather than by feature area, and every
-    # case in it is a regression test. Nothing here maps onto the standard schema, so it
-    # is parsed separately rather than bent into one shape that serves neither.
+    # Organizes a Playbook raise by changed kit rather than feature area. The pull request
+    # may also contain application edits, which get their own compatibility checks.
     class Parser
       include AgentPayload
 
       DEFAULT_KIT_CODE = "KIT"
       KIT_CODE_PATTERN = /\A[A-Z][A-Z0-9]{1,5}\z/
 
-      attr_reader :kits, :other_dependencies, :discarded
+      attr_reader :kits, :other_dependencies, :regression_tests, :application_checks, :discarded
 
       def self.parse_file(path)
         new(File.read(path, encoding: Encoding::UTF_8))
@@ -27,6 +25,8 @@ module TestPlan
         validate_root!
         @kits = build_kits
         @other_dependencies = build_other_dependencies
+        @regression_tests = build_checks(@payload["regression_tests"] || [], "regression test")
+        @application_checks = build_checks(@payload["application_checks"] || [], "application check")
       end
 
     private
@@ -96,6 +96,23 @@ module TestPlan
             "note" => normalize_text(entry["note"]),
             "steps" => unique_strings(Array(entry["steps"])),
           }
+        end
+      end
+
+      def build_checks(entries, label)
+        unless entries.is_a?(Array)
+          discard("#{label} list was not an array")
+          return []
+        end
+
+        entries.each_with_index.filter_map do |entry, index|
+          next discard("#{label} #{index + 1} was not an object") unless entry.is_a?(Hash)
+
+          title = normalize_text(entry["title"])
+          steps = string_list(entry["steps"])
+          next discard("#{label} #{index + 1} had no title or usable steps") if title.empty? || steps.nil? || steps.empty?
+
+          { "title" => title, "page" => normalize_text(entry["page"]), "steps" => steps }
         end
       end
 

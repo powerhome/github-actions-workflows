@@ -58,6 +58,7 @@ module TestPlan
 
       prompt_path
       playbook_prompt_path
+      dependency_prompt_path
       self
     end
 
@@ -98,6 +99,12 @@ module TestPlan
       resolve_prompt("playbook_prompt")
     end
 
+    def dependency_prompt_path
+      return "" unless attributes.key?("dependency_prompt")
+
+      resolve_prompt("dependency_prompt")
+    end
+
     def to_h
       {
         "profile_id" => id,
@@ -108,6 +115,7 @@ module TestPlan
         "artifact_name" => artifact_name,
         "prompt_path" => prompt_path,
         "playbook_prompt_path" => playbook_prompt_path,
+        "dependency_prompt_path" => dependency_prompt_path,
       }
     end
 

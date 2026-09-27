@@ -1,6 +1,7 @@
 require "json"
 require "set"
 require_relative "./bundler_change_detector"
+require_relative "./playbook_kit_usage"
 require_relative "./yarn_change_detector"
 
 module TestPlan
@@ -25,6 +26,7 @@ module TestPlan
       # Component Gemfile.lock files include gems used only by component test suites.
       # Yarn lockfiles in UI components resolve code the deployed application serves,
       # so every changed yarn.lock is in scope even when the root one did not change.
+      # A Playbook raise always takes priority, wherever its lockfile lives.
       ROOT_GEM_LOCKFILE = "Gemfile.lock"
       SCOPES = %w[umbrella all].freeze
 
@@ -85,7 +87,8 @@ module TestPlan
         return changes if @scope == "all"
 
         in_scope, out = changes.partition do |change|
-          change.ecosystem == "yarn" || change.lockfiles.include?(ROOT_GEM_LOCKFILE)
+          change.ecosystem == "yarn" || change.lockfiles.include?(ROOT_GEM_LOCKFILE) ||
+            PlaybookKitUsage::PACKAGE_NAMES.include?(change.name)
         end
         @out_of_scope = out
         in_scope

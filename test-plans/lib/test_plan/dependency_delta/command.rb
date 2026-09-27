@@ -2,6 +2,7 @@ require "json"
 
 require_relative "../untrusted_text"
 require_relative "./change_detector"
+require_relative "./dependency_usage"
 require_relative "./generator"
 require_relative "./playbook_kit_usage"
 require_relative "./git_snapshot"
@@ -41,6 +42,10 @@ module TestPlan
         File.write(manifest_path, JSON.pretty_generate(result.fetch(:manifest)) + "\n", encoding: Encoding::UTF_8)
         File.write(full_path, result.fetch(:full), encoding: Encoding::UTF_8)
         File.write(context_path, result.fetch(:context), encoding: Encoding::UTF_8)
+        File.write(
+          ENV.fetch("DEPENDENCY_USAGE_PATH"), DependencyUsage.new(workspace: workspace).report(changes),
+          encoding: Encoding::UTF_8
+        )
 
         kit_usage_path = ENV.fetch("DEPENDENCY_KIT_USAGE_PATH")
         # A separate name: kit_usage is the usage object the later writes still need.
@@ -63,9 +68,7 @@ module TestPlan
 
         warning_count = result.dig(:manifest, "warning_count")
         warning = warning_count.positive? ? warning_message(result.fetch(:manifest)) : ""
-        write_outputs(
-          changes.length, warning_count, warning, kit_usage.kits, snapshot.declarations_only?
-        )
+        write_outputs(changes, warning_count, warning, kit_usage.kits, snapshot.declarations_only?)
         write_summary(result.fetch(:manifest), kit_usage.facts)
         log_manifest(manifest_path, result.fetch(:manifest))
         puts("::warning::#{warning}") unless warning.empty?
@@ -138,11 +141,12 @@ module TestPlan
         text.gsub(/\s+/, " ").strip
       end
 
-      def write_outputs(change_count, warning_count, warning, kits, declarations_only)
+      def write_outputs(changes, warning_count, warning, kits, declarations_only)
         File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|
-          output.puts("change_count=#{change_count}")
+          output.puts("change_count=#{changes.length}")
           output.puts("warning_count=#{warning_count}")
           output.puts("generation_warning=#{warning}")
+          output.puts("playbook_raised=#{changes.any? { |change| PlaybookKitUsage::PACKAGE_NAMES.include?(change.name) }}")
           # First point in the run that can know: the profile resolved from the label
           # before any lockfile was read.
           output.puts("playbook_kits_changed=#{kits.any?}")
@@ -159,9 +163,8 @@ module TestPlan
 
       OTHER_RAISES_HEADING = "# Other dependency raises in this pull request"
 
-      # Listed for the provider here rather than left to the manifest. The manifest also
-      # records the raises this run deliberately skipped, and a provider pointed at it
-      # wrote up twenty component gems nothing deploys.
+      # Keep a concise list beside the kit evidence. The manifest is authoritative and
+      # separates in-scope raises from component-only gems the run skipped.
       def other_raises_section(changes)
         others = changes
           .reject { |change| PlaybookKitUsage::PACKAGE_NAMES.include?(change.name) }

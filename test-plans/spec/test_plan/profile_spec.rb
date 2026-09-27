@@ -59,7 +59,9 @@ RSpec.describe TestPlan::Profile do
     profile = TestPlan::Profile.load(action_root: ACTION_ROOT, profile_id: "cobra-test-plan")
 
     expect(profile.playbook_prompt_path).to end_with("prompts/cobra_playbook_test_plan.md")
+    expect(profile.dependency_prompt_path).to end_with("prompts/cobra_dependency_test_plan.md")
     expect(profile.to_h).to have_key("playbook_prompt_path")
+    expect(profile.to_h).to have_key("dependency_prompt_path")
   end
 
   it "has no Playbook prompt when a profile declares none" do

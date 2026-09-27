@@ -28,15 +28,15 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
   end
 
-  def gem_lock(version)
+  def gem_lock(version, name: "shared_gem")
     <<~LOCK
       GEM
         remote: https://rubygems.org/
         specs:
-          shared_gem (#{version})
+          #{name} (#{version})
 
       DEPENDENCIES
-        shared_gem
+        #{name}
     LOCK
   end
 
@@ -56,6 +56,20 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
 
       expect(detector.detect).to be_empty
       expect(detector.out_of_scope.map(&:name)).to eq(["shared_gem"])
+    end
+
+    it "keeps a Playbook raise from a component lockfile so it can select the Playbook plan" do
+      path = "components/pigment/Gemfile.lock"
+      snapshot = FakeSnapshot.new(
+        "merge_base" => { path => gem_lock("1.0.0", name: "playbook_ui") },
+        "head" => { path => gem_lock("2.0.0", name: "playbook_ui") }
+      )
+      allow(snapshot).to receive(:changed_dependency_files).and_return([path])
+
+      detector = described_class.new(snapshot)
+
+      expect(detector.detect.map(&:name)).to eq(["playbook_ui"])
+      expect(detector.out_of_scope).to be_empty
     end
 
     it "keeps a raise in a root lockfile" do

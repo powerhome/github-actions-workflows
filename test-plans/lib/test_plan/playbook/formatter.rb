@@ -7,20 +7,23 @@ module TestPlan
     # count rather than taken from the provider, so a sample can never be published as
     # exhaustive.
     class Formatter
-      REGRESSION_BANNER = "**Every case below is a regression test.** This upgrade changes no " \
-        "application code — only the Playbook version — so the goal is confirming that existing " \
-        "behavior still holds, not exercising anything new."
+      REGRESSION_BANNER = "**Every kit case below is a regression test.** The Playbook raise " \
+        "calls for confirming that existing behavior still holds."
       NO_KITS_MESSAGE = "No changed Playbook kits were identified for this upgrade."
       NO_OTHER_DEPENDENCIES_MESSAGE = "No other dependency raises in this PR."
 
       def initialize(parsed:, pull_request_title:, profile_name:, generation_warning: "",
-                     kit_facts: KitFacts.none)
+                     kit_facts: KitFacts.none, manifest: { "dependencies" => [] })
         @parsed = parsed
         @kit_facts = kit_facts
         @pull_request_title = normalize_text(pull_request_title)
         @profile_name = normalize_text(profile_name)
         @generation_warning = normalize_text(generation_warning)
         @case_identifiers = build_case_identifiers
+        @manifest_dependencies = manifest.fetch("dependencies")
+        @playbook_raises = @manifest_dependencies.select do |entry|
+          %w[playbook_ui playbook-ui].include?(entry.fetch("name"))
+        end
       end
 
       def render
@@ -31,16 +34,43 @@ module TestPlan
           [
             "> #{REGRESSION_BANNER}",
             "---",
+            release_section,
+            "---",
             kits_section,
             "---",
             beyond_section,
           ]
         )
+        sections.concat(["---", checks_section("Additional Playbook Regression Testing", @parsed.regression_tests)]) unless @parsed.regression_tests.empty?
+        sections.concat(["---", checks_section("Application Compatibility Checks", @parsed.application_checks)]) unless @parsed.application_checks.empty?
 
         "#{sections.join("\n\n")}\n"
       end
 
     private
+
+      def release_section
+        lines = ["## Playbook version changes", ""]
+        @playbook_raises.each do |entry|
+          lines << "- **#{sanitize(entry.fetch("name"))} " \
+            "#{sanitize(entry.fetch("old_version"))} → #{sanitize(entry.fetch("new_version"))}**"
+        end
+        lines << "- Playbook version details were unavailable." if @playbook_raises.empty?
+        lines.join("\n")
+      end
+
+      def checks_section(title, checks)
+        lines = ["## #{title}", ""]
+        checks.each do |check|
+          lines << "### #{sanitize(check.fetch("title"))}"
+          page = sanitize(check.fetch("page"))
+          lines << "**Page:** #{page}" unless page.empty?
+          lines << ""
+          check.fetch("steps").each { |step| lines << "- #{sanitize(step)}" }
+          lines << ""
+        end
+        lines.join("\n")
+      end
 
       def heading
         name = @profile_name.empty? ? "Test Plan" : @profile_name
@@ -107,17 +137,37 @@ module TestPlan
       # changes no tester can act on.
       def beyond_section
         lines = ["## Other dependency raises in this PR", ""]
+        entries = other_dependencies
 
-        if @parsed.other_dependencies.empty?
+        if entries.empty?
           lines << "- #{NO_OTHER_DEPENDENCIES_MESSAGE}"
         else
-          @parsed.other_dependencies.each do |entry|
+          entries.each do |entry|
             lines << "- **#{sanitize(entry.fetch("name"))} #{version_range(entry)}** — #{dependency_note(entry)}"
             entry.fetch("steps").each { |step| lines << "  - #{sanitize(step)}" }
           end
         end
 
         lines.join("\n")
+      end
+
+      def other_dependencies
+        return @parsed.other_dependencies if @manifest_dependencies.empty?
+
+        @manifest_dependencies.reject { |entry| %w[playbook_ui playbook-ui].include?(entry.fetch("name")) }
+          .map do |entry|
+            name = entry.fetch("name")
+            from = entry.fetch("old_version")
+            to = entry.fetch("new_version")
+            annotation = @parsed.other_dependencies.find do |candidate|
+              candidate.fetch("name") == name && candidate.fetch("from") == from && candidate.fetch("to") == to
+            end
+            {
+              "name" => name, "from" => from, "to" => to,
+              "note" => annotation&.fetch("note") || "No behavior-specific note was provided.",
+              "steps" => annotation&.fetch("steps") || [],
+            }
+          end
       end
 
       def version_range(entry)

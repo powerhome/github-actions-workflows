@@ -59,6 +59,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
         "DEPENDENCY_DELTA_FULL_PATH" => File.join(root, "full.diff"),
         "DEPENDENCY_DELTA_CONTEXT_PATH" => File.join(root, "context.diff"),
         "DEPENDENCY_KIT_USAGE_PATH" => File.join(root, "kit-usage.md"),
+        "DEPENDENCY_USAGE_PATH" => File.join(root, "dependency-usage.md"),
         "PLAYBOOK_KIT_FACTS_PATH" => File.join(root, "kit-facts.json"),
         "GITHUB_OUTPUT" => File.join(root, "output.txt"),
         "GITHUB_STEP_SUMMARY" => File.join(root, "summary.md"),
@@ -85,9 +86,10 @@ RSpec.describe TestPlan::DependencyDelta::Command do
         # render step reads it unconditionally and the artifact upload expects it.
         expect(JSON.parse(written.fetch("PLAYBOOK_KIT_FACTS_PATH"))).to eq("version" => 1, "kits" => {})
         expect(written.fetch("DEPENDENCY_KIT_USAGE_PATH")).to eq("")
+        expect(written.fetch("DEPENDENCY_USAGE_PATH")).to include("# Dependency usage candidates", "## widget")
 
         output = written.fetch("GITHUB_OUTPUT")
-        expect(output).to include("change_count=1", "playbook_kits_changed=false")
+        expect(output).to include("change_count=1", "playbook_kits_changed=false", "playbook_raised=false")
         expect(written.fetch("GITHUB_STEP_SUMMARY")).to include("## External dependency delta")
       end
     end
@@ -142,14 +144,15 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("Dialog: 0 call sites (unused)")
   end
 
-  # First point in the run that can say the plan should be shaped by kit -- and whether the
-  # pull request is the lockfile-only shape that plan is written for.
-  it "reports whether the raise changed Playbook kits, and whether anything else changed" do
+  # A Playbook raise selects the Playbook plan even when no changed kit could be found.
+  it "reports a Playbook raise separately from changed kits" do
     [[%w[dropdown file_upload], true], [[], false]].each do |kits, declarations_only|
       Tempfile.create("output") do |file|
         ENV["GITHUB_OUTPUT"] = file.path
-        described_class.new.send(:write_outputs, 4, 0, "", kits, declarations_only)
+        changes = [TestPlan::DependencyDelta::Change.new(name: "playbook_ui")]
+        described_class.new.send(:write_outputs, changes, 0, "", kits, declarations_only)
         expect(File.read(file.path)).to include(
+          "change_count=1", "playbook_raised=true",
           "playbook_kits_changed=#{kits.any?}", "lockfile_only=#{declarations_only}"
         )
       ensure

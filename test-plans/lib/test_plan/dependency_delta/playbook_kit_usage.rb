@@ -6,10 +6,9 @@ require_relative "./call_site_sample"
 
 module TestPlan
   module DependencyDelta
-    # A Playbook version bump is the PR shape this whole delta exists for, and it is the
-    # one where pr.diff says least: every file in such a bump is a lockfile. The
-    # changelog tells the model which kits moved, but not the only thing a tester needs
-    # -- which pages to open.
+    # A Playbook version bump can leave pr.diff with little or no application context.
+    # The changelog tells the model which kits moved, but not the only thing a tester
+    # needs -- which pages to open.
     #
     # Answering that means resolving a kit across every call site in a large
     # application. The agent could search for them, but at that scale it is slow and

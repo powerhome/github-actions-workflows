@@ -51,14 +51,8 @@ module TestPlan
         end
       end
 
-      # Whether this pull request raised dependency versions and did nothing else -- the
-      # premise the Playbook plan is written on, since it is told there is no application
-      # diff to read and is pointed at the kit evidence instead.
-      #
-      # False for an empty diff as well as a mixed one: "nothing changed" is not the claim
-      # that licenses a plan which never looks at the application. Every uncertain case
-      # answers false, because the cost is only the standard plan, which reads pr.diff and
-      # the kit evidence both.
+      # Whether this pull request raised dependency versions and did nothing else. A
+      # mixed application edit or uncertain declaration answers false.
       def declarations_only?
         changed = changed_files
         return false if changed.empty?
