@@ -7,7 +7,6 @@ module TestPlan
       id
       display_name
       prompt
-      model
       comment_tag
       status_comment_tag
       failure_comment_tag
@@ -70,10 +69,6 @@ module TestPlan
       attributes.fetch("display_name")
     end
 
-    def model
-      attributes.fetch("model")
-    end
-
     def comment_tag
       attributes.fetch("comment_tag")
     end
@@ -107,7 +102,6 @@ module TestPlan
       {
         "profile_id" => id,
         "display_name" => display_name,
-        "model" => model,
         "comment_tag" => comment_tag,
         "status_comment_tag" => status_comment_tag,
         "failure_comment_tag" => failure_comment_tag,

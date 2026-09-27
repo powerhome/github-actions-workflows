@@ -3,7 +3,7 @@ description: Generate a profile-driven manual QA plan for a pull request and ups
 
 inputs:
   profile:
-    description: Allowlisted test-plan profile (cobra-test-plan or enhanced-cobra-test-plan)
+    description: Test-plan profile (cobra-test-plan)
     required: true
   app-id:
     description: GitHub App ID used to create an installation token
@@ -245,7 +245,6 @@ runs:
       env:
         PROVIDER: ${{ inputs.provider }}
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
-        MODEL: ${{ steps.profile.outputs.model }}
         TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
         TEST_PLAN_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
       run: |

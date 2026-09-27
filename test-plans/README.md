@@ -1,23 +1,20 @@
 # Test Plans
 
-Generates structured, non-technical manual QA plans from pull-request merge-base diffs. The shared action selects an allowlisted profile, optionally enriches the PR diff with raised public dependency source changes, and upserts one authoritative PR comment per profile.
+Generates structured, non-technical manual QA plans from pull-request merge-base diffs. The action uses the `cobra-test-plan` profile, optionally enriches the PR diff with raised public dependency source changes, and upserts one authoritative PR comment.
 
 ## Profiles
 
 | Profile | Model | Intended use |
 | --- | --- | --- |
 | `cobra-test-plan` | Cursor default | Standard CoBRA/Consent test plan. |
-| `enhanced-cobra-test-plan` | `claude-opus-5-high` | Higher-effort CoBRA/Consent test plan. |
 
-Both profiles use the same prompt, JSON schema, Markdown renderer, and dependency evidence.
-
-Each scenario names the audience it belongs to when an application serves more than one from different hostnames — where the umbrella routes mount two engines at the same prefix behind subdomain constraints, a relative path alone does not identify the page. Applications with no such constraint produce plans with no audience line. Their result, status, failure, and artifact namespaces are independent, so both can run against the same PR.
+Each scenario names the audience it belongs to when an application serves more than one from different hostnames — where the umbrella routes mount two engines at the same prefix behind subdomain constraints, a relative path alone does not identify the page. Applications with no such constraint produce plans with no audience line.
 
 ## Inputs
 
 | Input | Required | Description |
 | --- | --- | --- |
-| `profile` | yes | `cobra-test-plan` or `enhanced-cobra-test-plan`. |
+| `profile` | yes | `cobra-test-plan`. |
 | `app-id` | yes | GitHub App ID used to create an installation token. |
 | `private-key` | yes | GitHub App private key. |
 | `provider-api-key` | yes | Provider credential; Cursor maps it to `CURSOR_API_KEY`. |
@@ -25,14 +22,14 @@ Each scenario names the audience it belongs to when an application serves more t
 | `provider` | no | Provider script name; default `cursor`. |
 | `deepen-length` | no | Merge-base fetch increment; default `30`. |
 
-Model selection belongs to the profile and cannot be overridden by a caller. The action deliberately has no additional-prompt input.
+Cursor selects its default model. The action deliberately has no model or additional-prompt input.
 
 ## Mergeability Gate
 
 Before checkout or provider usage, the action asks GitHub whether the PR can be merged:
 
 - Mergeable PRs continue normally.
-- Conflicting PRs receive a profile-specific blocked comment telling the author to resolve conflicts and reapply the label.
+- Conflicting PRs receive a blocked comment telling the author to resolve conflicts and reapply the label.
 - GitHub `UNKNOWN` responses are retried five times before a retry-later comment is posted.
 
 A blocked run completes successfully, consumes no provider usage, and replaces that profile's previous plan so testers do not follow stale instructions.
@@ -117,7 +114,7 @@ The pull-request head is untrusted: anyone who can open a pull request controls 
 - The provider runs read-only and offline. `config/cli-config.json` allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. Everything a plan says has to come from evidence this action assembled.
 - A part of the response the schema cannot use — a scenario with no steps, a feature area with no test path — is dropped rather than failing the run, since one unusable scenario should not cost an otherwise sound plan. The rendered plan says how many parts were dropped and why, so a partial plan is never mistaken for a complete one.
 - Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published. Every provider-derived field, and the pull-request title, is escaped before rendering: mentions cannot notify anyone, and links, images, and inline HTML cannot be injected into a comment the bot signs.
-- Model selection comes from the profile. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
+- Cursor selects its default model. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
 - Comments are authored with the calling workflow's `GITHUB_TOKEN` so action-authored comments do not retrigger workflows.
 - Comments are posted, updated, and deleted through `gh` rather than a third-party action. Each is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "<tag>" -->`), so one profile keeps one authoritative comment. A comment written by the action this replaced is still recognised and adopted on its next update.
 
@@ -125,7 +122,7 @@ Two residual risks are inherent rather than mitigated. Retrieved dependency sour
 
 ## Caller Workflow
 
-Test plans are activated only through labels. A consumer workflow should map each supported label directly to the matching profile and pin this action to an immutable commit SHA.
+Test plans are activated only through the `cobra-test-plan` label. A consumer workflow should pass that label as the profile and pin this action to an immutable commit SHA.
 
 ```yaml
 name: Test Plan
@@ -142,10 +139,7 @@ jobs:
   test-plan:
     if: |
       github.event.pull_request.state == 'open' &&
-      (
-        github.event.label.name == 'cobra-test-plan' ||
-        github.event.label.name == 'enhanced-cobra-test-plan'
-      )
+      github.event.label.name == 'cobra-test-plan'
     runs-on: ubuntu-latest
     concurrency:
       group: test-plan-${{ github.event.pull_request.number }}-${{ github.event.label.name }}
