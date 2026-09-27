@@ -1,22 +1,29 @@
-require_relative "../untrusted_text"
+require_relative "../plan_document"
 
 module TestPlan
   module Dependency
+    # Renders a version-raise plan: what moved, and how a tester exercises the behavior
+    # that already depended on it. The list of raises is the manifest's, not the
+    # provider's, so a raise the response omitted still appears and one it invented does
+    # not.
     class Formatter
+      include PlanDocument
+
       NO_REGRESSION_MESSAGE = "No tester-visible use could be established from the available evidence."
+      NO_NOTE_MESSAGE = "No behavior-specific note was provided."
+      UNAVAILABLE_NOTE_MESSAGE = "Upstream delta unavailable; no behavior-specific claim can be made."
 
       def initialize(parsed:, manifest:, pull_request_title:, profile_name:, generation_warning: "")
         @parsed = parsed
         @manifest_dependencies = manifest.fetch("dependencies")
-        @pull_request_title = normalize(pull_request_title)
-        @profile_name = normalize(profile_name)
-        @generation_warning = normalize(generation_warning)
+        @pull_request_title = normalize_text(pull_request_title)
+        @profile_name = normalize_text(profile_name)
+        @generation_warning = normalize_text(generation_warning)
+        @regression_cases, @unnamed_cases = partition_regression_tests
       end
 
       def render
-        sections = [heading]
-        sections << "> ⚠️ #{@generation_warning}" unless @generation_warning.empty?
-        sections << discarded_notice unless @parsed.discarded.empty?
+        sections = preamble
         sections.concat([
           "> This plan checks existing behavior after dependency version changes.",
           "---", dependency_section, "---", regression_section,
@@ -27,10 +34,21 @@ module TestPlan
 
     private
 
-      def heading
-        name = @profile_name.empty? ? "Test Plan" : @profile_name
-        suffix = @pull_request_title.empty? ? "" : ": #{sanitize(@pull_request_title)}"
-        "## ✅ #{name}#{suffix}"
+      # A case naming a dependency this pull request did not raise is not testing the
+      # raise, so it is dropped -- but dropped out loud. Every other omission this plan
+      # makes is named in the notice, and a plan that quietly published fewer cases than
+      # were generated would read as complete.
+      def partition_regression_tests
+        names = @manifest_dependencies.map { |entry| entry.fetch("name") }
+
+        @parsed.regression_tests.partition { |test| names.include?(test.fetch("dependency")) }
+      end
+
+      def discarded
+        @discarded ||= @parsed.discarded + @unnamed_cases.map do |test|
+          "regression test #{test.fetch("title").inspect} named #{test.fetch("dependency").inspect}, " \
+            "which this pull request did not raise"
+        end
       end
 
       def dependency_section
@@ -39,36 +57,40 @@ module TestPlan
           annotation = annotation_for(entry)
           label = "#{sanitize(entry.fetch("name"))} (#{sanitize(entry.fetch("ecosystem"))})"
           version = "#{sanitize(entry.fetch("old_version"))} → #{sanitize(entry.fetch("new_version"))}"
-          note = annotation && !annotation.fetch("note").empty? ? annotation.fetch("note") : fallback_note(entry)
-          lines << "- **#{label} #{version}** — #{sanitize(note)}"
-          Array(annotation&.fetch("steps", [])).each { |step| lines << "  - #{sanitize(step)}" }
+          lines << "- **#{label} #{version}** — #{sanitize(note_for(entry, annotation))}"
+          Array(annotation&.fetch("steps")).each { |step| lines << "  - #{sanitize(step)}" }
         end
         lines.join("\n")
       end
 
+      # Matched on the raise's identity as a reader would state it. Deliberately not on
+      # `source`: that is an internal enum the provider only ever sees in the manifest,
+      # and a response that spelled it "rubygems.org" would have lost its note and its
+      # steps for a field no reader of the plan can see.
       def annotation_for(entry)
         @parsed.dependencies.find do |candidate|
           candidate.fetch("ecosystem") == entry.fetch("ecosystem") &&
             candidate.fetch("name") == entry.fetch("name") &&
-            candidate.fetch("source") == entry.fetch("source") &&
             candidate.fetch("from") == entry.fetch("old_version") &&
             candidate.fetch("to") == entry.fetch("new_version")
         end
       end
 
-      def fallback_note(entry)
-        entry.fetch("status") == "unavailable" ?
-          "Upstream delta unavailable; no behavior-specific claim can be made." :
-          "No behavior-specific note was provided."
+      # Silence is not evidence of no change, and the two reasons for it are different
+      # things to a tester: nothing was retrieved, or something was and nothing was said
+      # about it.
+      def note_for(entry, annotation)
+        note = annotation ? annotation.fetch("note") : ""
+        return note unless note.empty?
+
+        entry.fetch("status", "") == "unavailable" ? UNAVAILABLE_NOTE_MESSAGE : NO_NOTE_MESSAGE
       end
 
       def regression_section
         lines = ["## Regression Testing", ""]
-        names = @manifest_dependencies.map { |entry| entry.fetch("name") }
-        cases = @parsed.regression_tests.select { |test| names.include?(test.fetch("dependency")) }
-        return lines.push("- #{NO_REGRESSION_MESSAGE}").join("\n") if cases.empty?
+        return lines.push("- #{NO_REGRESSION_MESSAGE}").join("\n") if @regression_cases.empty?
 
-        cases.each { |test| lines.concat(case_lines(test, dependency: true)) }
+        @regression_cases.each { |test| lines.concat(case_lines(test, dependency: true)) }
         lines.join("\n")
       end
 
@@ -87,22 +109,6 @@ module TestPlan
         test.fetch("steps").each { |step| lines << "- #{sanitize(step)}" }
         lines << ""
         lines
-      end
-
-      def discarded_notice
-        count = @parsed.discarded.length
-        lines = ["> ⚠️ #{count} #{count == 1 ? "part" : "parts"} of the generated response could not be used:"]
-        @parsed.discarded.first(5).each { |reason| lines << "> - #{sanitize(reason)}" }
-        lines << "> - ...and #{count - 5} more" if count > 5
-        lines.join("\n")
-      end
-
-      def sanitize(value)
-        UntrustedText.escape(value)
-      end
-
-      def normalize(value)
-        value.to_s.strip.gsub(/\s+/, " ")
       end
     end
   end

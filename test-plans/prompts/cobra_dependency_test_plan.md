@@ -12,13 +12,13 @@ Do not modify files, run git or shell commands, or use tools that change reposit
 
 ## Dependency version changes
 
-Return one `dependencies` entry for every in-scope manifest entry. Copy its `ecosystem`, `name`, `source`, `old_version` as `from`, and `new_version` as `to` exactly. The renderer uses the manifest to list every raise even if your response omits one; matching these fields lets it attach your explanation to the right raise.
+Return one `dependencies` entry for every in-scope manifest entry. Copy its `ecosystem` and `name` exactly, its `old_version` as `from`, and its `new_version` as `to`. The renderer lists every raise from the manifest whether or not your response covers it; these four fields are how it attaches your explanation to the right raise, so a misspelling costs that raise its note and steps.
 
 For each entry, give a short `note` stating what the upstream delta shows in product terms, or what evidence is unavailable. A patch bump with no observable change shown by the delta gets a note and no steps. Add `steps` only when the delta shows something a tester could observe. These are concise, version-specific checks, not generic "make sure it still works" instructions. Do not turn release-note claims into application features the PR did not add.
 
 ## Regression testing
 
-Use repository call sites to find the application surfaces that depend on the raised libraries. Return `regression_tests` with a case for each distinct, testable use that could be affected. Give each case a dependency name, a tester-facing title, the relative page route when supported by the repository (otherwise an empty string), and concrete steps to exercise existing behavior and check the result. Follow component routes through their umbrella mount. Do not infer a page from a filename alone. Prefer a small set of meaningful cases over repetition across equivalent call sites. If no use can be traced to a tester-visible workflow, leave this array empty rather than inventing one.
+Use repository call sites to find the application surfaces that depend on the raised libraries. Return `regression_tests` with a case for each distinct, testable use that could be affected. Every case must name a dependency the manifest lists; a case naming anything else is dropped from the plan. Give each case a dependency name, a tester-facing title, the relative page route when supported by the repository (otherwise an empty string), and concrete steps to exercise existing behavior and check the result. Follow component routes through their umbrella mount. Do not infer a page from a filename alone. Prefer a small set of meaningful cases over repetition across equivalent call sites. If no use can be traced to a tester-visible workflow, leave this array empty rather than inventing one.
 
 ## Application compatibility checks
 
@@ -33,7 +33,6 @@ Return a single JSON object, without Markdown fences:
     {
       "ecosystem": "yarn",
       "name": "example-package",
-      "source": "npm",
       "from": "1.2.0",
       "to": "1.3.0",
       "note": "The release changes how the existing search control handles an empty query.",

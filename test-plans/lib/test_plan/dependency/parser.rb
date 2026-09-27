@@ -18,53 +18,37 @@ module TestPlan
         payload = JSON.parse(extract_json(json_string))
         raise "Dependency test-plan JSON root must be an object" unless payload.is_a?(Hash)
         raise 'Dependency test-plan JSON must include a "dependencies" array' unless payload["dependencies"].is_a?(Array)
-        raise 'Dependency test-plan JSON must include a "regression_tests" array' unless payload["regression_tests"].is_a?(Array)
 
         @dependencies = payload.fetch("dependencies").each_with_index.filter_map do |entry, index|
           dependency(entry, index + 1)
         end
-        @regression_tests = checks(payload.fetch("regression_tests"), "regression test", dependency: true)
-        @application_checks = checks(payload["application_checks"] || [], "application check")
+        # Optional, like the application checks beside them. A response that traced no use
+        # to a tester-visible workflow was told to send an empty array, and one that sent
+        # no array at all means the same thing: the plan still has every version change
+        # the manifest recorded, and the regression section says plainly that nothing was
+        # established. Failing the run there would discard a usable plan over a key.
+        @regression_tests = check_list(payload["regression_tests"] || [], "regression test", dependency: true)
+        @application_checks = check_list(payload["application_checks"] || [], "application check")
       end
 
     private
 
+      # The fields the formatter matches a manifest raise on, and only those. `source` is
+      # an internal enum the provider sees only in the manifest and no reader of the plan
+      # ever sees, so requiring it back would cost a response its note over a field that
+      # decides nothing.
+      IDENTITY_FIELDS = %w[ecosystem name from to].freeze
+
       def dependency(entry, position)
         return discard("dependency #{position} was not an object") unless entry.is_a?(Hash)
 
-        identity = %w[ecosystem name source from to].to_h do |field|
-          [field, normalize_text(entry[field])]
-        end
+        identity = IDENTITY_FIELDS.to_h { |field| [field, normalize_text(entry[field])] }
         return discard("dependency #{position} had no identity") if identity.values.any?(&:empty?)
 
         steps = entry.key?("steps") ? string_list(entry["steps"]) : []
         return discard("dependency #{position} had invalid steps") unless steps
 
         identity.merge("note" => normalize_text(entry["note"]), "steps" => steps)
-      end
-
-      def checks(entries, label, dependency: false)
-        unless entries.is_a?(Array)
-          discard("#{label} list was not an array")
-          return []
-        end
-
-        entries.each_with_index.filter_map do |entry, index|
-          next discard("#{label} #{index + 1} was not an object") unless entry.is_a?(Hash)
-
-          title = normalize_text(entry["title"])
-          steps = string_list(entry["steps"])
-          next discard("#{label} #{index + 1} had no title or usable steps") if title.empty? || steps.nil? || steps.empty?
-
-          result = { "title" => title, "page" => normalize_text(entry["page"]), "steps" => steps }
-          if dependency
-            name = normalize_text(entry["dependency"])
-            next discard("#{label} #{index + 1} named no dependency") if name.empty?
-
-            result["dependency"] = name
-          end
-          result
-        end
       end
     end
   end
