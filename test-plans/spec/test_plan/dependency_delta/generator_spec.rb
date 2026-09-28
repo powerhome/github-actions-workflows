@@ -547,6 +547,36 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(result.fetch(:full)).to include("dist/card.js")
   end
 
+  # Weighting, release linking, scope and plan selection all have to agree on which names
+  # are Playbook. A third published name reaching only some of them would leave a raise
+  # selecting the Playbook plan without the context budget or the link that plan assumes.
+  describe "the Playbook package list" do
+    it "weights and links exactly the names the rest of the action recognises" do
+      expect(described_class::WEIGHTED_PACKAGES).to equal(TestPlan::Playbook::PACKAGE_NAMES)
+      expect(described_class::LINKED_RELEASES).to include(TestPlan::Playbook::PACKAGE_NAMES)
+    end
+
+    it "weights every one of them and nothing else" do
+      weight = ->(name) do
+        generator(changes: []).send(:context_weight, TestPlan::DependencyDelta::Change.new(name: name))
+      end
+
+      TestPlan::Playbook::PACKAGE_NAMES.each do |name|
+        expect(weight.call(name)).to eq(described_class::WEIGHTED_CONTEXT_SHARE)
+      end
+      expect(weight.call("cgi")).to eq(described_class::DEFAULT_CONTEXT_SHARE)
+    end
+
+    it "links every one of them to the same release" do
+      link = ->(name) do
+        generator(changes: []).send(:linked_release, TestPlan::DependencyDelta::Change.new(name: name))
+      end
+
+      expect(TestPlan::Playbook::PACKAGE_NAMES.map { |name| link.call(name) }.uniq.compact.length).to eq(1)
+      expect(link.call("cgi")).to be_nil
+    end
+  end
+
   it "still sends build output for a dependency that has no linked source half" do
     builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
     diffs = [

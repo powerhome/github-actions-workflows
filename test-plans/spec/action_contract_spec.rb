@@ -54,8 +54,8 @@ RSpec.describe "test-plans/action.yml" do
     expect(reset_index).to be < names.index("Run test-plan provider")
   end
 
-  it "takes model selection only from the resolved profile" do
+  it "leaves model selection to the provider" do
     provider_step = steps.find { |step| step.fetch("name") == "Run test-plan provider" }
-    expect(provider_step.dig("env", "MODEL")).to eq("${{ steps.profile.outputs.model }}")
+    expect(provider_step.fetch("env")).not_to have_key("MODEL")
   end
 end

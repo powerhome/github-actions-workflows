@@ -3,14 +3,10 @@ require "uri"
 module TestPlan
   module DependencyDelta
     # Whether a lockfile entry really is the public package of that name and version.
-    #
-    # Name and version alone do not establish it: a private package can share both with
-    # an unrelated public one. Anything downloaded on that assumption -- an archive, or
-    # a repository's changelog -- would describe a different project entirely, which is
-    # worse than having no evidence, because it reads as though it belongs.
-    #
-    # Every caller that resolves a dependency to something public goes through here, so
-    # the rule is stated once.
+    # Name and version do not establish it -- a private package can share both with an
+    # unrelated public one -- and anything downloaded on that assumption describes a
+    # different project while reading as though it belongs, which is worse than no
+    # evidence. Stated once, because every caller resolving to something public comes here.
     module PublicOrigin
       module_function
 
@@ -32,8 +28,8 @@ module TestPlan
           "(#{describe(change.new_locator)}); private sources are not retrieved"
       end
 
-      # A package resolved through a private registry may still be a proxied copy of the
-      # public one, which the lockfile's own checksum can prove.
+      # A private-registry package may be a proxied copy of the public one, which the
+      # lockfile's checksum can prove.
       def npm_public?(dist, locator, integrity)
         return true if host?(locator, PUBLIC_NPM_HOSTS)
 

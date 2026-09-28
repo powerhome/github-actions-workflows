@@ -1,23 +1,20 @@
 # Test Plans
 
-Generates structured, non-technical manual QA plans from pull-request merge-base diffs. The shared action selects an allowlisted profile, optionally enriches the PR diff with raised public dependency source changes, and upserts one authoritative PR comment per profile.
+Generates structured, non-technical manual QA plans from pull-request merge-base diffs. The action uses the `cobra-test-plan` profile, optionally enriches the PR diff with raised public dependency source changes, and upserts one authoritative PR comment.
 
 ## Profiles
 
 | Profile | Model | Intended use |
 | --- | --- | --- |
 | `cobra-test-plan` | Cursor default | Standard CoBRA/Consent test plan. |
-| `enhanced-cobra-test-plan` | `claude-opus-5-high` | Higher-effort CoBRA/Consent test plan. |
 
-Both profiles use the same prompt, JSON schema, Markdown renderer, and dependency evidence.
-
-Each scenario names the audience it belongs to when an application serves more than one from different hostnames — where the umbrella routes mount two engines at the same prefix behind subdomain constraints, a relative path alone does not identify the page. Applications with no such constraint produce plans with no audience line. Their result, status, failure, and artifact namespaces are independent, so both can run against the same PR.
+Each scenario names the audience it belongs to when an application serves more than one from different hostnames — where the umbrella routes mount two engines at the same prefix behind subdomain constraints, a relative path alone does not identify the page. Applications with no such constraint produce plans with no audience line.
 
 ## Inputs
 
 | Input | Required | Description |
 | --- | --- | --- |
-| `profile` | yes | `cobra-test-plan` or `enhanced-cobra-test-plan`. |
+| `profile` | yes | `cobra-test-plan`. |
 | `app-id` | yes | GitHub App ID used to create an installation token. |
 | `private-key` | yes | GitHub App private key. |
 | `provider-api-key` | yes | Provider credential; Cursor maps it to `CURSOR_API_KEY`. |
@@ -25,14 +22,14 @@ Each scenario names the audience it belongs to when an application serves more t
 | `provider` | no | Provider script name; default `cursor`. |
 | `deepen-length` | no | Merge-base fetch increment; default `30`. |
 
-Model selection belongs to the profile and cannot be overridden by a caller. The action deliberately has no additional-prompt input.
+Cursor selects its default model. The action deliberately has no model or additional-prompt input.
 
 ## Mergeability Gate
 
 Before checkout or provider usage, the action asks GitHub whether the PR can be merged:
 
 - Mergeable PRs continue normally.
-- Conflicting PRs receive a profile-specific blocked comment telling the author to resolve conflicts and reapply the label.
+- Conflicting PRs receive a blocked comment telling the author to resolve conflicts and reapply the label.
 - GitHub `UNKNOWN` responses are retried five times before a retry-later comment is posted.
 
 A blocked run completes successfully, consumes no provider usage, and replaces that profile's previous plan so testers do not follow stale instructions.
@@ -41,7 +38,7 @@ A blocked run completes successfully, consumes no provider usage, and replaces t
 
 The action detects raised Bundler and Yarn v1 dependencies across root and component lockfiles, comparing the merge base against the head so it sees the same range as `pr.diff`. Local CoBRA PATH components and Yarn workspace/file/link packages are excluded. Duplicate raises are collapsed across lockfiles.
 
-By default only raises that reach a root `Gemfile.lock` or `yarn.lock` are analyzed. Only the umbrella application is deployed, so a raise confined to an unmounted component's lockfile resolves that component's test suite and changes nothing a tester can open — on nitro-web that was 17 of 19 dependencies, 15 of them one component's test gems, competing for the context budget against the Playbook raise the plan was about. A raise recorded in both a root and a component lockfile is kept, since deduplication runs first. Skipped raises are named in the manifest and the job summary rather than dropped silently, and they raise no warning because they cost no evidence. A repository with a single lockfile is unaffected; set `dependency-scope: all` for a monorepo that mounts its components. A dependency that moves between a Git source and a registry is reported as a source transition: the two sides are not comparable artifacts, so no delta is retrieved, but the change is named rather than dropped. A gem and an npm package published together as one upstream release — Playbook — are linked in the manifest and in the provider context, so the same change is not covered twice. The pairs are named explicitly rather than inferred from matching names and versions, because linking drops each half's build output and a wrong link would cost both of them their evidence. Both deltas are still retrieved, because the published gem and package differ.
+By default, gem raises must reach the root `Gemfile.lock`, while raises in every changed `yarn.lock` are analyzed. Playbook is the exception: its raise is always analyzed, including when it appears only in a component `Gemfile.lock`. Nitro-web's `components/pulse-ui/yarn.lock` and `components/connect-web-ui/yarn.lock` are therefore in scope: their UI code is served by the application. Other component-only gem raises can resolve dependencies used only by component test suites and are skipped — on nitro-web, 15 of the 17 raises previously skipped were one component's test gems competing for the context budget against the Playbook raise. A gem raise recorded in both root and component lockfiles is kept, since deduplication runs first. Skipped gem raises are named in the manifest and job summary and raise no warning because they cost no evidence. Set `dependency-scope: all` to analyze component-only gem raises too. The setting governs gems only: every changed `yarn.lock` is analyzed under either value, so there is no way to narrow Yarn back to the root lockfile. That is deliberate — a component's UI code is served by the deployed application, where a component's test gems are not — but it means a repository whose component `yarn.lock` files resolve tooling rather than served code will see those raises analyzed. A dependency that moves between a Git source and a registry is reported as a source transition: the two sides are not comparable artifacts, so no delta is retrieved, but the change is named rather than dropped. A gem and an npm package published together as one upstream release — Playbook — are linked in the manifest and in the provider context, so the same change is not covered twice. The pairs are named explicitly rather than inferred from matching names and versions, because linking drops each half's build output and a wrong link would cost both of them their evidence. Both deltas are still retrieved, because the published gem and package differ.
 
 Where a package records its repository, the action also reads that repository's `CHANGELOG.md` and diffs the upgraded-from tag against the default branch. Published packages routinely omit their changelog — neither the `playbook_ui` gem nor the `playbook-ui` tarball ships one — yet it is the highest-signal artifact available for a QA plan, naming behaviour changes in product terms rather than leaving them to be inferred from code. The upgraded-to tag decides how the pair is read. Where a project commits its changelog before tagging, that tag already describes the release and the two tags bracket the upgrade exactly. Where it is committed after tagging, that tag holds everything up to but not including its own release — which makes it the baseline, not the new side — and the default branch supplies the notes, along with anything released since, which the delta says. A Git-pinned dependency is read at its pinned revision, since the lockfile names exactly which commits are in use. Diffing rather than parsing keeps this working across changelog formats. A changelog also survives a package download the registry refuses, so a private package can still contribute its public release notes.
 
@@ -49,7 +46,7 @@ For public sources, the action downloads old/new RubyGem or npm archives, or pub
 
 Context is prioritized across dependencies as direct, then Git-pinned, then transitive, then by how many lockfiles the dependency appears in — blast radius rather than the alphabet, so a gem in a hundred components is funded before one in a single component. Within each dependency the order is changelogs and release notes, runtime source, tests, documentation, and finally generated or vendored files. The 1 MiB context budget is shared out among the dependencies that changed rather than fixed per dependency, so a lone upgrade can use all of it and an upgrade that came in small hands its surplus to the next.
 
-Playbook draws four times an ordinary dependency's slice. A Playbook bump is a pull request whose every file is a lockfile, so the dependency delta is the only evidence there is, where an ordinary gem bump is read alongside the application code that calls it. The packages are named in `Generator::WEIGHTED_PACKAGES` rather than inferred.
+Playbook draws four times an ordinary dependency's slice because its kit changes can affect many application call sites. The packages are named in `Playbook::PACKAGE_NAMES` rather than inferred, and that one list also decides scope, plan selection, and release linking, so a name cannot reach one of them and not the others.
 
 Where a gem and an npm package are linked as one upstream release, the build output in either half is kept out of the provider context — it is compiled from source that reaches the model through the other half — while non-generated files such as `package.json` still go through. Everything stays in the full-delta artifact regardless.
 
@@ -64,6 +61,7 @@ Artifacts include:
 - `dependency-deltas-full.diff` (maximum 10 MiB, written outside the workspace)
 - `dependency-deltas-context.diff` (1 MiB in total, shared out among the dependencies that changed)
 - `dependency-kit-usage.md`
+- `dependency-usage.md` (bounded application source matches for raised package names)
 - `playbook-kit-facts.json` (what the action worked out about each changed kit; written outside the workspace, like the full delta, because it carries the call-site counts the evidence withholds from the provider)
 
 ### Playbook Kit Usage
@@ -80,17 +78,25 @@ A kit whose usage search could not be completed says so rather than borrowing th
 
 No counts appear in the evidence file or the comment. A kit with four call sites or fewer reads as "every use is listed"; more reads as a representative sample. The action decides that from its own search and carries it to the render step in `playbook-kit-facts.json` — written outside the workspace, since the provider reads the workspace with `Read(**)` and this is the one file whose numbers it must not see — so the provider is never asked to report a number nobody can check — it earlier reported a kit as used in 1083 files, and a count it copies is a count that can be wrong. The counts stay in that facts file, the job summary and the run log.
 
+### Plan selection
+
+After building the dependency delta, the action chooses one output shape. Any Playbook raise uses the Playbook plan, even if other dependencies were raised, no changed kit was found, or application code also changed. Otherwise, any in-scope dependency raise uses the dependency plan. A PR without an in-scope raise uses the standard functional plan. The selected prompt and parser/formatter always agree through the variant step output.
+
+### The dependency plan
+
+The dependency plan lists every in-scope version raise from the manifest. The provider adds a short product-facing note and version-specific steps only when the retrieved delta shows an observable change. If an upstream delta is unavailable or the provider omits an entry, the renderer still lists the version change with an evidence-aware fallback note.
+
+Its Regression Testing section traces raised libraries to repository call sites and explains how a tester can exercise existing application behavior. A case naming a dependency this pull request did not raise is not testing the raise, so it is dropped — and named in the plan's discard notice, like every other omission. The action supplies a bounded `dependency-usage.md` with candidate source files, spread across components; a text match alone does not establish a route, so the provider must verify each case. The section has no functional-case references. When application code changes alongside a version raise, an optional Application Compatibility Checks section covers those edits without presenting the dependency upgrade as a new feature. The prompt reads `pr.diff`, the manifest, and the bounded dependency delta; it may inspect repository files needed to ground a usage path.
+
 ### The Playbook plan
 
-When the delta finds changed kits **and the pull request raised versions and did nothing else**, the run switches to the profile's `playbook_prompt` and renders through `TestPlan::Playbook::Parser` and `TestPlan::Playbook::Formatter` instead of the standard pair. The profile resolves from the label before any lockfile has been read, so the choice is made after the delta and named as a step output, and the render step follows the same decision the provider was given. Changed kits alone are not enough: that plan is told there is no application diff to read, so a pull request that bumps Playbook *and* touches application code would have had those changes silently left out. Such a pull request gets the standard plan, which reads `pr.diff` and the kit evidence both.
+The Playbook plan groups regression cases by changed, used kit. It reads the manifest, kit usage, upstream delta, and `pr.diff`. If no changed kit is identified, it still lists the Playbook version raise and can include regression cases for evidence-backed usage outside the kit report. If application code changes alongside Playbook, Application Compatibility Checks cover those edits.
 
-A filename cannot answer whether a pull request raised versions and nothing else. This repository pins Playbook exactly, so a real bump edits several component `package.json` files and a gemspec as well as the lockfiles — but adding an npm script or a Bundler `require: false` edits the same files and does change behaviour. Lockfiles are accepted outright, being resolver output; a hand-written manifest is accepted only when its two sides are identical once version literals are blanked, so a renamed dependency, a moved group or a new script all read as behaviour. Every uncertain case reads as behaviour, because the cost of being wrong that way is only the standard plan.
-
-That plan is a different document. It opens by saying every case in it is a regression test — a Playbook raise adds nothing, so there is no separate regression section — then the cases grouped by kit, each kit headed with which side of it changed, each case carrying the page and whether it is a Rails or a React call site. There is no permissions section, since a version bump changes none. A closing section lists the other dependencies the pull request raised and nothing else: Playbook's own version constant, its packaging and its documentation site change on every release and are not a tester's problem.
+Each kit case carries the page and whether it is a Rails or React call site. The plan has no permissions section for a pure version raise. A closing section lists other dependencies the pull request raised. Playbook's own version constant, packaging, and documentation site are not tester-facing changes.
 
 Coverage wording is the action's, not the provider's. A kit with no matching fact reads as a sample, and a kit the action found exhaustible is downgraded to a sample anyway when the provider wrote fewer cases than there are call sites, because "every use is listed below" would then be false.
 
-The result is `dependency-kit-usage.md`, listing per kit which side changed and the call sites for that side, followed by the other dependencies this pull request raised. That last list is generated by the action rather than left to the manifest: the manifest also records the raises the run deliberately skipped, and a provider pointed at it wrote up twenty component gems nothing deploys.
+When changed kits are found, `dependency-kit-usage.md` lists which side changed and the call sites for that side. The manifest remains the authoritative list of in-scope raises; its separate `out_of_scope` list records skipped component-only gems.
 
 Unreadable lockfiles, missing private sources, failed downloads, and truncation do not fail the plan. A lockfile the action cannot parse is skipped and reported; the remaining lockfiles are still analyzed. Every case that cost evidence produces a warning in the PR comment, workflow annotation, job summary, and dependency manifest; every omission is named in the manifest whether or not it counted. The comment and the annotation name the dependencies and why — `irb, minitest (provider context budget exhausted)` — grouping the dependencies that share a reason and pointing at the manifest for the file lists. The manifest is also echoed into the build step's log under a collapsed `Dependency delta manifest` group, so the reason a warning was raised is readable without downloading the artifact from an ephemeral runner.
 
@@ -116,8 +122,8 @@ The pull-request head is untrusted: anyone who can open a pull request controls 
 - The Cursor CLI installer is downloaded before it is run, rather than piped into a shell, and the run logs its size and SHA-256. Piping starts executing while the transfer is still in flight, so an interrupted download leaves the first half already run with no record of what that was. The installer is still unpinned — Cursor documents no version-pinned CI install — so this bounds the failure mode rather than removing it.
 - The provider runs read-only and offline. `config/cli-config.json` allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. Everything a plan says has to come from evidence this action assembled.
 - A part of the response the schema cannot use — a scenario with no steps, a feature area with no test path — is dropped rather than failing the run, since one unusable scenario should not cost an otherwise sound plan. The rendered plan says how many parts were dropped and why, so a partial plan is never mistaken for a complete one.
-- Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published. Every provider-derived field, and the pull-request title, is escaped before rendering: mentions cannot notify anyone, and links, images, and inline HTML cannot be injected into a comment the bot signs.
-- Model selection comes from the profile. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
+- Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published. Every provider-derived field, and the pull-request title, is escaped before rendering: mentions cannot notify anyone, and links, images, and inline HTML cannot be injected into a comment the bot signs. Inline code is the single exception, so a plan can set a route or an identifier apart from the prose around it. A complete code span passes through as written — GitHub renders its contents literally, resolving no mention, autolinking no URL, and interpreting no tag — while a backtick that closes nothing, or one standing behind a backslash that Markdown may read as escaping it, is neutralised like any other markup. A response can neither open a code block that swallows the plan below it nor slip a mention past the escaping by making plain text merely look like code.
+- Cursor selects its default model. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
 - Comments are authored with the calling workflow's `GITHUB_TOKEN` so action-authored comments do not retrigger workflows.
 - Comments are posted, updated, and deleted through `gh` rather than a third-party action. Each is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "<tag>" -->`), so one profile keeps one authoritative comment. A comment written by the action this replaced is still recognised and adopted on its next update.
 
@@ -125,7 +131,7 @@ Two residual risks are inherent rather than mitigated. Retrieved dependency sour
 
 ## Caller Workflow
 
-Test plans are activated only through labels. A consumer workflow should map each supported label directly to the matching profile and pin this action to an immutable commit SHA.
+Test plans are activated only through the `cobra-test-plan` label. A consumer workflow should pass that label as the profile and pin this action to an immutable commit SHA.
 
 ```yaml
 name: Test Plan
@@ -142,10 +148,7 @@ jobs:
   test-plan:
     if: |
       github.event.pull_request.state == 'open' &&
-      (
-        github.event.label.name == 'cobra-test-plan' ||
-        github.event.label.name == 'enhanced-cobra-test-plan'
-      )
+      github.event.label.name == 'cobra-test-plan'
     runs-on: ubuntu-latest
     concurrency:
       group: test-plan-${{ github.event.pull_request.number }}-${{ github.event.label.name }}

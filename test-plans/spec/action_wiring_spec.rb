@@ -3,11 +3,9 @@ require "test_plan/profile"
 
 require "yaml"
 
-# action.yml and the scripts it invokes form a contract nothing else checks: the scripts
-# read environment variables the steps have to set, the steps read outputs the scripts
-# have to write, and several steps hand each other files by path. All of it is spelled
-# out in two places at once, so a rename in one of them fails at runtime on a real pull
-# request rather than here.
+# action.yml and its scripts spell the same names in two places -- environment variables,
+# step outputs, file paths -- so a rename in one fails at runtime on a real pull request
+# rather than here.
 module ActionWiring
   module_function
 
@@ -37,13 +35,10 @@ module ActionWiring
     Dir[File.join(ACTION_ROOT, "bin", "*.rb")].sort.map { |path| "bin/#{File.basename(path)}" }
   end
 
-  # Follows require_relative from an entry point, so each step is checked against the
-  # environment its own code reads rather than the union of every script's.
-  #
-  # Paths are resolved against ACTION_ROOT rather than the working directory: these
-  # specs run both from the repository root and from test-plans/, and resolving
-  # relatively would quietly find nothing from one of them, leaving every check here
-  # passing against an empty set.
+  # Follows require_relative from an entry point, so each step is checked against what its
+  # own code reads. Resolved against ACTION_ROOT because these specs run both from the
+  # repository root and from test-plans/, and relative resolution would find nothing from
+  # one of them, leaving every check passing against an empty set.
   def sources(entry, seen = [])
     return seen if seen.include?(entry)
 
@@ -57,8 +52,7 @@ module ActionWiring
     seen
   end
 
-  # Required and optional reads are told apart the way the scripts spell them:
-  # ENV.fetch("X") raises when a step forgot it, ENV.fetch("X", default) and ENV["X"]
+  # ENV.fetch("X") raises when a step forgot it; ENV.fetch("X", default) and ENV["X"]
   # tolerate it. Only the required ones are a promise every step has to keep.
   def ruby_required_env_reads(entry)
     sources(entry).flat_map do |source|
@@ -72,7 +66,6 @@ module ActionWiring
     end.uniq
   end
 
-  # Shell reads, minus anything the script assigns itself.
   def shell_env_reads(path)
     script_env_reads(read(path))
   end
@@ -90,7 +83,6 @@ module ActionWiring
     steps.find { |step| step.fetch("run", "").include?(script) }
   end
 
-  # One script can back several steps, each providing its own environment.
   def steps_running(script)
     steps.select { |step| step.fetch("run", "").include?(script) }
   end
@@ -112,8 +104,8 @@ module ActionWiring
     end.uniq
   end
 
-  # The step that clears reserved names before anything writes to them. Its env is the
-  # canonical list of workspace outputs, so it declares paths it does not produce.
+  # Its env is the canonical list of workspace outputs, so it declares paths it does not
+  # produce.
   def clearing_step
     steps.find { |step| step.fetch("name", "").include?("Clear generated output paths") }
   end
@@ -153,8 +145,7 @@ RSpec.describe "action.yml wiring" do
     end
 
     # Guards the checks above from passing against an empty set: every entry point is a
-    # thin wrapper that requires its library code, so resolving one source means
-    # resolution is broken and nothing below is really being checked.
+    # thin wrapper, so resolving only one source means resolution is broken.
     ActionWiring.entry_points.each do |entry|
       it "resolves the library code behind #{entry}" do
         expect(ActionWiring.sources(entry).length).to be > 1
@@ -166,8 +157,7 @@ RSpec.describe "action.yml wiring" do
       expect(orphaned).to be_empty
     end
 
-    # These run under `set -u`, so a variable a step references but does not declare
-    # aborts the step rather than expanding empty.
+    # Under `set -u` an undeclared variable aborts the step rather than expanding empty.
     it "declares every variable its inline shell steps reference" do
       undeclared = ActionWiring.inline_shell_steps.filter_map do |step|
         provided = step.fetch("env", {}).keys + ActionWiring::AMBIENT
@@ -203,8 +193,7 @@ RSpec.describe "action.yml wiring" do
         .flat_map { |step| step.fetch("env", {}).to_a }
         .find { |name, _value| name == "DEPENDENCY_DELTA_FULL_PATH" }
 
-      # Readable there, it would bypass both the context budget and the generated-file
-      # exclusions the budget exists to enforce.
+      # Readable there, it bypasses the context budget and the exclusions it enforces.
       expect(full.last).not_to include("github.workspace")
       expect(full.last).to include("runner.temp")
     end
@@ -231,9 +220,8 @@ RSpec.describe "action.yml wiring" do
   end
 
   describe "files handed between steps" do
-    # Keyed on the file, not the variable name: a producer and its consumer need not
-    # agree on a variable, but they do have to agree on where the file is. Catches a
-    # directory that drifted between them -- workspace against runner.temp.
+    # Keyed on the file, not the variable: a producer and consumer need not agree on a
+    # variable but must agree on where the file is -- workspace against runner.temp.
     it "spells each shared file the same way in every step that touches it" do
       paths = Hash.new { |hash, key| hash[key] = [] }
       ActionWiring.steps.each do |step|
@@ -258,9 +246,8 @@ RSpec.describe "action.yml wiring" do
       expect(produced.reject { |name| uploaded.include?(name) }).to be_empty
     end
 
-    # The checked-out head can pre-create any of these names, as a file or a symlink, and
-    # both shell redirects and File.write follow one. Every name written into the
-    # workspace has to be cleared before the first write.
+    # The head can pre-create any of these names, as a file or a symlink, and both shell
+    # redirects and File.write follow one.
     it "clears every workspace path it later writes" do
       # A step may also clear its own path inline, which counts the same.
       cleared = ActionWiring.steps

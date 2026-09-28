@@ -42,7 +42,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
     output = render({ "kits" => [kit(name: "Dropdown")] })
 
     expect(output).to start_with("## ✅ Cobra Test Plan: Playbook RC 17.2.0.pre.rc.0")
-    expect(output).to include("> **Every case below is a regression test.**")
+    expect(output).to include("> **Every kit case below is a regression test.**")
     expect(output).not_to include("## Regression Testing")
   end
 
@@ -55,8 +55,8 @@ RSpec.describe TestPlan::Playbook::Formatter do
     expect(output).to start_with("## ✅")
   end
 
-  # The steps are the plan: everything else on a case is just how a tester finds the page.
-  # Nothing asserted them until deleting the line that renders them left the suite green.
+  # Nothing asserted the steps until deleting the line that renders them left the suite
+  # green.
   it "renders every step of every case, in the order they were written" do
     output = render({ "kits" => [kit(name: "Dropdown", cases: 2)] })
 
@@ -116,8 +116,8 @@ RSpec.describe TestPlan::Playbook::Formatter do
       expect(output).to include(KF::UNUSED_SENTENCE)
     end
 
-    # A grep that failed leaves the plan unable to say how widely the kit is used, and
-    # claiming a representative sample would assert that anyway while hiding the failure.
+    # A failed grep cannot say how widely the kit is used, and a representative sample
+    # claims it anyway while hiding the failure.
     it "says the usage search failed rather than claiming a sample" do
       output = render(
         { "kits" => [kit(name: "Dropdown")] },
@@ -138,8 +138,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
       expect(output).to include(KF::REPRESENTATIVE_SENTENCE)
     end
 
-    # What the parser's old use_count clamp was really protecting: "every use is listed
-    # below" must not appear above a list shorter than the call sites.
+    # "Every use is listed below" must not appear above a list shorter than the call sites.
     it "downgrades an exhaustible kit the provider under-covered" do
       output = render(
         { "kits" => [kit(name: "Dropdown", cases: 1)] },
@@ -183,6 +182,90 @@ RSpec.describe TestPlan::Playbook::Formatter do
     expect(output).to include("#### DRP-1 — Page 1", "#### DRP-2 — Page 2")
   end
 
+  it "lists the Playbook raise and covers non-kit regressions and application edits" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate(
+      "kits" => [],
+      "regression_tests" => [
+        { "title" => "Existing control", "page" => "/control",
+          "steps" => ["Open the control.", "Confirm it still works."] },
+      ],
+      "application_checks" => [
+        { "title" => "Adjusted call site", "page" => "/control",
+          "steps" => ["Open the control.", "Confirm the adjusted integration works."] },
+      ]
+    ))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [
+        { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
+      ] }
+    ).render
+
+    expect(output).to include("## Playbook version changes", "playbook_ui 17.0.0 → 17.1.0")
+    expect(output).to include("No changed Playbook kits were identified")
+    expect(output).to include("## Additional Playbook Regression Testing", "### Existing control")
+    expect(output).to include("## Application Compatibility Checks", "### Adjusted call site")
+  end
+
+  it "lists other manifest raises even when the provider omits them" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [
+        { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
+        { "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" },
+      ] }
+    ).render
+
+    expect(output).to include("**cgi 0.5.1 → 0.5.2** — Raised alongside the Playbook upgrade.")
+    expect(output).not_to include("No other dependency raises in this PR.")
+  end
+
+  # One the response invented has no raise to attach to; one it forgot still appears.
+  it "ignores an other-dependency entry the manifest does not list" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate(
+      "kits" => [],
+      "other_dependencies" => [
+        { "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2", "note" => "Matched." },
+        { "name" => "invented", "from" => "1.0.0", "to" => "2.0.0", "note" => "Not in the manifest." },
+      ]
+    ))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [
+        { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
+        { "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" },
+      ] }
+    ).render
+
+    expect(output).to include("**cgi 0.5.1 → 0.5.2** — Matched.")
+    expect(output).not_to include("invented", "Not in the manifest.")
+  end
+
+  it "says the Playbook version is unavailable rather than inventing one" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [{ "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" }] }
+    ).render
+
+    expect(output).to include("## Playbook version changes", "Playbook version details were unavailable.")
+  end
+
+  # The npm half of the same release: also the Playbook raise, not an other dependency.
+  it "recognises the npm package as a Playbook raise" do
+    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    output = described_class.new(
+      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      manifest: { "dependencies" => [
+        { "name" => "playbook-ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
+      ] }
+    ).render
+
+    expect(output).to include("## Playbook version changes", "playbook-ui 17.0.0 → 17.1.0")
+    expect(output).to include("No other dependency raises in this PR.")
+  end
+
   describe "beyond the kits" do
     it "lists the other dependency raises and nothing else" do
       output = render(
@@ -221,6 +304,17 @@ RSpec.describe TestPlan::Playbook::Formatter do
     expect(output).not_to include("<img", "@someone")
     expect(output).to include("&lt;img", "&#64;someone", "https&#58;//example.test")
     expect(output).to include("\\[click\\]")
+  end
+
+  it "preserves backticks in pages and steps" do
+    entry = kit(name: "Dropdown")
+    entry["cases"][0]["page"] = "`/page/1`"
+    entry["cases"][0]["steps"] = ["Open `/page/1`."]
+
+    output = render({ "kits" => [entry] })
+
+    expect(output).to include("**Page:** `/page/1`")
+    expect(output).to include("- Open `/page/1`.")
   end
 
   it "carries the dependency-delta warning and the discard notice" do

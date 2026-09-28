@@ -230,22 +230,23 @@ RSpec.describe TestPlan::Formatter do
     )
   end
 
-  it "keeps Consent UI labels while stripping Markdown backticks" do
+  it "preserves backticks in plan text" do
     payload["permissions"]["changes"] = ["Added permission: `Project Items` — `Edit Comments`."]
     payload["permissions"]["subject_actions"] = [
       { "subject" => "`Project Items`", "action" => "`Edit Comments`" },
     ]
     scenario = payload["feature_areas"].first["scenarios"].first
-    scenario["landing_page"] = "/`unsafe`"
+    scenario["landing_page"] = "`/contact_center/reminder_calls`"
+    scenario["steps"] = ["Open `/contact_center/reminder_calls`."]
     scenario["permissions"] = [
       { "subject" => "`Project Items`", "action" => "`Edit Comments`" },
     ]
 
     output = render
-    expect(output).to include("Added permission: Project Items — Edit Comments.")
-    expect(output).to include("**Landing Page:** /unsafe")
-    expect(output).to include("**Permissions:** Project Items — Edit Comments")
-    expect(output).not_to include("`")
+    expect(output).to include("Added permission: `Project Items` — `Edit Comments`.")
+    expect(output).to include("**Landing Page:** `/contact_center/reminder_calls`")
+    expect(output).to include("**Permissions:** `Project Items` — `Edit Comments`")
+    expect(output).to include("- Open `/contact_center/reminder_calls`.")
   end
 
   it "lists only functional identifiers for regressions covered by cases" do

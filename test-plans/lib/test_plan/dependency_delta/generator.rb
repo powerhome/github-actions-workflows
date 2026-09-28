@@ -1,3 +1,4 @@
+require_relative "../playbook/packages"
 require_relative "./changelog_source"
 require_relative "./playbook_kit_usage"
 require_relative "./public_dependency_retriever"
@@ -8,23 +9,21 @@ module TestPlan
     class Generator
       FULL_LIMIT = 10 * 1024 * 1024
       CONTEXT_TOTAL_LIMIT = 1024 * 1024
-      # Floor on a dependency's share; below this a slice says nothing useful. Spent
-      # ahead of the fair share, so a run with more than CONTEXT_TOTAL_LIMIT / this many
-      # dependencies leaves its tail with nothing -- hence the blast-radius sort.
+      # Floor on a dependency's share. Spent ahead of the fair share, so a run with more
+      # than CONTEXT_TOTAL_LIMIT / this many dependencies leaves its tail with nothing --
+      # hence the blast-radius sort.
       CONTEXT_MINIMUM_PER_DEPENDENCY = 25 * 1024
 
-      # A Playbook bump's diff is entirely lockfiles, so the delta is the only evidence
-      # there is; an ordinary gem bump is read alongside the code that calls it. Named
-      # rather than inferred, like LINKED_RELEASES: a wrong guess starves the dependency
-      # the plan is about.
-      WEIGHTED_PACKAGES = %w[playbook_ui playbook-ui].freeze
+      # Playbook's kit changes reach many call sites, where an ordinary gem bump is read
+      # alongside the code calling it.
+      WEIGHTED_PACKAGES = Playbook::PACKAGE_NAMES
       WEIGHTED_CONTEXT_SHARE = 4
       DEFAULT_CONTEXT_SHARE = 1
 
       def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new,
                      kit_usage: PlaybookKitUsage.disabled, problems: [], out_of_scope: [])
-        # Blast radius before name: nearly everything here is direct and from a registry,
-        # which left the alphabet deciding who got funded first.
+        # Blast radius before name: nearly everything is direct and from a registry, which
+        # left the alphabet deciding who got funded first.
         @changes = changes.sort_by do |change|
           [
             change.direct ? 0 : 1,
@@ -59,10 +58,8 @@ module TestPlan
             entry["changed_files"] = diffs.length
             header = dependency_header(change)
 
-            # The artifact and the provider context have separate budgets. Only the
-            # context affects the generated plan, so only it decides the status; the
-            # shared artifact budget being spent by earlier dependencies says nothing
-            # about this one's evidence.
+            # Only the context affects the generated plan, so only it decides the status;
+            # the shared artifact budget says nothing about this dependency's evidence.
             omitted_from_artifact = append_chunks(full, header, diffs, FULL_LIMIT, :artifact_text)
 
             candidates = context_candidates(entry.fetch("related"), diffs)
@@ -88,8 +85,8 @@ module TestPlan
                 "release. They remain in the full-delta artifact."
             end
 
-            # Only lost evidence truncates; a budget that dropped tests and docs off the
-            # tail is the priority order working. Every omission is named either way.
+            # Only lost evidence truncates; dropping tests and docs off the tail is the
+            # priority order working. Every omission is named either way.
             entry["status"] = omitted_from_context.any?(&:evidence?) ? "truncated" : "retrieved"
 
             if omitted_from_artifact.any?
@@ -123,13 +120,11 @@ module TestPlan
             "version" => 1,
             "dependencies" => entries,
             "lockfile_warnings" => lockfile_warnings,
-            # Recorded, not silently dropped: a reader looking for a raise they know
-            # landed has to be able to find it here.
+            # Recorded, so a reader can find a raise they know landed.
             "out_of_scope" => @out_of_scope.map { |change| out_of_scope_entry(change) },
-            # Counts anything that cost evidence, which is not the same as anything
-            # that produced a warning: build output kept out of a linked release, and
-            # an artifact that ran out of room while the provider context did not, are
-            # both expected and neither degrades the plan.
+            # Only what cost evidence, which is not everything that warned: build output
+            # kept out of a linked release, and a full artifact with room left in the
+            # context, are both expected.
             "warning_count" => entries.count { |entry| incomplete?(entry) } +
               lockfile_warnings.length,
           },
@@ -141,9 +136,8 @@ module TestPlan
 
     private
 
-      # The changelog comes from the repository rather than the package, so it can
-      # survive a package download the registry refuses -- which is the difference
-      # between no evidence at all and the release notes for the version being tested.
+      # The changelog comes from the repository, so it survives a package download the
+      # registry refuses.
       def retrieve_diffs(change, entry)
         changelog = @changelog.diffs_for(change)
 
@@ -172,9 +166,8 @@ module TestPlan
         entry.fetch("status") != "retrieved" || entry.fetch("degraded", false)
       end
 
-      # Weighted share of what is left, so an early dependency that came in small hands
-      # its surplus on. remaining_weight still counts this one, so the last dependency is
-      # handed everything left.
+      # Weighted share of what is left, so a dependency that came in small hands its
+      # surplus on. remaining_weight still counts this one, so the last gets the rest.
       def context_budget(remaining_context, remaining_weight, weight)
         share = remaining_context * weight / [remaining_weight, 1].max
         [[share, CONTEXT_MINIMUM_PER_DEPENDENCY].max, remaining_context].min
@@ -184,15 +177,10 @@ module TestPlan
         WEIGHTED_PACKAGES.include?(change.name) ? WEIGHTED_CONTEXT_SHARE : DEFAULT_CONTEXT_SHARE
       end
 
-      # One upstream release published as a gem and a package: the build output in this
-      # half is compiled from source that reaches the provider through the other half, so
-      # spending context on minified bundles would only crowd that source out. Everything
-      # that is not build output still goes through -- an npm tarball's package.json says
-      # something its gem counterpart does not.
-      #
-      # Assumes the linked sibling carries source. That holds for a gem-and-package pair,
-      # where the gem ships source by construction; two all-generated halves would leave
-      # the release with no context, which the warnings would make visible.
+      # This half's build output is compiled from source reaching the provider through the
+      # other half, so spending context on minified bundles crowds that source out.
+      # Non-generated files still go through: an npm package.json says what a gem's does
+      # not. Assumes the sibling carries source, which holds for a gem-and-package pair.
       def context_candidates(related, diffs)
         return diffs if related.empty?
 
@@ -217,23 +205,21 @@ module TestPlan
         "#{bytes / 1024 / 1024} MiB"
       end
 
-      # A gem and an npm package released in lockstep from one upstream project -- Playbook
-      # is the case this exists for -- are one release, not two independent upgrades. Their
-      # published artifacts genuinely differ (Rails kits versus compiled components), so
-      # both deltas are kept; the link only stops the provider reading them as two
-      # unrelated changes and writing coverage twice.
+      # A gem and a package released in lockstep are one release. Both deltas are kept --
+      # the artifacts genuinely differ -- and the link only stops the provider covering
+      # the same change twice.
       #
-      # The pairs are named rather than inferred. Matching on a normalised name and equal
-      # versions would have linked an unrelated widget_ui gem and widget-ui package that
-      # happened to bump together, and linking drops each half's build output from the
-      # provider context -- so a wrong link silently costs both of them their evidence.
+      # A list of groups, so another linked pair can be added beside Playbook's. Named
+      # rather than inferred: matching on normalised names and equal versions would link
+      # an unrelated widget_ui gem and widget-ui package that happened to bump together,
+      # and linking drops each half's build output, so a wrong link silently costs both
+      # of them their evidence.
       LINKED_RELEASES = [
-        %w[playbook_ui playbook-ui],
+        Playbook::PACKAGE_NAMES,
       ].freeze
 
-      # Canonical versions, not the lockfile's own strings: the two halves spell a
-      # prerelease differently, so raw comparison failed to link exactly the
-      # release-candidate bumps this exists for.
+      # Canonical versions, not the lockfile's strings: the two halves spell a prerelease
+      # differently, so raw comparison failed to link exactly the RC bumps this is for.
       def build_related(changes)
         changes
           .group_by do |change|
@@ -244,8 +230,6 @@ module TestPlan
             ]
           end
           .each_with_object({}) do |(key, group), related|
-            # key is [linked release, old version, new version]; a nil release means the
-            # package is not half of a named pair.
             next if key.first.nil?
             next if group.map(&:ecosystem).uniq.length < 2
 
@@ -275,9 +259,8 @@ module TestPlan
 
       SEPARATOR = "\n".freeze
 
-      # Returns the diffs that did not fit -- the objects, because the caller asks what
-      # was lost as well as naming it. `text` picks the artifact's copy or the provider's
-      # capped one.
+      # Returns the diff objects that did not fit; `text` picks the artifact's copy or the
+      # provider's capped one.
       def append_chunks(target, header, diffs, limit, text)
         return diffs if target.bytesize + header.bytesize > limit
 
@@ -285,8 +268,8 @@ module TestPlan
         target << header
         diffs.each do |source_diff|
           body = source_diff.public_send(text)
-          # The separator counts against the limit too; without it the advertised cap
-          # was exceeded by a byte for every diff included.
+          # The separator counts against the limit; without it the cap was exceeded by a
+          # byte per diff.
           if target.bytesize + body.bytesize + SEPARATOR.bytesize > limit
             omitted << source_diff
             next

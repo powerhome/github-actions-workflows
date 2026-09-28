@@ -13,9 +13,8 @@ module TestPlan
       PRIORITY_GENERATED = 4
 
       CHANGELOG_PATTERN = %r{(?:^|/)(?:change(?:log|s)?|history|release(?:s|_notes)?|upgrade(?:_guide)?)(?:\.|/|$)}i
-      # Directory segments, plus colocated names like avatar.test.js and widget_spec.rb.
-      # Matching only on directories scored Playbook's colocated tests as runtime source,
-      # so they competed with real source for the context budget.
+      # Colocated names too: matching only directories scored Playbook's colocated tests
+      # as runtime source, competing with real source for the context budget.
       TEST_PATTERN = %r{
         (?:^|/)(?:test|tests|spec|specs|__tests__)(?:/|$)
         |
@@ -51,11 +50,10 @@ module TestPlan
         end
       end
 
-      # Generated is decided before test and documentation, because a name like
-      # dist/widget.test.js or build/docs/readme.md is build output whatever its suffix
-      # suggests. Classifying it as a test left generated?(that) false, which sent a
-      # linked release's bundles to the provider despite the exclusion. Changelogs stay
-      # first: one shipped inside dist/ is still the release notes.
+      # Generated before test and documentation: dist/widget.test.js is build output
+      # whatever its suffix says, and classifying it as a test left generated? false,
+      # sending a linked release's bundles to the provider despite the exclusion.
+      # Changelogs stay first -- one inside dist/ is still the release notes.
       def priority(path)
         return PRIORITY_CHANGELOG if path.match?(CHANGELOG_PATTERN)
         return PRIORITY_GENERATED if path.match?(GENERATED_PATTERN)
@@ -65,10 +63,9 @@ module TestPlan
         PRIORITY_RUNTIME
       end
 
-      # A binary file has no readable diff, but dropping it left an icon, an image, or a
-      # font changing with nothing to show for it -- absent from the artifact and from
-      # every omission list, against the promise that what is dropped gets named. The
-      # marker costs a line and keeps the change countable.
+      # A binary has no readable diff, but dropping it left an icon or font changing with
+      # nothing to show -- absent from the artifact and from every omission list, against
+      # the promise that what is dropped gets named.
       def binary_marker(path, old_path, new_path)
         state =
           if !File.file?(old_path) then "was added"

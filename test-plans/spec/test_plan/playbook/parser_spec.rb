@@ -85,6 +85,21 @@ RSpec.describe TestPlan::Playbook::Parser do
     expect(parse.other_dependencies).to be_empty
   end
 
+  it "accepts additional regression and application checks" do
+    parsed = parse(
+      "kits" => [],
+      "regression_tests" => [
+        { "title" => "Existing control", "page" => "/control", "steps" => ["Open it.", "Confirm it works."] },
+      ],
+      "application_checks" => [
+        { "title" => "Updated call site", "steps" => ["Open it.", "Confirm it still works."] },
+      ]
+    )
+
+    expect(parsed.regression_tests.first.fetch("page")).to eq("/control")
+    expect(parsed.application_checks.first.fetch("title")).to eq("Updated call site")
+  end
+
   # Playbook's own version constant, packaging and docs site are not a tester's problem,
   # so there is nowhere for the provider to write them up any more.
   it "has no place for Playbook internals" do

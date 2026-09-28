@@ -1,9 +1,8 @@
 require "json"
 
 module TestPlan
-  # Recovery and normalisation shared by every plan shape. The provider answers with JSON
-  # somewhere inside prose, and nothing it returns can be trusted to be the type the
-  # schema says. Includers set @discarded before parsing.
+  # The provider answers with JSON somewhere inside prose, and nothing it returns can be
+  # trusted to be the type the schema says. Includers set @discarded before parsing.
   module AgentPayload
   private
 
@@ -33,9 +32,8 @@ module TestPlan
       false
     end
 
-    # Steps are the plan's instructions, and the schema says they are strings. Coercing
-    # anything else produces a published step reading {"x"=>1}. Returns nil when the value
-    # is not an array of strings, so the caller can record why it went.
+    # nil unless every value is a string, so the caller can record why the entry went:
+    # coercing instead publishes a step reading {"x"=>1}.
     def string_list(values)
       return nil unless values.is_a?(Array)
       return nil unless values.all? { |value| value.is_a?(String) }
@@ -43,8 +41,6 @@ module TestPlan
       unique_strings(values)
     end
 
-    # Supporting collections drop what they cannot use rather than discarding the entry
-    # around them.
     def unique_strings(values)
       seen = {}
 
@@ -59,14 +55,39 @@ module TestPlan
       end
     end
 
+    # Shared so a response cannot be usable in one plan shape and not another for a reason
+    # nobody chose. `dependency: true` also requires each case to name what it tests, which
+    # only the dependency plan groups by.
+    def check_list(entries, label, dependency: false)
+      unless entries.is_a?(Array)
+        discard("#{label} list was not an array")
+        return []
+      end
+
+      entries.each_with_index.filter_map do |entry, index|
+        next discard("#{label} #{index + 1} was not an object") unless entry.is_a?(Hash)
+
+        title = normalize_text(entry["title"])
+        steps = string_list(entry["steps"])
+        next discard("#{label} #{index + 1} had no title or usable steps") if title.empty? || steps.nil? || steps.empty?
+
+        check = { "title" => title, "page" => normalize_text(entry["page"]), "steps" => steps }
+        next check unless dependency
+
+        name = normalize_text(entry["dependency"])
+        next discard("#{label} #{index + 1} named no dependency") if name.empty?
+
+        check.merge("dependency" => name)
+      end
+    end
+
     # Always nil, so a caller can `return discard(...)` and drop the entry in one line.
     def discard(reason)
       @discarded << reason
       nil
     end
 
-    # Anything that is not a string normalizes to empty rather than through to_s, which
-    # would have published a numeric title as "42".
+    # Empty rather than to_s, which would publish a numeric title as "42".
     def normalize_text(value)
       return "" unless value.is_a?(String)
 

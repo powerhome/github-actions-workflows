@@ -2,6 +2,8 @@
 
 require_relative "../lib/test_plan/formatter"
 require_relative "../lib/test_plan/parser"
+require_relative "../lib/test_plan/dependency/formatter"
+require_relative "../lib/test_plan/dependency/parser"
 require_relative "../lib/test_plan/playbook/formatter"
 require_relative "../lib/test_plan/playbook/kit_facts"
 require_relative "../lib/test_plan/playbook/parser"
@@ -14,10 +16,14 @@ begin
   profile_name = ENV.fetch("TEST_PLAN_PROFILE_NAME", "Test Plan")
   generation_warning = ENV.fetch("TEST_PLAN_GENERATION_WARNING", "")
 
-  # The same choice the provider step was given, so the plan is rendered in the shape it
-  # was asked for rather than in whichever one the response happens to resemble.
-  playbook = ENV["TEST_PLAN_VARIANT"].to_s == TestPlan::Variant::PLAYBOOK
+  # The choice the provider step was given, so the plan is rendered in the shape it was
+  # asked for rather than whichever one the response resembles.
+  variant = ENV["TEST_PLAN_VARIANT"].to_s
   kit_facts_path = ENV.fetch("PLAYBOOK_KIT_FACTS_PATH")
+  manifest_path = ENV.fetch("DEPENDENCY_DELTA_MANIFEST_PATH")
+  # Lazy: the standard plan renders from the response alone and should not fail over a
+  # file it never reads.
+  read_manifest = -> { JSON.parse(File.read(manifest_path, encoding: Encoding::UTF_8)) }
 
   options = {
     pull_request_title: pull_request_title,
@@ -25,13 +31,18 @@ begin
     generation_warning: generation_warning,
   }
 
-  if playbook
+  if variant == TestPlan::Variant::PLAYBOOK
     parsed = TestPlan::Playbook::Parser.parse_file(json_path)
-    # Coverage wording comes from what the action counted, not from what the provider
-    # reported. KitFacts.load_file never raises: a plan rendered without facts reads as a
-    # sample throughout, which under-claims rather than overstating.
+    # Coverage wording comes from what the action counted. load_file never raises: without
+    # facts the plan reads as a sample throughout, which under-claims.
     comment = TestPlan::Playbook::Formatter.new(
-      parsed: parsed, kit_facts: TestPlan::Playbook::KitFacts.load_file(kit_facts_path), **options
+      parsed: parsed, kit_facts: TestPlan::Playbook::KitFacts.load_file(kit_facts_path),
+      manifest: read_manifest.call, **options
+    ).render
+  elsif variant == TestPlan::Variant::DEPENDENCY
+    parsed = TestPlan::Dependency::Parser.parse_file(json_path)
+    comment = TestPlan::Dependency::Formatter.new(
+      parsed: parsed, manifest: read_manifest.call, **options
     ).render
   else
     parsed = TestPlan::Parser.parse_file(json_path)

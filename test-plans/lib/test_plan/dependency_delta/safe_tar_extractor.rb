@@ -11,9 +11,8 @@ module TestPlan
     class SafeTarExtractor
       MAX_EXTRACTED_BYTES = 100 * 1024 * 1024
       MAX_FILES = 20_000
-      # pax extended headers carry metadata about the *next* entry, not content of their
-      # own. GitHub's codeload tarballs open with a global one, so refusing them refuses
-      # every Git dependency archive.
+      # pax headers carry metadata about the next entry, not content. GitHub's codeload
+      # tarballs open with a global one, so refusing them refuses every Git archive.
       PAX_HEADER_TYPEFLAGS = %w[g x].freeze
 
       def extract_gzip(path, destination)
@@ -48,15 +47,13 @@ module TestPlan
         root = File.expand_path(destination)
 
         tar.each do |entry|
-          # Counted before dispatching on type: an archive of nothing but directory or
-          # metadata entries costs the same inodes and CPU as one full of files, and
-          # counting only regular files let it past this limit entirely.
+          # Before dispatching on type: an archive of nothing but directory or metadata
+          # entries costs the same, and counting only regular files let it past entirely.
           entries += 1
           raise "Archive contains more than #{MAX_FILES} entries" if entries > MAX_FILES
 
-          # Counted before the metadata entries are skipped: TarReader still inflates
-          # and reads past their declared size, so a small compressed archive of huge
-          # PAX payloads would otherwise cost unbounded work under this limit.
+          # Before metadata entries are skipped: TarReader still inflates and reads past
+          # their declared size, so huge PAX payloads would cost unbounded work.
           total_bytes += entry.header.size
           raise "Archive expands beyond #{ByteSize.describe(MAX_EXTRACTED_BYTES)}" if total_bytes > MAX_EXTRACTED_BYTES
 
