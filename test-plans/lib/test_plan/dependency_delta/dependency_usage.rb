@@ -48,7 +48,7 @@ module TestPlan
         "#{lines.join("\n")}\n"
       end
 
-      private
+    private
 
       def paths_for(name)
         patterns = [name, name.tr("-", "_"), name.tr("-", "/")].uniq

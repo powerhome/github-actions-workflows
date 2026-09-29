@@ -73,7 +73,7 @@ module TestPlan
         puts("::warning::#{warning}") unless warning.empty?
       end
 
-      private
+    private
 
       # The runner is ephemeral, so otherwise the reason is only in the artifact.
       # Unescaped is safe: a workflow command must start its own line, and

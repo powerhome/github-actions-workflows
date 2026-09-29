@@ -58,7 +58,7 @@ module TestPlan
         output
       end
 
-      private
+    private
 
       def parse_selectors(header)
         header.scan(/"([^"]+)"|([^,\s]+)/).map { |quoted, bare| quoted || bare }

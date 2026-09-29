@@ -99,7 +99,7 @@ module TestPlan
         )
       end
 
-      private
+    private
 
       # No counts here on purpose: the provider was once asked to copy one back and
       # reported a kit as used in 1083 files. The coverage sentence carries the same

@@ -30,7 +30,7 @@ module TestPlan
         @application_checks = check_list(@payload["application_checks"] || [], "application check")
       end
 
-      private
+    private
 
       def validate_root!
         raise "Test-plan JSON root must be a JSON object" unless @payload.is_a?(Hash)

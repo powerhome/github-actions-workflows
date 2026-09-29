@@ -77,7 +77,7 @@ module TestPlan
         }
       end
 
-      private
+    private
 
       def build_entry(change, full, context, remaining_context, remaining_weight)
         starting_context_bytes = context.bytesize

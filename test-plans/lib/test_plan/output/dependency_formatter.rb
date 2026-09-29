@@ -32,7 +32,7 @@ module TestPlan
         "#{sections.join("\n\n")}\n"
       end
 
-      private
+    private
 
       # Dropped -- it is not testing the raise -- but dropped out loud, since a plan that
       # quietly published fewer cases than were generated reads as complete.

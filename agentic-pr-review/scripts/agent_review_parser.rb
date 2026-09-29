@@ -21,7 +21,7 @@ class AgentReviewParser
 
   attr_reader :summary_body, :inline_comments
 
-  private
+private
 
   # Models sometimes emit prose or code fences around the JSON object.
   # Strategy: strip code fences first, then fall back to extracting the

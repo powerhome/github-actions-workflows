@@ -62,7 +62,7 @@ class GitHubReviewPoster
     false
   end
 
-  private
+private
 
   class RequestError < StandardError; end
 

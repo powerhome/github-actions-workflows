@@ -57,7 +57,7 @@ module TestPlan
       @merge_base_sha ||= git("merge-base", @base_sha, @head_sha).strip
     end
 
-    private
+  private
 
     def head_paths
       @head_paths ||= [].tap do |paths|

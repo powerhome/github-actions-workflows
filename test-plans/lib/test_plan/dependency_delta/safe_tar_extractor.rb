@@ -41,7 +41,7 @@ module TestPlan
         end
       end
 
-      private
+    private
 
       def extract_entries(tar, destination)
         total_bytes = 0

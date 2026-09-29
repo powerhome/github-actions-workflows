@@ -40,7 +40,7 @@ module TestPlan
         end
       end
 
-      private
+    private
 
       def files(root)
         return [] unless Dir.exist?(root)

@@ -11,7 +11,7 @@ module TestPlan
     # https://evilgithub.com/example/widget.git as example/widget, attaching a real but
     # unrelated repository's source and changelog to the dependency.
     module GitLocator
-      module_function
+    module_function
 
       HOSTS = %w[github.com www.github.com codeload.github.com].freeze
       SCP = %r{\Agit@([^:/]+):([^/]+)/(.+)\z}

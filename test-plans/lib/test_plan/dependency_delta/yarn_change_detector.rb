@@ -26,7 +26,7 @@ module TestPlan
         end
       end
 
-      private
+    private
 
       def version_changes(path, name, old_records, new_records, direct)
         old_versions = old_records.map(&:version).uniq

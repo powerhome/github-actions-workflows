@@ -192,8 +192,10 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
                                                           "steps" => ["Open the control.", "Confirm it still works."] },
                                                       ],
                                                       "application_checks" => [
-                                                        { "title" => "Adjusted call site", "page" => "/control",
-                                                          "steps" => ["Open the control.", "Confirm the adjusted integration works."] },
+                                                        { "title" => "Adjusted call site",
+                                                          "page" => "/control",
+                                                          "steps" => ["Open the control.",
+                                                                      "Confirm the adjusted integration works."] },
                                                       ]
                                                     ))
     output = described_class.new(

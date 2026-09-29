@@ -36,7 +36,7 @@ module TestPlan
         raise "Unable to parse #{path}: #{e.message}"
       end
 
-      private
+    private
 
       def external_specs(lock)
         lock.specs.each_with_object({}) do |spec, specs|

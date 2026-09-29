@@ -57,7 +57,7 @@ module TestPlan
         "#{sections.join("\n\n")}\n"
       end
 
-      private
+    private
 
       def release_section
         lines = ["## Playbook version changes", ""]

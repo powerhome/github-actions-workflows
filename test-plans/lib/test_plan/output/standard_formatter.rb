@@ -42,7 +42,7 @@ module TestPlan
         "#{sections.join("\n\n")}\n"
       end
 
-      private
+    private
 
       def permissions_section
         lines = [

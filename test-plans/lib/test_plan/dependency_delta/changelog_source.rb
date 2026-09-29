@@ -67,7 +67,7 @@ module TestPlan
         []
       end
 
-      private
+    private
 
       # Returns [baseline, new side, bounded?]. Which refs bracket the upgrade depends on
       # when the project commits its changelog, which the upgraded-to tag reveals:

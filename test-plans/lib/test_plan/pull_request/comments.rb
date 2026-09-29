@@ -68,7 +68,7 @@ module TestPlan
         "deleted comment #{existing}"
       end
 
-      private
+    private
 
       def validate_tag!(tag)
         raise "Invalid comment tag: #{tag.inspect}" unless TAG_PATTERN.match?(tag.to_s)

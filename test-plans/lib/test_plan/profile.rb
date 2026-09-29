@@ -141,7 +141,7 @@ module TestPlan
       }
     end
 
-    private
+  private
 
     def resolve_prompt(field)
       value = attributes.fetch(field)

@@ -94,7 +94,7 @@ module TestPlan
         @kits[normalize(slug)] || @kits[normalize(name)]
       end
 
-      private
+    private
 
       def normalize(value)
         value.to_s.strip.downcase.gsub(/[^a-z0-9]+/, "_").gsub(/\A_+|_+\z/, "")

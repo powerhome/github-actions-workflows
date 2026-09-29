@@ -25,6 +25,9 @@ Lint/InterpolationCheck:
 Layout:
   Enabled: true
 
+Layout/AccessModifierIndentation:
+  EnforcedStyle: outdent
+
 Style/StringLiterals:
   Enabled: true
   EnforcedStyle: double_quotes

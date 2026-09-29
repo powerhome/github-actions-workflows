@@ -35,7 +35,7 @@ module TestPlan
         )
       end
 
-      private
+    private
 
       def blocked_reason(mergeable)
         {

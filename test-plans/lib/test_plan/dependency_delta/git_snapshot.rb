@@ -54,7 +54,7 @@ module TestPlan
         nil
       end
 
-      private
+    private
 
       def git(*args)
         stdout, stderr, status = Open3.capture3("git", *args, chdir: @workspace)

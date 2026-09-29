@@ -79,7 +79,7 @@ module TestPlan
         scoped(deduplicate(changes))
       end
 
-      private
+    private
 
       # After deduplication: partitioning first would judge the component copy of a raise
       # that also reached the root lockfile.

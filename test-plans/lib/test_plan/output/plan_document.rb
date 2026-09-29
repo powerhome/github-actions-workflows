@@ -14,7 +14,7 @@ module TestPlan
       # Past this the notice stops being readable; the count still says how many there were.
       MAX_NAMED_DISCARDS = 5
 
-      private
+    private
 
       def preamble
         sections = [heading]

@@ -9,7 +9,7 @@ require "yaml"
 # step outputs, file paths -- so a rename in one fails at runtime on a real pull request
 # rather than here.
 module ActionWiring
-  module_function
+module_function
 
   # Supplied by the runner or the shell, so no step declares them.
   AMBIENT = %w[
@@ -252,13 +252,11 @@ RSpec.describe "action.yml wiring" do
     # redirects and File.write follow one.
     it "clears every workspace path it later writes" do
       # A step may also clear its own path inline, which counts the same.
-      cleared = ActionWiring.steps
-                            .select { |step|
-        step.equal?(ActionWiring.clearing_step) || step.fetch("run",
-                                                              "").include?("rm -rf --")
-      }
-                            .flat_map { |step| ActionWiring.workspace_paths(step) }
-                            .uniq
+      cleared =
+        ActionWiring.steps.select do |step|
+          step.equal?(ActionWiring.clearing_step) || step.fetch("run", "").include?("rm -rf --")
+        end.flat_map { |step| ActionWiring.workspace_paths(step) }
+                    .uniq
       written = (ActionWiring.steps - [ActionWiring.clearing_step])
                 .flat_map { |step| ActionWiring.workspace_paths(step) }
                 .uniq

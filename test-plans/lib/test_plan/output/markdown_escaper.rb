@@ -30,7 +30,7 @@ module TestPlan
       # counting backslashes, and over-escaping costs only formatting.
       CODE_SPAN = /(?<![`\\])(`+)(?!`)(.+?)(?<!`)\1(?!`)/
 
-      module_function
+    module_function
 
       def escape(value)
         return "" unless value.is_a?(String)

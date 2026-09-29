@@ -28,7 +28,7 @@ module TestPlan
         @regression_tests = build_regression_tests
       end
 
-      private
+    private
 
       def validate_root!
         raise "Test-plan JSON root must be a JSON object" unless @payload.is_a?(Hash)
