@@ -3,6 +3,12 @@ AllCops:
   NewCops: disable
   DisabledByDefault: true
 
+Layout:
+  Enabled: true
+
+Layout/AccessModifierIndentation:
+  EnforcedStyle: outdent
+
 Lint:
   Enabled: true
 
@@ -21,28 +27,6 @@ Lint/HashCompareByIdentity:
 Lint/InterpolationCheck:
   Exclude:
     - 'test-plans/spec/action_wiring_spec.rb'
-
-Layout:
-  Enabled: true
-
-Layout/AccessModifierIndentation:
-  EnforcedStyle: outdent
-
-Style/StringLiterals:
-  Enabled: true
-  EnforcedStyle: double_quotes
-
-Style/FrozenStringLiteralComment:
-  Enabled: true
-  EnforcedStyle: always
-
-Style/MutableConstant:
-  Enabled: false
-
-Style/HashSyntax:
-  Enabled: true
-  EnforcedStyle: ruby19
-  EnforcedShorthandSyntax: always
 
 Metrics/ClassLength:
   Enabled: true
@@ -63,3 +47,19 @@ Metrics/ParameterLists:
 Metrics/PerceivedComplexity:
   Enabled: true
   Max: 18
+
+Style/StringLiterals:
+  Enabled: true
+  EnforcedStyle: double_quotes
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+  EnforcedStyle: always
+
+Style/MutableConstant:
+  Enabled: false
+
+Style/HashSyntax:
+  Enabled: true
+  EnforcedStyle: ruby19
+  EnforcedShorthandSyntax: always
