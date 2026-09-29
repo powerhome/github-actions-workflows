@@ -57,6 +57,10 @@ jobs:
       github.actor != 'dependabot[bot]'
       && (inputs.skip-label == '' || (!contains(github.event.issue.labels.*.name, inputs.skip-label) && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)))
       && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested')
+    # Runs for one issue or pull request queue behind each other, so they write in event order.
+    concurrency:
+      group: project-status-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -84,7 +88,9 @@ jobs:
           ITEM_ID: ${{ steps.add.outputs.itemId }}
           EVENT: ${{ github.event_name }}
           ACTION: ${{ github.event.action }}
-          DRAFT: ${{ github.event.pull_request.draft }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          PULL: ${{ github.event.pull_request.number }}
           OWNER: ${{ inputs.project-owner }}
           NUMBER: ${{ inputs.project-number }}
           IN_PROGRESS: ${{ inputs.status-in-progress }}
@@ -96,9 +102,21 @@ jobs:
             issues/opened | issues/reopened) status="" ;;
             issues/closed | pull_request/closed) status="$DONE" ;;
             pull_request/ready_for_review) status="$IN_REVIEW" ;;
-            pull_request/review_requested) if [ "$DRAFT" = "true" ]; then status="$IN_PROGRESS"; else status="$IN_REVIEW"; fi ;;
+            pull_request/review_requested) status="$IN_REVIEW" ;;
             pull_request/* | pull_request_review/submitted) status="$IN_PROGRESS" ;;
             *) echo "No Status change for $EVENT/$ACTION"; exit 0 ;;
+          esac
+          # Check the item as it is now, not as the event saw it, so a delayed run cannot
+          # overwrite the Status a later event has set.
+          if [ -n "$PULL" ]; then
+            live=$(gh api "repos/$REPO/pulls/$PULL" --jq 'if .state == "closed" then "closed" elif .draft then "draft" else "open" end')
+          else
+            live=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.state')
+          fi
+          case "$status/$live" in
+            "$DONE/closed" | "$IN_REVIEW/open" | "$IN_PROGRESS/open" | "$IN_PROGRESS/draft" | "/open") ;;
+            "$IN_REVIEW/draft") status="$IN_PROGRESS" ;;
+            *) echo "The item is now $live, so this $EVENT/$ACTION event no longer decides its Status"; exit 0 ;;
           esac
           project=$(gh api graphql \
             -f query='query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } }' \

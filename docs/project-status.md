@@ -13,6 +13,8 @@ Adds a repository's issues and pull requests to an organization project (Project
 
 Dependabot pull requests are skipped, because they cannot read Actions secrets.
 
+Runs for the same issue or pull request queue behind each other, and each one checks the item's current state before writing, so a delayed run never overwrites the Status a later event set.
+
 ## Installation 🛠
 
 The workflow writes to the project with a GitHub App, because the default `GITHUB_TOKEN` cannot write to organization projects. Install an App on the organization with **Organization projects: Read and write**, **Issues: Read** and **Pull requests: Read**, and make its client ID and private key available to the calling repositories.
