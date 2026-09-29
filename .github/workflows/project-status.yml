@@ -99,13 +99,28 @@ jobs:
         run: |
           set -euo pipefail
           if [ -n "$PULL" ]; then
-            # Changes are outstanding when the latest review decision, review request or
-            # ready-for-review event is a review requesting changes. Comment-only reviews
-            # don't count.
             live=$(gh api graphql \
-              -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { state isDraft timelineItems(last: 100, itemTypes: [PULL_REQUEST_REVIEW, REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) { nodes { __typename ... on PullRequestReview { state } } } } } }' \
+              -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { state isDraft } } }' \
               -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" \
-              --jq '.data.repository.pullRequest | if .state != "OPEN" then "closed" elif .isDraft then "draft" elif ([.timelineItems.nodes[] | select(.__typename != "PullRequestReview" or .state == "CHANGES_REQUESTED" or .state == "APPROVED")] | last | .state?) == "CHANGES_REQUESTED" then "changes-requested" else "ready" end')
+              --jq '.data.repository.pullRequest | if .state != "OPEN" then "closed" elif .isDraft then "draft" else "" end')
+            # Changes are outstanding when the latest review decision, review request or
+            # ready-for-review event is a review requesting changes. Comment-only and
+            # dismissed reviews don't count. Page back through the timeline until one is found.
+            before=()
+            while [ -z "$live" ]; do
+              page=$(gh api graphql \
+                -f query='query($owner: String!, $repo: String!, $number: Int!, $before: String) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { timelineItems(last: 100, before: $before, itemTypes: [PULL_REQUEST_REVIEW, REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) { pageInfo { hasPreviousPage startCursor } nodes { __typename ... on PullRequestReview { state } } } } } }' \
+                -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" ${before[@]+"${before[@]}"} \
+                --jq '.data.repository.pullRequest.timelineItems')
+              live=$(jq -r '[.nodes[] | select(.__typename != "PullRequestReview" or .state == "CHANGES_REQUESTED" or .state == "APPROVED")] | last | if . == null then "" elif .state == "CHANGES_REQUESTED" then "changes-requested" else "ready" end' <<<"$page")
+              if [ -z "$live" ]; then
+                if [ "$(jq -r '.pageInfo.hasPreviousPage' <<<"$page")" != "true" ]; then
+                  live="ready"
+                else
+                  before=(-f before="$(jq -r '.pageInfo.startCursor' <<<"$page")")
+                fi
+              fi
+            done
             case "$live" in
               closed) status="$DONE" ;;
               ready) status="$IN_REVIEW" ;;

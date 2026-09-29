@@ -30,7 +30,7 @@ on:
   pull_request:
     types: [opened, reopened, ready_for_review, review_requested, converted_to_draft, closed]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, dismissed]
 
 permissions: {}
 
