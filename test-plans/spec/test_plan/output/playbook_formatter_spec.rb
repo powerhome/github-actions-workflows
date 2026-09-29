@@ -1,11 +1,11 @@
 require_relative "../../spec_helper"
-require "test_plan/playbook/formatter"
+require "test_plan/output/playbook_formatter"
 require "test_plan/playbook/kit_facts"
-require "test_plan/playbook/parser"
+require "test_plan/response/playbook_parser"
 
 require "json"
 
-RSpec.describe TestPlan::Playbook::Formatter do
+RSpec.describe TestPlan::Output::PlaybookFormatter do
   KF = TestPlan::Playbook::KitFacts
 
   def kit(name:, slug: nil, cases: 1, code: nil, system: "rails")
@@ -30,7 +30,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
 
   def render(payload, warning: "", kit_facts: KF.none)
     described_class.new(
-      parsed: TestPlan::Playbook::Parser.new(JSON.generate(payload)),
+      parsed: TestPlan::Response::PlaybookParser.new(JSON.generate(payload)),
       pull_request_title: "Playbook RC 17.2.0.pre.rc.0",
       profile_name: "Cobra Test Plan",
       generation_warning: warning,
@@ -183,7 +183,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
   end
 
   it "lists the Playbook raise and covers non-kit regressions and application edits" do
-    parsed = TestPlan::Playbook::Parser.new(JSON.generate(
+    parsed = TestPlan::Response::PlaybookParser.new(JSON.generate(
       "kits" => [],
       "regression_tests" => [
         { "title" => "Existing control", "page" => "/control",
@@ -208,7 +208,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
   end
 
   it "lists other manifest raises even when the provider omits them" do
-    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    parsed = TestPlan::Response::PlaybookParser.new(JSON.generate("kits" => []))
     output = described_class.new(
       parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [
@@ -223,7 +223,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
 
   # One the response invented has no raise to attach to; one it forgot still appears.
   it "ignores an other-dependency entry the manifest does not list" do
-    parsed = TestPlan::Playbook::Parser.new(JSON.generate(
+    parsed = TestPlan::Response::PlaybookParser.new(JSON.generate(
       "kits" => [],
       "other_dependencies" => [
         { "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2", "note" => "Matched." },
@@ -243,7 +243,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
   end
 
   it "says the Playbook version is unavailable rather than inventing one" do
-    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    parsed = TestPlan::Response::PlaybookParser.new(JSON.generate("kits" => []))
     output = described_class.new(
       parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [{ "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" }] }
@@ -254,7 +254,7 @@ RSpec.describe TestPlan::Playbook::Formatter do
 
   # The npm half of the same release: also the Playbook raise, not an other dependency.
   it "recognises the npm package as a Playbook raise" do
-    parsed = TestPlan::Playbook::Parser.new(JSON.generate("kits" => []))
+    parsed = TestPlan::Response::PlaybookParser.new(JSON.generate("kits" => []))
     output = described_class.new(
       parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [

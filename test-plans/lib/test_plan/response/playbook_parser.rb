@@ -1,13 +1,13 @@
 require "json"
 
-require_relative "../agent_payload"
-require_relative "./kit_facts"
+require_relative "validation"
+require_relative "../playbook/kit_facts"
 
 module TestPlan
-  module Playbook
+  module Response
     # Organizes a Playbook raise by changed kit rather than feature area.
-    class Parser
-      include AgentPayload
+    class PlaybookParser
+      include Validation
 
       DEFAULT_KIT_CODE = "KIT"
       KIT_CODE_PATTERN = /\A[A-Z][A-Z0-9]{1,5}\z/
@@ -100,7 +100,7 @@ module TestPlan
       # Empty rather than guessed, so the plan does not label a React page as Rails.
       def system(value)
         candidate = normalize_text(value).downcase
-        KitFacts::SYSTEMS.include?(candidate) ? candidate : ""
+        Playbook::KitFacts::SYSTEMS.include?(candidate) ? candidate : ""
       end
 
       def kit_code(value, name)

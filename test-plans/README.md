@@ -120,7 +120,7 @@ The pull-request head is untrusted: anyone who can open a pull request controls 
 - The workspace holds no credential while the provider runs. `actions/checkout` persists the installation token in `.git/config`, so it is removed once the last fetch is done — every later Git operation is local — rather than left where an agent with `Read(**)` could find it.
 - The unbounded full delta is written outside the workspace and uploaded from there. Inside it, an agent could read it and bypass both the context budget and the generated-file exclusions.
 - The Cursor CLI installer is downloaded before it is run, rather than piped into a shell, and the run logs its size and SHA-256. Piping starts executing while the transfer is still in flight, so an interrupted download leaves the first half already run with no record of what that was. The installer is still unpinned — Cursor documents no version-pinned CI install — so this bounds the failure mode rather than removing it.
-- The provider runs read-only and offline. `config/cli-config.json` allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. Everything a plan says has to come from evidence this action assembled.
+- The provider runs read-only and offline. `ai/config/cli-config.json` allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. Everything a plan says has to come from evidence this action assembled.
 - A part of the response the schema cannot use — a scenario with no steps, a feature area with no test path — is dropped rather than failing the run, since one unusable scenario should not cost an otherwise sound plan. The rendered plan says how many parts were dropped and why, so a partial plan is never mistaken for a complete one.
 - Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published. Every provider-derived field, and the pull-request title, is escaped before rendering: mentions cannot notify anyone, and links, images, and inline HTML cannot be injected into a comment the bot signs. Inline code is the single exception, so a plan can set a route or an identifier apart from the prose around it. A complete code span passes through as written — GitHub renders its contents literally, resolving no mention, autolinking no URL, and interpreting no tag — while a backtick that closes nothing, or one standing behind a backslash that Markdown may read as escaping it, is neutralised like any other markup. A response can neither open a code block that swallows the plan below it nor slip a mention past the escaping by making plain text merely look like code.
 - Cursor selects its default model. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
@@ -175,9 +175,7 @@ test-plans/
   lib/test_plan/      library code, namespaced under TestPlan
   spec/               specs, mirroring lib/
   profiles/           allowlisted profile definitions
-  prompts/            provider prompts
-  providers/          per-provider shell adapters
-  config/             provider CLI permissions
+  ai/                 prompts, provider adapters, and CLI permissions
 ```
 
 ## Local Tests

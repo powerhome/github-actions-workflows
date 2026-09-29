@@ -1,10 +1,10 @@
 require "json"
 
-require_relative "agent_payload"
+require_relative "validation"
 
-module TestPlan
-  class Parser
-    include AgentPayload
+module TestPlan::Response
+  class StandardParser
+    include Validation
 
     VALID_PERMISSION_REQUIREMENTS = %w[yes no not_identified].freeze
     DEFAULT_FEATURE_CODE = "AC"

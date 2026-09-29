@@ -1,9 +1,9 @@
 require_relative "../../spec_helper"
-require "test_plan/playbook/parser"
+require "test_plan/response/playbook_parser"
 
 require "json"
 
-RSpec.describe TestPlan::Playbook::Parser do
+RSpec.describe TestPlan::Response::PlaybookParser do
   def payload(overrides = {})
     {
       "kits" => [
