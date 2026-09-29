@@ -50,69 +50,10 @@ module TestPlan
         remaining_weight = @changes.sum { |change| context_weight(change) }
 
         @changes.each do |change|
-          entry = change.to_h
-          entry["related"] = related_for(change)
-          entry["warnings"] = []
-          entry["degraded"] = false
-          begin
-            diffs = retrieve_diffs(change, entry)
-            @kit_usage.observe(change, diffs)
-            entry["changed_files"] = diffs.length
-            header = dependency_header(change)
-
-            # Only the context affects the generated plan, so only it decides the status;
-            # the shared artifact budget says nothing about this dependency's evidence.
-            omitted_from_artifact = append_chunks(full, header, diffs, FULL_LIMIT, :artifact_text)
-
-            candidates = context_candidates(entry.fetch("related"), diffs)
-            excluded = diffs - candidates
-            omitted_from_context = []
-
-            if candidates.any?
-              budget = context_budget(remaining_context, remaining_weight, context_weight(change))
-              dependency_context = +""
-              omitted_from_context =
-                append_chunks(dependency_context, header, candidates, budget, :context_text)
-              context << dependency_context
-              remaining_context -= dependency_context.bytesize
-
-              if omitted_from_context.any?
-                entry["warnings"] << budget_warning(budget, omitted_from_context)
-              end
-            end
-
-            if excluded.any?
-              entry["warnings"] << "Kept #{excluded.length} generated build files out of the provider " \
-                "context; #{entry.fetch("related").join(", ")} carries the source for the same " \
-                "release. They remain in the full-delta artifact."
-            end
-
-            # Only lost evidence truncates; dropping tests and docs off the tail is the
-            # priority order working. Every omission is named either way.
-            entry["status"] = omitted_from_context.any?(&:evidence?) ? "truncated" : "retrieved"
-
-            if omitted_from_artifact.any?
-              entry["warnings"] << "The full-delta artifact reached its #{mib(FULL_LIMIT)} limit; " \
-                "#{omitted_from_artifact.length} file diffs are missing from the artifact only, not " \
-                "from the provider context."
-            end
-
-            entry["context_files"] = candidates.length - omitted_from_context.length
-            entry["omitted_from_context"] = omitted_from_context.map(&:path).sort
-            entry["excluded_generated"] = excluded.map(&:path).sort
-            entry["omitted_from_artifact"] = omitted_from_artifact.map(&:path).sort
-          rescue => e
-            entry["status"] = "unavailable"
-            entry["degraded"] = true
-            entry["warnings"] = [e.message]
-            entry["changed_files"] = 0
-            entry["context_files"] = 0
-            entry["omitted_from_context"] = []
-            entry["excluded_generated"] = []
-            entry["omitted_from_artifact"] = []
-          end
+          context_before = context.bytesize
+          entries << build_entry(change, full, context, remaining_context, remaining_weight)
+          remaining_context -= context.bytesize - context_before
           remaining_weight -= context_weight(change)
-          entries << entry
         end
 
         lockfile_warnings = @problems.map(&:to_h)
@@ -137,6 +78,80 @@ module TestPlan
       end
 
     private
+
+      def build_entry(change, full, context, remaining_context, remaining_weight)
+        entry = change.to_h
+        entry["related"] = related_for(change)
+        entry["warnings"] = []
+        entry["degraded"] = false
+
+        begin
+          populate_entry(entry, change, full, context, remaining_context, remaining_weight)
+        rescue => e
+          mark_unavailable(entry, e)
+        end
+
+        entry
+      end
+
+      def populate_entry(entry, change, full, context, remaining_context, remaining_weight)
+        diffs = retrieve_diffs(change, entry)
+        @kit_usage.observe(change, diffs)
+        entry["changed_files"] = diffs.length
+        header = dependency_header(change)
+
+        # Only the context affects the generated plan, so only it decides the status;
+        # the shared artifact budget says nothing about this dependency's evidence.
+        omitted_from_artifact = append_chunks(full, header, diffs, FULL_LIMIT, :artifact_text)
+
+        candidates = context_candidates(entry.fetch("related"), diffs)
+        excluded = diffs - candidates
+        omitted_from_context = []
+
+        if candidates.any?
+          budget = context_budget(remaining_context, remaining_weight, context_weight(change))
+          dependency_context = +""
+          omitted_from_context =
+            append_chunks(dependency_context, header, candidates, budget, :context_text)
+          context << dependency_context
+
+          if omitted_from_context.any?
+            entry["warnings"] << budget_warning(budget, omitted_from_context)
+          end
+        end
+
+        if excluded.any?
+          entry["warnings"] << "Kept #{excluded.length} generated build files out of the provider " \
+            "context; #{entry.fetch("related").join(", ")} carries the source for the same " \
+            "release. They remain in the full-delta artifact."
+        end
+
+        # Only lost evidence truncates; dropping tests and docs off the tail is the
+        # priority order working. Every omission is named either way.
+        entry["status"] = omitted_from_context.any?(&:evidence?) ? "truncated" : "retrieved"
+
+        if omitted_from_artifact.any?
+          entry["warnings"] << "The full-delta artifact reached its #{mib(FULL_LIMIT)} limit; " \
+            "#{omitted_from_artifact.length} file diffs are missing from the artifact only, not " \
+            "from the provider context."
+        end
+
+        entry["context_files"] = candidates.length - omitted_from_context.length
+        entry["omitted_from_context"] = omitted_from_context.map(&:path).sort
+        entry["excluded_generated"] = excluded.map(&:path).sort
+        entry["omitted_from_artifact"] = omitted_from_artifact.map(&:path).sort
+      end
+
+      def mark_unavailable(entry, error)
+        entry["status"] = "unavailable"
+        entry["degraded"] = true
+        entry["warnings"] = [error.message]
+        entry["changed_files"] = 0
+        entry["context_files"] = 0
+        entry["omitted_from_context"] = []
+        entry["excluded_generated"] = []
+        entry["omitted_from_artifact"] = []
+      end
 
       # The changelog comes from the repository, so it survives a package download the
       # registry refuses.

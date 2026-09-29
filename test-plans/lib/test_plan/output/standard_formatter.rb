@@ -67,7 +67,12 @@ module TestPlan::Output
 
       subject_actions = @parsed.permissions.fetch("subject_actions")
       if subject_actions.empty?
-        subject_actions_message = @parsed.permissions.fetch("required") == "no" ? "No special permission required." : NO_SUBJECT_ACTIONS_MESSAGE
+        subject_actions_message =
+          if @parsed.permissions.fetch("required") == "no"
+            "No special permission required."
+          else
+            NO_SUBJECT_ACTIONS_MESSAGE
+          end
         lines << "- **Permission Subjects / Actions:** #{subject_actions_message}"
       else
         lines << "- **Permission Subjects / Actions:**"
@@ -161,7 +166,9 @@ module TestPlan::Output
     def scenario_permissions(scenario)
       permissions = scenario.fetch("permissions")
       if permissions.empty?
-        return @parsed.permissions.fetch("required") == "no" ? "No special permission required." : "Not identified for this case."
+        return "No special permission required." if @parsed.permissions.fetch("required") == "no"
+
+        return "Not identified for this case."
       end
 
       permissions.map { |permission| permission_display(permission) }.join("; ")

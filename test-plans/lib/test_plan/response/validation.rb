@@ -72,7 +72,9 @@ module TestPlan
 
           title = normalize_text(entry["title"])
           steps = string_list(entry["steps"])
-          next discard("#{label} #{index + 1} had no title or usable steps") if title.empty? || steps.nil? || steps.empty?
+          if title.empty? || steps.nil? || steps.empty?
+            next discard("#{label} #{index + 1} had no title or usable steps")
+          end
 
           check = { "title" => title, "page" => normalize_text(entry["page"]), "steps" => steps }
           next check unless dependency

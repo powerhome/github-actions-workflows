@@ -185,17 +185,18 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
   end
 
   it "lists the Playbook raise and covers non-kit regressions and application edits" do
-    parsed = TestPlan::Response::PlaybookParser.new(JSON.generate(
-                                                      "kits" => [],
-                                                      "regression_tests" => [
-                                                        { "title" => "Existing control", "page" => "/control",
-                                                          "steps" => ["Open the control.", "Confirm it still works."] },
-                                                      ],
-                                                      "application_checks" => [
-                                                        { "title" => "Adjusted call site", "page" => "/control",
-                                                          "steps" => ["Open the control.", "Confirm the adjusted integration works."] },
-                                                      ]
-                                                    ))
+    payload = {
+      "kits" => [],
+      "regression_tests" => [
+        { "title" => "Existing control", "page" => "/control",
+          "steps" => ["Open the control.", "Confirm it still works."] },
+      ],
+      "application_checks" => [
+        { "title" => "Adjusted call site", "page" => "/control",
+          "steps" => ["Open the control.", "Confirm the adjusted integration works."] },
+      ]
+    }
+    parsed = TestPlan::Response::PlaybookParser.new(JSON.generate(payload))
     output = described_class.new(
       parsed:, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [

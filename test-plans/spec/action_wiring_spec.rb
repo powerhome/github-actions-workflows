@@ -252,13 +252,10 @@ RSpec.describe "action.yml wiring" do
     # redirects and File.write follow one.
     it "clears every workspace path it later writes" do
       # A step may also clear its own path inline, which counts the same.
-      cleared = ActionWiring.steps
-                            .select { |step|
-        step.equal?(ActionWiring.clearing_step) || step.fetch("run",
-                                                              "").include?("rm -rf --")
-      }
-                            .flat_map { |step| ActionWiring.workspace_paths(step) }
-                            .uniq
+      clearing_steps = ActionWiring.steps.select do |step|
+        step.equal?(ActionWiring.clearing_step) || step.fetch("run", "").include?("rm -rf --")
+      end
+      cleared = clearing_steps.flat_map { |step| ActionWiring.workspace_paths(step) }.uniq
       written = (ActionWiring.steps - [ActionWiring.clearing_step])
                 .flat_map { |step| ActionWiring.workspace_paths(step) }
                 .uniq
