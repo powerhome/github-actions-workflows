@@ -1,0 +1,131 @@
+# Adds the calling repository's issues and pull requests to an organization project and sets
+# their Status. See docs/project-status.md for the triggers a caller needs.
+#
+# - Issues are added when opened, with no Status, so they wait for triage. A reopened issue
+#   goes back to no Status for re-triage. A closed issue is Done.
+# - Pull requests are In progress while open as a draft or not yet ready, In review once
+#   marked ready for review or when review is requested again, back to In progress when a
+#   review requests changes, and Done when closed.
+# - Issues and pull requests carrying skip-label are left off the project.
+
+name: Project status
+
+on:
+  workflow_call:
+    inputs:
+      project-owner:
+        description: Organization that owns the project.
+        type: string
+        required: true
+      project-number:
+        description: Number of the project, from its URL.
+        type: number
+        required: true
+      client-id:
+        description: Client ID of the GitHub App that writes to the project.
+        type: string
+        required: true
+      skip-label:
+        description: Issues and pull requests with this label are not added.
+        type: string
+        default: ""
+      status-in-progress:
+        description: Status option for work in progress.
+        type: string
+        default: In progress
+      status-in-review:
+        description: Status option for pull requests waiting on review.
+        type: string
+        default: In review
+      status-done:
+        description: Status option for closed issues and pull requests.
+        type: string
+        default: Done
+    secrets:
+      private-key:
+        description: Private key of the GitHub App that writes to the project.
+        required: true
+
+permissions: {}
+
+jobs:
+  project:
+    name: Add to project and set status
+    # Dependabot pull requests cannot read Actions secrets; only reviews requesting changes
+    # move a pull request.
+    if: >-
+      github.actor != 'dependabot[bot]'
+      && (inputs.skip-label == '' || (!contains(github.event.issue.labels.*.name, inputs.skip-label) && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)))
+      && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Mint project App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ inputs.client-id }}
+          private-key: ${{ secrets.private-key }}
+          owner: ${{ inputs.project-owner }}
+          permission-issues: read
+          permission-pull-requests: read
+          permission-organization-projects: write
+
+      - name: Add to project
+        id: add
+        uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd # v2.0.0
+        with:
+          project-url: https://github.com/orgs/${{ inputs.project-owner }}/projects/${{ inputs.project-number }}
+          github-token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set status
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ITEM_ID: ${{ steps.add.outputs.itemId }}
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          DRAFT: ${{ github.event.pull_request.draft }}
+          OWNER: ${{ inputs.project-owner }}
+          NUMBER: ${{ inputs.project-number }}
+          IN_PROGRESS: ${{ inputs.status-in-progress }}
+          IN_REVIEW: ${{ inputs.status-in-review }}
+          DONE: ${{ inputs.status-done }}
+        run: |
+          set -euo pipefail
+          case "$EVENT/$ACTION" in
+            issues/opened | issues/reopened) status="" ;;
+            issues/closed | pull_request/closed) status="$DONE" ;;
+            pull_request/ready_for_review) status="$IN_REVIEW" ;;
+            pull_request/review_requested) if [ "$DRAFT" = "true" ]; then status="$IN_PROGRESS"; else status="$IN_REVIEW"; fi ;;
+            pull_request/* | pull_request_review/submitted) status="$IN_PROGRESS" ;;
+            *) echo "No Status change for $EVENT/$ACTION"; exit 0 ;;
+          esac
+          project=$(gh api graphql \
+            -f query='query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } }' \
+            -f owner="$OWNER" -F number="$NUMBER" \
+            --jq '.data.organization.projectV2')
+          project_id=$(jq -r '.id' <<<"$project")
+          field_id=$(jq -r '.field.id' <<<"$project")
+          if [ -z "$status" ]; then
+            current=$(gh api graphql \
+              -f query='query($item: ID!) { node(id: $item) { ... on ProjectV2Item { fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { optionId } } } } }' \
+              -f item="$ITEM_ID" --jq '.data.node.fieldValueByName.optionId // empty')
+            if [ -z "$current" ]; then
+              echo "Status already empty for triage"
+              exit 0
+            fi
+            gh api graphql \
+              -f query='mutation($project: ID!, $item: ID!, $field: ID!) { clearProjectV2ItemFieldValue(input: { projectId: $project, itemId: $item, fieldId: $field }) { projectV2Item { id } } }' \
+              -f project="$project_id" -f item="$ITEM_ID" -f field="$field_id" > /dev/null
+            echo "Cleared Status for triage"
+            exit 0
+          fi
+          option_id=$(jq -r --arg status "$status" '.field.options[] | select(.name == $status) | .id' <<<"$project")
+          if [ -z "$option_id" ]; then
+            echo "::error::The project's Status field has no \"$status\" option."
+            exit 1
+          fi
+          gh api graphql \
+            -f query='mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) { updateProjectV2ItemFieldValue(input: { projectId: $project, itemId: $item, fieldId: $field, value: { singleSelectOptionId: $option } }) { projectV2Item { id } } }' \
+            -f project="$project_id" -f item="$ITEM_ID" -f field="$field_id" -f option="$option_id" > /dev/null
+          echo "Set Status to $status"
