@@ -1,12 +1,14 @@
 # Adds the calling repository's issues and pull requests to an organization project and sets
 # their Status. See docs/project-status.md for the triggers a caller needs.
 #
-# - Issues are added when opened, with no Status, so they wait for triage. A reopened issue
-#   goes back to no Status for re-triage. A closed issue is Done.
-# - Pull requests are In progress while open as a draft or not yet ready, In review once
-#   marked ready for review or when review is requested again, back to In progress when a
-#   review requests changes, and Done when closed.
+# - Open issues have no Status, so they wait for triage, and closed issues are Done.
+# - Pull requests are In progress while in draft, In review once ready, back to In progress
+#   while a review's requested changes are outstanding, until review is requested again or
+#   the pull request is approved, and Done when closed.
 # - Issues and pull requests carrying skip-label are left off the project.
+#
+# Events only trigger a run: each run works the Status out from the item as it is now, so
+# runs that start late or out of order still leave the latest Status.
 
 name: Project status
 
@@ -51,12 +53,12 @@ permissions: {}
 jobs:
   project:
     name: Add to project and set status
-    # Dependabot pull requests cannot read Actions secrets; only reviews requesting changes
-    # move a pull request.
+    # Dependabot pull requests cannot read Actions secrets; comment-only reviews never change
+    # the Status.
     if: >-
       github.actor != 'dependabot[bot]'
       && (inputs.skip-label == '' || (!contains(github.event.issue.labels.*.name, inputs.skip-label) && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)))
-      && (github.event_name != 'pull_request_review' || github.event.review.state == 'changes_requested')
+      && (github.event_name != 'pull_request_review' || github.event.review.state != 'commented')
     # Runs for one issue or pull request queue behind each other, so they write in event order.
     concurrency:
       group: project-status-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
@@ -86,8 +88,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ITEM_ID: ${{ steps.add.outputs.itemId }}
-          EVENT: ${{ github.event_name }}
-          ACTION: ${{ github.event.action }}
           REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
           PULL: ${{ github.event.pull_request.number }}
@@ -98,26 +98,24 @@ jobs:
           DONE: ${{ inputs.status-done }}
         run: |
           set -euo pipefail
-          case "$EVENT/$ACTION" in
-            issues/opened | issues/reopened) status="" ;;
-            issues/closed | pull_request/closed) status="$DONE" ;;
-            pull_request/ready_for_review) status="$IN_REVIEW" ;;
-            pull_request/review_requested) status="$IN_REVIEW" ;;
-            pull_request/* | pull_request_review/submitted) status="$IN_PROGRESS" ;;
-            *) echo "No Status change for $EVENT/$ACTION"; exit 0 ;;
-          esac
-          # Check the item as it is now, not as the event saw it, so a delayed run cannot
-          # overwrite the Status a later event has set.
           if [ -n "$PULL" ]; then
-            live=$(gh api "repos/$REPO/pulls/$PULL" --jq 'if .state == "closed" then "closed" elif .draft then "draft" else "open" end')
+            # Changes are outstanding when the latest review decision, review request or
+            # ready-for-review event is a review requesting changes. Comment-only reviews
+            # don't count.
+            live=$(gh api graphql \
+              -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { state isDraft timelineItems(last: 100, itemTypes: [PULL_REQUEST_REVIEW, REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) { nodes { __typename ... on PullRequestReview { state } } } } } }' \
+              -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" \
+              --jq '.data.repository.pullRequest | if .state != "OPEN" then "closed" elif .isDraft then "draft" elif ([.timelineItems.nodes[] | select(.__typename != "PullRequestReview" or .state == "CHANGES_REQUESTED" or .state == "APPROVED")] | last | .state?) == "CHANGES_REQUESTED" then "changes-requested" else "ready" end')
+            case "$live" in
+              closed) status="$DONE" ;;
+              ready) status="$IN_REVIEW" ;;
+              draft | changes-requested) status="$IN_PROGRESS" ;;
+            esac
           else
             live=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.state')
+            if [ "$live" = "closed" ]; then status="$DONE"; else status=""; fi
           fi
-          case "$status/$live" in
-            "$DONE/closed" | "$IN_REVIEW/open" | "$IN_PROGRESS/open" | "$IN_PROGRESS/draft" | "/open") ;;
-            "$IN_REVIEW/draft") status="$IN_PROGRESS" ;;
-            *) echo "The item is now $live, so this $EVENT/$ACTION event no longer decides its Status"; exit 0 ;;
-          esac
+          echo "The item is $live"
           project=$(gh api graphql \
             -f query='query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } }' \
             -f owner="$OWNER" -F number="$NUMBER" \

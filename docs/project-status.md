@@ -1,19 +1,19 @@
 # Project Status workflow
 
-Adds a repository's issues and pull requests to an organization project (Projects V2) and keeps their Status field in step with their lifecycle:
+Adds a repository's issues and pull requests to an organization project (Projects V2) and keeps their Status field in step with their state:
 
-| Event | Status |
+| Item | Status |
 | --- | --- |
-| Issue opened or reopened | none, waiting for triage |
-| Pull request opened, reopened or converted to draft | In progress |
-| Pull request marked ready for review | In review |
-| Review requested on a pull request that is not a draft | In review |
-| Review requests changes | In progress |
-| Issue or pull request closed, including merged | Done |
+| Open issue | none, waiting for triage |
+| Closed issue | Done |
+| Draft pull request | In progress |
+| Pull request ready for review | In review |
+| Pull request whose latest review requests changes, until review is requested again or it is approved | In progress |
+| Closed or merged pull request | Done |
 
 Dependabot pull requests are skipped, because they cannot read Actions secrets.
 
-Runs for the same issue or pull request queue behind each other, and each one checks the item's current state before writing, so a delayed run never overwrites the Status a later event set.
+Events only trigger a run. Each run works the Status out from the issue or pull request as it is at that moment, including its review history, so runs that start late or out of order still leave the right Status. Runs for the same item also queue behind each other.
 
 ## Installation 🛠
 
