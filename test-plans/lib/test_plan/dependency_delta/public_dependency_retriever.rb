@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "fileutils"
 require "tmpdir"
 require "uri"
@@ -41,7 +42,7 @@ module TestPlan
         end
       end
 
-    private
+      private
 
       # Gemfile.lock carries no checksum to fall back on, so a gem resolved from anywhere
       # but rubygems.org is reported as private rather than guessed at.

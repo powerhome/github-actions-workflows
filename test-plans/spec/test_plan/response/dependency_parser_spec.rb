@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/response/dependency_parser"
 
@@ -55,8 +56,9 @@ RSpec.describe TestPlan::Response::DependencyParser do
   # response its note and steps for nothing.
   it "keeps a version entry that did not echo the manifest's source" do
     parsed = parse("dependencies" => [
-      { "ecosystem" => "yarn", "name" => "widget", "from" => "1.0.0", "to" => "2.0.0", "note" => "Changed." },
-    ])
+                     { "ecosystem" => "yarn", "name" => "widget", "from" => "1.0.0", "to" => "2.0.0",
+                       "note" => "Changed." },
+                   ])
 
     expect(parsed.dependencies.first).to include("name" => "widget", "note" => "Changed.", "steps" => [])
     expect(parsed.discarded).to be_empty

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "./change"
 require_relative "./yarn_lock_parser"
 
@@ -25,7 +26,7 @@ module TestPlan
         end
       end
 
-    private
+      private
 
       def version_changes(path, name, old_records, new_records, direct)
         old_versions = old_records.map(&:version).uniq
@@ -35,8 +36,8 @@ module TestPlan
 
         added.filter_map do |new_version|
           old_version = removed
-            .select { |candidate| version(candidate) < version(new_version) }
-            .max_by { |candidate| version(candidate) }
+                        .select { |candidate| version(candidate) < version(new_version) }
+                        .max_by { |candidate| version(candidate) }
           next unless old_version
 
           old_record = old_records.find { |record| record.version == old_version }

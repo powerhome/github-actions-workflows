@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "json"
 
 module TestPlan
@@ -140,7 +141,7 @@ module TestPlan
       }
     end
 
-  private
+    private
 
     def resolve_prompt(field)
       value = attributes.fetch(field)

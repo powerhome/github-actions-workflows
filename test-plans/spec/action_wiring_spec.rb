@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "spec_helper"
 require "test_plan/profile"
 
@@ -191,8 +192,8 @@ RSpec.describe "action.yml wiring" do
 
     it "keeps the unbounded delta out of the workspace" do
       full = ActionWiring.steps
-        .flat_map { |step| step.fetch("env", {}).to_a }
-        .find { |name, _value| name == "DEPENDENCY_DELTA_FULL_PATH" }
+                         .flat_map { |step| step.fetch("env", {}).to_a }
+                         .find { |name, _value| name == "DEPENDENCY_DELTA_FULL_PATH" }
 
       # Readable there, it bypasses the context budget and the exclusions it enforces.
       expect(full.last).not_to include("github.workspace")
@@ -236,10 +237,10 @@ RSpec.describe "action.yml wiring" do
 
     it "uploads every workspace file the steps produce" do
       produced = (ActionWiring.steps - [ActionWiring.clearing_step])
-        .flat_map { |step| ActionWiring.workspace_paths(step) }
-        .uniq
-        # Comments are posted, not archived.
-        .reject { |name| name.end_with?("-comment.md") }
+                 .flat_map { |step| ActionWiring.workspace_paths(step) }
+                 .uniq
+                 # Comments are posted, not archived.
+                 .reject { |name| name.end_with?("-comment.md") }
 
       upload = ActionWiring.steps.find { |step| step.fetch("name", "").include?("Upload") }
       uploaded = upload.dig("with", "path").to_s
@@ -252,12 +253,15 @@ RSpec.describe "action.yml wiring" do
     it "clears every workspace path it later writes" do
       # A step may also clear its own path inline, which counts the same.
       cleared = ActionWiring.steps
-        .select { |step| step.equal?(ActionWiring.clearing_step) || step.fetch("run", "").include?("rm -rf --") }
-        .flat_map { |step| ActionWiring.workspace_paths(step) }
-        .uniq
+                            .select { |step|
+        step.equal?(ActionWiring.clearing_step) || step.fetch("run",
+                                                              "").include?("rm -rf --")
+      }
+                            .flat_map { |step| ActionWiring.workspace_paths(step) }
+                            .uniq
       written = (ActionWiring.steps - [ActionWiring.clearing_step])
-        .flat_map { |step| ActionWiring.workspace_paths(step) }
-        .uniq
+                .flat_map { |step| ActionWiring.workspace_paths(step) }
+                .uniq
 
       expect(written - cleared).to be_empty
     end

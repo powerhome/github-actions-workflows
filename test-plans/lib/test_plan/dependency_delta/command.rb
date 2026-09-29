@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "json"
 
 require_relative "../playbook/packages"
@@ -72,7 +73,7 @@ module TestPlan
         puts("::warning::#{warning}") unless warning.empty?
       end
 
-    private
+      private
 
       # The runner is ephemeral, so otherwise the reason is only in the artifact.
       # Unescaped is safe: a workflow command must start its own line, and
@@ -159,8 +160,8 @@ module TestPlan
 
       def other_raises_section(changes)
         others = changes
-          .reject { |change| Playbook::PACKAGE_NAMES.include?(change.name) }
-          .sort_by(&:name)
+                 .reject { |change| Playbook::PACKAGE_NAMES.include?(change.name) }
+                 .sort_by(&:name)
         return "\n#{OTHER_RAISES_HEADING}\n\nNone.\n" if others.empty?
 
         lines = others.map { |c| "- #{c.name} #{c.old_version} -> #{c.new_version}" }

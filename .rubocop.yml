@@ -1,4 +1,3 @@
-# Adopt a small, reviewable rule set for the Ruby used by these actions.
 AllCops:
   TargetRubyVersion: 3.1
   NewCops: disable
@@ -7,60 +6,36 @@ AllCops:
 Lint:
   Enabled: true
 
-# Ruby files are invoked by `ruby`, not as executable programs.
 Lint/ScriptPermission:
   Enabled: false
 
-# Specs define short fixture constants inside example groups.
 Lint/ConstantDefinitionInBlock:
   Exclude:
     - '**/spec/**/*_spec.rb'
 
-# These formatters use object_id to keep distinct parsed entries separate.
 Lint/HashCompareByIdentity:
   Exclude:
     - 'test-plans/lib/test_plan/output/standard_formatter.rb'
     - 'test-plans/lib/test_plan/output/playbook_formatter.rb'
 
-# This spec checks a literal interpolation token in source text.
 Lint/InterpolationCheck:
   Exclude:
     - 'test-plans/spec/action_wiring_spec.rb'
 
-Layout/TrailingWhitespace:
+Layout:
   Enabled: true
-Layout/TrailingEmptyLines:
-  Enabled: true
-Layout/SpaceAroundOperators:
-  Enabled: true
-Layout/SpaceAfterComma:
-  Enabled: true
-Layout/IndentationWidth:
-  Enabled: true
-Layout/EndAlignment:
-  Enabled: true
-Layout/DefEndAlignment:
-  Enabled: true
-Layout/EmptyLines:
-  Enabled: true
-Layout/EmptyLineBetweenDefs:
-  Enabled: true
-Layout/LineLength:
-  Enabled: true
-  Max: 120
 
 Style/StringLiterals:
   Enabled: true
   EnforcedStyle: double_quotes
 
-# Match the applicable Ruby conventions shared by nitro-web's nitro_linting
-# component, with frozen-string headers as requested for this repository.
-# Rails, GraphQL, migrations, and app-specific path rules do not apply here.
 Style/FrozenStringLiteralComment:
   Enabled: true
   EnforcedStyle: always
+
 Style/MutableConstant:
   Enabled: false
+
 Style/HashSyntax:
   Enabled: true
   EnforcedStyle: ruby19
@@ -69,15 +44,19 @@ Style/HashSyntax:
 Metrics/ClassLength:
   Enabled: true
   Max: 500
+
 Metrics/MethodLength:
   Enabled: true
   Max: 40
+
 Metrics/ModuleLength:
   Enabled: true
   Max: 500
+
 Metrics/ParameterLists:
   Enabled: true
   Max: 7
+
 Metrics/PerceivedComplexity:
   Enabled: true
   Max: 18

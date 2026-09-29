@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "json"
 require "set"
 require_relative "./bundler_change_detector"
@@ -78,7 +79,7 @@ module TestPlan
         scoped(deduplicate(changes))
       end
 
-    private
+      private
 
       # After deduplication: partitioning first would judge the component copy of a raise
       # that also reached the root lockfile.
@@ -172,7 +173,7 @@ module TestPlan
 
       def ruby_dependency_names
         paths = @snapshot.paths_at(@snapshot.head_sha, "Gemfile") +
-          @snapshot.paths_at(@snapshot.head_sha, ".gemspec")
+                @snapshot.paths_at(@snapshot.head_sha, ".gemspec")
 
         paths.each_with_object(Set.new) do |path, names|
           content = @snapshot.read(@snapshot.head_sha, path).to_s

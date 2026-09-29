@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -128,11 +129,11 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       workspace(app) do |root|
         usage = described_class.new(workspace: root)
         usage.observe(playbook_change, [
-          diff("app/pb_kits/playbook/pb_icon/docs/_icon_class.md",
-               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
-          diff("app/pb_kits/playbook/pb_icon/icon.test.js",
-               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_TEST),
-        ])
+                        diff("app/pb_kits/playbook/pb_icon/docs/_icon_class.md",
+                             priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
+                        diff("app/pb_kits/playbook/pb_icon/icon.test.js",
+                             priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_TEST),
+                      ])
 
         expect(usage.kits).to be_empty
         expect(usage.report).to be_nil
@@ -143,10 +144,10 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       workspace(app) do |root|
         usage = described_class.new(workspace: root)
         usage.observe(playbook_change, [
-          diff("app/pb_kits/playbook/pb_table/docs/_table_docs.md",
-               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
-          diff("app/pb_kits/playbook/pb_table/_table.rb"),
-        ])
+                        diff("app/pb_kits/playbook/pb_table/docs/_table_docs.md",
+                             priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
+                        diff("app/pb_kits/playbook/pb_table/_table.rb"),
+                      ])
 
         expect(usage.kits).to eq(["table"])
       end
@@ -178,8 +179,8 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     # The bug stakeholders caught: every Icon example came from one component.
     it "spreads the sample across components rather than taking the first alphabetically" do
       files = card_workspace(component_count: 1, per_component: 20)
-        .transform_keys { |path| path.sub("components/c1", "components/accounting") }
-        .merge(card_workspace(component_count: 9, per_component: 1))
+              .transform_keys { |path| path.sub("components/c1", "components/accounting") }
+              .merge(card_workspace(component_count: 9, per_component: 1))
 
       workspace(files) do |root|
         usage = described_class.new(workspace: root)

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "fileutils"
 require "pathname"
 require "rubygems/package"
@@ -40,7 +41,7 @@ module TestPlan
         end
       end
 
-    private
+      private
 
       def extract_entries(tar, destination)
         total_bytes = 0

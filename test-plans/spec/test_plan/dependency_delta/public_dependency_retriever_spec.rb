@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -40,7 +41,7 @@ RSpec.describe TestPlan::DependencyDelta::PublicRetriever do
     def extract_gzip(_path, destination) = write(@layouts.shift, destination)
     def extract_gem(_path, destination) = write(@layouts.shift, destination)
 
-  private
+    private
 
     def write(layout, destination)
       layout.each do |path, content|

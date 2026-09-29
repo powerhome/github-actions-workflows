@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "plan_document"
 require_relative "../playbook/kit_facts"
 require_relative "../playbook/packages"
@@ -56,7 +57,7 @@ module TestPlan
         "#{sections.join("\n\n")}\n"
       end
 
-    private
+      private
 
       def release_section
         lines = ["## Playbook version changes", ""]

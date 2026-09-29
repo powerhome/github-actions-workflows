@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "fileutils"
 require "find"
 require "open3"
@@ -56,7 +57,7 @@ module TestPlan
       @merge_base_sha ||= git("merge-base", @base_sha, @head_sha).strip
     end
 
-  private
+    private
 
     def head_paths
       @head_paths ||= [].tap do |paths|
@@ -68,7 +69,7 @@ module TestPlan
           # Cursor follows the link and reads whatever the pull request put there.
           if File.symlink?(path)
             paths << relative if self.class.instruction_path?(relative) ||
-              DIRECTORY_NAMES.include?(File.basename(path))
+                                 DIRECTORY_NAMES.include?(File.basename(path))
             next
           end
 
@@ -84,7 +85,7 @@ module TestPlan
 
     def base_paths
       @base_paths ||= git("ls-tree", "-r", "--name-only", merge_base_sha)
-        .lines.map(&:chomp).select { |path| self.class.instruction_path?(path) }
+                      .lines.map(&:chomp).select { |path| self.class.instruction_path?(path) }
     end
 
     def read_base(relative)

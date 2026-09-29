@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "digest"
 require "open3"
 
@@ -39,7 +40,7 @@ module TestPlan
         end
       end
 
-    private
+      private
 
       def files(root)
         return [] unless Dir.exist?(root)

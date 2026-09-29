@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "json"
 
 require_relative "validation"
@@ -32,7 +33,7 @@ module TestPlan
         @application_checks = check_list(payload["application_checks"] || [], "application check")
       end
 
-    private
+      private
 
       # What the formatter matches on, and only that. `source` is an internal enum no
       # reader of the plan sees, so requiring it back costs a response its note for

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/output/playbook_formatter"
 require "test_plan/playbook/kit_facts"
@@ -185,16 +186,16 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
 
   it "lists the Playbook raise and covers non-kit regressions and application edits" do
     parsed = TestPlan::Response::PlaybookParser.new(JSON.generate(
-      "kits" => [],
-      "regression_tests" => [
-        { "title" => "Existing control", "page" => "/control",
-          "steps" => ["Open the control.", "Confirm it still works."] },
-      ],
-      "application_checks" => [
-        { "title" => "Adjusted call site", "page" => "/control",
-          "steps" => ["Open the control.", "Confirm the adjusted integration works."] },
-      ]
-    ))
+                                                      "kits" => [],
+                                                      "regression_tests" => [
+                                                        { "title" => "Existing control", "page" => "/control",
+                                                          "steps" => ["Open the control.", "Confirm it still works."] },
+                                                      ],
+                                                      "application_checks" => [
+                                                        { "title" => "Adjusted call site", "page" => "/control",
+                                                          "steps" => ["Open the control.", "Confirm the adjusted integration works."] },
+                                                      ]
+                                                    ))
     output = described_class.new(
       parsed:, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [
@@ -225,12 +226,14 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
   # One the response invented has no raise to attach to; one it forgot still appears.
   it "ignores an other-dependency entry the manifest does not list" do
     parsed = TestPlan::Response::PlaybookParser.new(JSON.generate(
-      "kits" => [],
-      "other_dependencies" => [
-        { "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2", "note" => "Matched." },
-        { "name" => "invented", "from" => "1.0.0", "to" => "2.0.0", "note" => "Not in the manifest." },
-      ]
-    ))
+                                                      "kits" => [],
+                                                      "other_dependencies" => [
+                                                        { "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2",
+                                                          "note" => "Matched." },
+                                                        { "name" => "invented", "from" => "1.0.0", "to" => "2.0.0",
+                                                          "note" => "Not in the manifest." },
+                                                      ]
+                                                    ))
     output = described_class.new(
       parsed:, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [

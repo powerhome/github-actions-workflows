@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "json"
 
 require_relative "validation"
@@ -27,7 +28,7 @@ module TestPlan
         @regression_tests = build_regression_tests
       end
 
-  private
+      private
 
       def validate_root!
         raise "Test-plan JSON root must be a JSON object" unless @payload.is_a?(Hash)
@@ -66,10 +67,10 @@ module TestPlan
         end
       end
 
-    # A malformed part of the response is dropped rather than failing the whole run: one
-    # unusable scenario should not cost a plan that is otherwise sound. What it must not
-    # do is disappear quietly, so every discard is recorded and the rendered plan says
-    # how much of the response could not be used.
+      # A malformed part of the response is dropped rather than failing the whole run: one
+      # unusable scenario should not cost a plan that is otherwise sound. What it must not
+      # do is disappear quietly, so every discard is recorded and the rendered plan says
+      # how much of the response could not be used.
       def build_feature_area(entry, position)
         unless entry.is_a?(Hash)
           return discard("feature area #{position} was not an object")
@@ -149,7 +150,6 @@ module TestPlan
           }
         end
       end
-
     end
   end
 end

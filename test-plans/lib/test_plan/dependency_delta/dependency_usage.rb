@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "open3"
 
 require_relative "../runner_text"
@@ -47,7 +48,7 @@ module TestPlan
         "#{lines.join("\n")}\n"
       end
 
-    private
+      private
 
       def paths_for(name)
         patterns = [name, name.tr("-", "_"), name.tr("-", "/")].uniq

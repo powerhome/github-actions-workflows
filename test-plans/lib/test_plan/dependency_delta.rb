@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # Loads the whole dependency-delta stack. Individual files require only what they
 # reference, so they can also be pulled in one at a time.
 require_relative "dependency_delta/bundler_change_detector"

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "plan_document"
 
 module TestPlan
@@ -24,14 +25,14 @@ module TestPlan
       def render
         sections = preamble
         sections.concat([
-          "> This plan checks existing behavior after dependency version changes.",
-          "---", dependency_section, "---", regression_section,
-        ])
+                          "> This plan checks existing behavior after dependency version changes.",
+                          "---", dependency_section, "---", regression_section,
+                        ])
         sections.concat(["---", application_section]) unless @parsed.application_checks.empty?
         "#{sections.join("\n\n")}\n"
       end
 
-    private
+      private
 
       # Dropped -- it is not testing the raise -- but dropped out loud, since a plan that
       # quietly published fewer cases than were generated reads as complete.

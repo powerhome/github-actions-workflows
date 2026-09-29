@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "plan_document"
 
 module TestPlan
@@ -41,7 +42,7 @@ module TestPlan
         "#{sections.join("\n\n")}\n"
       end
 
-  private
+      private
 
       def permissions_section
         lines = [

@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "json"
 require "open3"
 require "tempfile"
@@ -66,7 +67,7 @@ module TestPlan
         []
       end
 
-    private
+      private
 
       # Returns [baseline, new side, bounded?]. Which refs bracket the upgrade depends on
       # when the project commits its changelog, which the upgraded-to tag reveals:
@@ -108,7 +109,7 @@ module TestPlan
           [repository, [path, *candidate_paths(nil)].compact.uniq]
         when "git"
           repository = GitLocator.repository(change.new_locator) ||
-            GitLocator.repository(change.old_locator)
+                       GitLocator.repository(change.old_locator)
           [repository, candidate_paths(nil)]
         else
           [nil, []]

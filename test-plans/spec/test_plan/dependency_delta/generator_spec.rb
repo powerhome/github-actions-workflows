@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -200,8 +201,8 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       new_locator: "https://registry.npmjs.org/b.tgz", direct: true, lockfiles: ["yarn.lock"]
     )
     retriever = double("retriever", retrieve: [
-      TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n", priority: 0),
-    ])
+                         TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n", priority: 0),
+                       ])
 
     result = generator(changes: [gem_change, npm_change], retriever:).generate
 
@@ -497,7 +498,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     retriever = double("retriever", retrieve: [])
 
     names = generator(changes: [narrow, wide], retriever:)
-      .generate.dig(:manifest, "dependencies").map { |entry| entry.fetch("name") }
+            .generate.dig(:manifest, "dependencies").map { |entry| entry.fetch("name") }
 
     expect(names).to eq(%w[zzz-wide aaa-narrow])
   end
@@ -590,7 +591,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
     diffs = [
       TestPlan::DependencyDelta::SourceDiff.new(path: "dist/thing.js", diff: "x" * 2048,
-                     priority: builder.send(:priority, "dist/thing.js")),
+                                                priority: builder.send(:priority, "dist/thing.js")),
     ]
 
     result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate

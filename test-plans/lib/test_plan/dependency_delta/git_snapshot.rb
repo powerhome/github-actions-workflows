@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require "open3"
 
 require_relative "../runner_text"
@@ -53,7 +54,7 @@ module TestPlan
         nil
       end
 
-    private
+      private
 
       def git(*args)
         stdout, stderr, status = Open3.capture3("git", *args, chdir: @workspace)

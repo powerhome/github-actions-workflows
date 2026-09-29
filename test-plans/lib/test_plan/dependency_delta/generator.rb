@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 require_relative "../playbook/packages"
 require_relative "./changelog_source"
 require_relative "./playbook_kit_usage"
@@ -76,7 +77,7 @@ module TestPlan
         }
       end
 
-    private
+      private
 
       def build_entry(change, full, context, remaining_context, remaining_weight)
         starting_context_bytes = context.bytesize
@@ -245,8 +246,8 @@ module TestPlan
 
             group.each do |change|
               related[change.key] = (group - [change])
-                .map { |other| "#{other.ecosystem}:#{other.name}" }
-                .sort
+                                    .map { |other| "#{other.ecosystem}:#{other.name}" }
+                                    .sort
             end
           end
       end
@@ -288,7 +289,6 @@ module TestPlan
         end
         omitted
       end
-
     end
   end
 end
