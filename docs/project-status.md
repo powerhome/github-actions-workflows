@@ -11,7 +11,7 @@ Adds a repository's issues and pull requests to an organization project (Project
 | Pull request whose latest review requests changes, until review is requested again or it is approved | In progress |
 | Closed or merged pull request | Done |
 
-Dependabot pull requests are skipped, because they cannot read Actions secrets.
+Dependabot pull requests and pull requests from forks are skipped, because they cannot read Actions secrets.
 
 Events only trigger a run. Each run works the Status out from the issue or pull request as it is at that moment, including its review history, so runs that start late or out of order still leave the right Status. Runs for the same item also queue behind each other.
 

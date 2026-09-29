@@ -53,10 +53,11 @@ permissions: {}
 jobs:
   project:
     name: Add to project and set status
-    # Dependabot pull requests cannot read Actions secrets; comment-only reviews never change
-    # the Status.
+    # Dependabot and fork pull requests cannot read Actions secrets; comment-only reviews
+    # never change the Status.
     if: >-
       github.actor != 'dependabot[bot]'
+      && (github.event.pull_request == null || github.event.pull_request.head.repo.full_name == github.repository)
       && (inputs.skip-label == '' || (!contains(github.event.issue.labels.*.name, inputs.skip-label) && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)))
       && (github.event_name != 'pull_request_review' || github.event.review.state != 'commented')
     # Runs for one issue or pull request queue behind each other, so they write in event order.
