@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "json"
 require "set"
 require_relative "./bundler_change_detector"

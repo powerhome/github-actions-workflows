@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../spec_helper"
 require "test_plan/trusted_agent_instructions"
 

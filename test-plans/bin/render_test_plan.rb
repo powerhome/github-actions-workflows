@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require_relative "../lib/test_plan/output/standard_formatter"
 require_relative "../lib/test_plan/response/standard_parser"

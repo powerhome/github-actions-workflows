@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "./change"
 require_relative "./yarn_lock_parser"
 

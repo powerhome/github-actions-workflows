@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/output/standard_formatter"
 require "test_plan/response/standard_parser"

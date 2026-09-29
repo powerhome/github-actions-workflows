@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require_relative "agent_review_parser"
 require_relative "github_review_poster"

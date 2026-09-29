@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../playbook/packages"
 require_relative "./changelog_source"
 require_relative "./playbook_kit_usage"

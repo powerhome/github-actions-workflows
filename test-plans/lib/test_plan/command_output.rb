@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module TestPlan
   # Subprocess output is tagged with the locale's encoding, US-ASCII when nothing sets
   # LANG, and everything done with it then raises on the first byte above ASCII -- an

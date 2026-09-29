@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module TestPlan
   module DependencyDelta
     # `name` is the package the lockfile actually installed, which is what evidence has

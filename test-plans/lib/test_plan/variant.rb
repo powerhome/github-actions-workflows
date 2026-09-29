@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module TestPlan
   # The profile resolves from the label before any lockfile is read, so only the
   # dependency delta knows what was raised. Named so the render step follows the same

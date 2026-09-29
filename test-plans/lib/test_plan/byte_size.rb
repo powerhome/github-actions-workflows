@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module TestPlan
   # Renders a byte limit the way the constant means it, so a message never contradicts
   # the limit it is reporting -- including when a spec stubs the constant smaller.

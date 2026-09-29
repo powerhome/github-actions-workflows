@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "plan_document"
 require_relative "../playbook/kit_facts"
 require_relative "../playbook/packages"
