@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 module TestPlan
   module DependencyDelta
     # git grep answers lexicographically, the worst order to sample a monorepo in: pb_body

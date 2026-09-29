@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 module TestPlan
   module Output
     # One policy for every string this action did not write -- provider output, the

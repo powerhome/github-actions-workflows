@@ -202,6 +202,8 @@ test-plans/
 
 ## Local Tests
 
+Use Ruby 3.1 or newer; the action and specs use keyword argument shorthand.
+
 Run the whole suite in one process:
 
 ```bash

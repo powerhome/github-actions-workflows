@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require "digest"
 require "open3"
 
@@ -75,7 +76,7 @@ module TestPlan
           end
 
         SourceDiff.new(
-          path: path,
+          path:,
           diff: "Binary file #{path} #{state} (#{File.size(File.file?(new_path) ? new_path : old_path)} bytes)\n",
           priority: priority(path)
         )

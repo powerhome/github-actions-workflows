@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require "json"
 
 module TestPlan
@@ -29,7 +30,7 @@ module TestPlan
       raise "Unknown test-plan profile: #{profile_id}" unless File.file?(path)
 
       profile = new(
-        action_root: action_root,
+        action_root:,
         attributes: JSON.parse(File.read(path, encoding: Encoding::UTF_8))
       ).tap(&:validate!)
 

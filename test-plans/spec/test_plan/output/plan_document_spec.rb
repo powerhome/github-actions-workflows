@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require_relative "../../spec_helper"
 
 require "test_plan/output/dependency_formatter"
@@ -41,7 +42,7 @@ RSpec.describe TestPlan::Output::PlanDocument do
 
   def render(shape, profile_name: "Cobra Test Plan", pull_request_title: "Raise dependencies", warning: "")
     SHAPES.fetch(shape).call(
-      pull_request_title: pull_request_title, profile_name: profile_name, generation_warning: warning
+      pull_request_title:, profile_name:, generation_warning: warning
     )
   end
 

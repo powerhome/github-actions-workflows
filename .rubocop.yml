@@ -53,22 +53,25 @@ Style/StringLiterals:
   Enabled: true
   EnforcedStyle: double_quotes
 
-# Match the Ruby conventions shared by nitro-web's nitro_linting component.
-# Keep both explicit and shorthand hash values to avoid unrelated source churn.
+# Match the applicable Ruby conventions shared by nitro-web's nitro_linting
+# component, with frozen-string headers as requested for this repository.
 # Rails, GraphQL, migrations, and app-specific path rules do not apply here.
 Style/FrozenStringLiteralComment:
   Enabled: true
-  EnforcedStyle: never
+  EnforcedStyle: always
 Style/MutableConstant:
   Enabled: false
 Style/HashSyntax:
   Enabled: true
   EnforcedStyle: ruby19
-  EnforcedShorthandSyntax: either
+  EnforcedShorthandSyntax: always
 
 Metrics/ClassLength:
   Enabled: true
   Max: 500
+Metrics/MethodLength:
+  Enabled: true
+  Max: 40
 Metrics/ModuleLength:
   Enabled: true
   Max: 500

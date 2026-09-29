@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 module TestPlan
   # Text crossing the runner boundary: subprocess bytes need a predictable encoding,
   # and size limits need the same units in exceptions and workflow messages.

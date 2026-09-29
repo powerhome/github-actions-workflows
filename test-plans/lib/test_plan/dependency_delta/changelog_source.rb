@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require "json"
 require "open3"
 require "tempfile"
@@ -54,8 +55,8 @@ module TestPlan
 
         [
           SourceDiff.new(
-            path: path,
-            diff: diff,
+            path:,
+            diff:,
             context_diff: truncate(diff),
             priority: SourceDiffBuilder::PRIORITY_CHANGELOG
           ),

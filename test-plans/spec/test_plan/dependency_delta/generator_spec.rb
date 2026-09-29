@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -26,7 +27,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve).and_raise("not public")
 
-    result = generator(changes: [change], retriever: retriever).generate
+    result = generator(changes: [change], retriever:).generate
     entry = result.dig(:manifest, "dependencies", 0)
     expect(entry).to include("status" => "unavailable", "warnings" => ["not public"])
     expect(result.dig(:manifest, "warning_count")).to eq(1)
@@ -43,7 +44,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
 
     result = described_class.new(
       changes: [change],
-      retriever: retriever,
+      retriever:,
       changelog: double("changelog", diffs_for: [changelog])
     ).generate
     entry = result.dig(:manifest, "dependencies", 0)
@@ -64,7 +65,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     allow(retriever).to receive(:retrieve).and_raise("resolves to a non-public registry")
 
     result = described_class.new(
-      changes: [change], retriever: retriever,
+      changes: [change], retriever:,
       changelog: double("changelog", diffs_for: [changelog])
     ).generate
 
@@ -77,7 +78,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
     diff = lambda do |path|
       TestPlan::DependencyDelta::SourceDiff.new(
-        path: path, diff: "x" * 512, priority: builder.send(:priority, path)
+        path:, diff: "x" * 512, priority: builder.send(:priority, path)
       )
     end
     gem_change = TestPlan::DependencyDelta::Change.new(
@@ -95,7 +96,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       candidate.ecosystem == "bundler" ? [diff.call("lib/widget.rb")] : [diff.call("dist/widget.js")]
     end
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
 
     expect(result.dig(:manifest, "warning_count")).to eq(0)
   end
@@ -132,7 +133,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve).and_raise("not public")
 
-    result = generator(changes: [change], retriever: retriever).generate
+    result = generator(changes: [change], retriever:).generate
 
     expect(result.dig(:manifest, "dependencies", 0)).to include(
       "status" => "unavailable",
@@ -177,7 +178,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = generator(changes: [big, small], retriever: retriever).generate
+    result = generator(changes: [big, small], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -202,7 +203,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n", priority: 0),
     ])
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
 
     # Linking drops each half's build output, so a wrong link costs both their evidence.
     expect(result.dig(:manifest, "dependencies").map { |entry| entry.fetch("related") }).to eq([[], []])
@@ -224,7 +225,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       "retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")]
     )
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -255,7 +256,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       "retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")]
     )
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -280,7 +281,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       "retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")]
     )
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
 
     expect(result.dig(:manifest, "dependencies").map { |entry| entry.fetch("related") }).to eq([[], []])
   end
@@ -395,7 +396,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = generator(changes: [small, change], retriever: retriever).generate
+    result = generator(changes: [small, change], retriever:).generate
     entry = result.dig(:manifest, "dependencies").find { |candidate| candidate.fetch("name") == "example" }
 
     expect(entry).to include("status" => "retrieved", "context_files" => 8)
@@ -423,7 +424,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       ]
     end
 
-    result = generator(changes: changes, retriever: retriever).generate
+    result = generator(changes:, retriever:).generate
     entries = result.dig(:manifest, "dependencies")
 
     expect(entries.first.fetch("context_files")).to eq(1)
@@ -441,7 +442,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
     retriever = double("retriever", retrieve: [])
 
-    result = generator(changes: [change], retriever: retriever, out_of_scope: [skipped]).generate
+    result = generator(changes: [change], retriever:, out_of_scope: [skipped]).generate
 
     expect(result.dig(:manifest, "out_of_scope")).to eq(
       [
@@ -473,7 +474,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       [TestPlan::DependencyDelta::SourceDiff.new(path: "#{candidate.name}.rb", diff: "x" * (200 * 1024))]
     end
 
-    result = generator(changes: [playbook, *others], retriever: retriever).generate
+    result = generator(changes: [playbook, *others], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -495,7 +496,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
     retriever = double("retriever", retrieve: [])
 
-    names = generator(changes: [narrow, wide], retriever: retriever)
+    names = generator(changes: [narrow, wide], retriever:)
       .generate.dig(:manifest, "dependencies").map { |entry| entry.fetch("name") }
 
     expect(names).to eq(%w[zzz-wide aaa-narrow])
@@ -516,7 +517,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
     source_diff = lambda do |path|
       TestPlan::DependencyDelta::SourceDiff.new(
-        path: path,
+        path:,
         diff: "--- a/#{path}\n+++ b/#{path}\n#{"x" * 512}\n",
         priority: builder.send(:priority, path)
       )
@@ -534,7 +535,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -566,7 +567,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
 
     it "weights every one of them and nothing else" do
       weight = ->(name) do
-        generator(changes: []).send(:context_weight, TestPlan::DependencyDelta::Change.new(name: name))
+        generator(changes: []).send(:context_weight, TestPlan::DependencyDelta::Change.new(name:))
       end
 
       TestPlan::Playbook::PACKAGE_NAMES.each do |name|
@@ -577,7 +578,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
 
     it "links every one of them to the same release" do
       link = ->(name) do
-        generator(changes: []).send(:linked_release, TestPlan::DependencyDelta::Change.new(name: name))
+        generator(changes: []).send(:linked_release, TestPlan::DependencyDelta::Change.new(name:))
       end
 
       expect(TestPlan::Playbook::PACKAGE_NAMES.map { |name| link.call(name) }.uniq.compact.length).to eq(1)

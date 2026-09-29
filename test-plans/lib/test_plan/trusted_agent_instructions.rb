@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require "fileutils"
 require "find"
 require "open3"
@@ -48,7 +49,7 @@ module TestPlan
         end
       end
 
-      Result.new(restored: restored, removed: removed)
+      Result.new(restored:, removed:)
     end
 
     def merge_base_sha

@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 module TestPlan
   module DependencyDelta
     # `name` is the package the lockfile actually installed, which is what evidence has
@@ -29,9 +30,9 @@ module TestPlan
               output << YarnRecord.new(
                 name: installed,
                 alias: requested,
-                version: version,
-                resolved: resolved,
-                integrity: integrity
+                version:,
+                resolved:,
+                integrity:
               )
             end
           end

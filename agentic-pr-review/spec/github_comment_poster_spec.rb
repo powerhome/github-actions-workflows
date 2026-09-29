@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require_relative "spec_helper"
 
 require "json"
@@ -15,7 +16,7 @@ RSpec.describe GitHubCommentPoster do
     end
 
     def call(arguments, input)
-      @calls << { arguments: arguments, input: input && JSON.parse(input) }
+      @calls << { arguments:, input: input && JSON.parse(input) }
       method = arguments[arguments.index("--method") + 1]
       path = arguments[3]
 
@@ -43,7 +44,7 @@ RSpec.describe GitHubCommentPoster do
   describe "#upsert" do
     it "creates a comment carrying its tag when the pull request has none" do
       gh = FakeGh.new
-      result = poster(gh).upsert(tag: tag, body: "in progress")
+      result = poster(gh).upsert(tag:, body: "in progress")
 
       post = request(gh, "POST")
       expect(post[:arguments]).to include("repos/powerhome/nitro-web/issues/42/comments")
@@ -53,7 +54,7 @@ RSpec.describe GitHubCommentPoster do
 
     it "updates the comment carrying the same tag instead of posting a second one" do
       gh = FakeGh.new(pages: [[{ "id" => 7, "body" => "older\n#{described_class.marker(tag)}" }]])
-      result = poster(gh).upsert(tag: tag, body: "in progress")
+      result = poster(gh).upsert(tag:, body: "in progress")
 
       expect(request(gh, "PATCH")[:arguments])
         .to include("repos/powerhome/nitro-web/issues/comments/7")
@@ -66,7 +67,7 @@ RSpec.describe GitHubCommentPoster do
       legacy = described_class.legacy_marker(tag)
       gh = FakeGh.new(pages: [[{ "id" => 9, "body" => "older\n#{legacy}" }]])
 
-      poster(gh).upsert(tag: tag, body: "in progress")
+      poster(gh).upsert(tag:, body: "in progress")
 
       patch = request(gh, "PATCH")
       expect(patch[:arguments]).to include("repos/powerhome/nitro-web/issues/comments/9")
@@ -78,7 +79,7 @@ RSpec.describe GitHubCommentPoster do
       filler = Array.new(described_class::PER_PAGE) { |index| { "id" => index, "body" => "chatter" } }
       gh = FakeGh.new(pages: [filler, [{ "id" => 500, "body" => described_class.marker(tag) }]])
 
-      poster(gh).upsert(tag: tag, body: "in progress")
+      poster(gh).upsert(tag:, body: "in progress")
 
       expect(request(gh, "PATCH")[:arguments])
         .to include("repos/powerhome/nitro-web/issues/comments/500")
@@ -90,14 +91,14 @@ RSpec.describe GitHubCommentPoster do
       gh = FakeGh.new
       binary = "\u2014 in progress".dup.force_encoding(Encoding::ASCII_8BIT)
 
-      expect { poster(gh).upsert(tag: tag, body: binary) }.not_to output.to_stderr
+      expect { poster(gh).upsert(tag:, body: binary) }.not_to output.to_stderr
 
       expect(request(gh, "POST")[:input].fetch("body")).to start_with("\u2014 in progress")
     end
 
     it "sends the body as input rather than an argument" do
       gh = FakeGh.new
-      poster(gh).upsert(tag: tag, body: "a" * 5000)
+      poster(gh).upsert(tag:, body: "a" * 5000)
 
       post = request(gh, "POST")
       expect(post[:arguments]).to include("--input", "-")
@@ -121,7 +122,7 @@ RSpec.describe GitHubCommentPoster do
   describe "#delete" do
     it "removes the comment carrying the tag" do
       gh = FakeGh.new(pages: [[{ "id" => 12, "body" => described_class.marker(tag) }]])
-      result = poster(gh).delete(tag: tag)
+      result = poster(gh).delete(tag:)
 
       expect(request(gh, "DELETE")[:arguments])
         .to include("repos/powerhome/nitro-web/issues/comments/12")
@@ -130,7 +131,7 @@ RSpec.describe GitHubCommentPoster do
 
     it "is a no-op when no comment carries the tag" do
       gh = FakeGh.new
-      result = poster(gh).delete(tag: tag)
+      result = poster(gh).delete(tag:)
 
       expect(request(gh, "DELETE")).to be_nil
       expect(result).to eq("nothing to delete")

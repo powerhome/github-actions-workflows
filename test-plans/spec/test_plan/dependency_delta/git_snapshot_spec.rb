@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -44,7 +45,7 @@ RSpec.describe TestPlan::DependencyDelta::GitSnapshot do
       git(directory, "commit", "-m", "widget")
       head_sha = git(directory, "rev-parse", "HEAD").strip
 
-      snapshot = described_class.new(workspace: directory, base_sha: head_sha, head_sha: head_sha)
+      snapshot = described_class.new(workspace: directory, base_sha: head_sha, head_sha:)
       content = with_external_encoding(Encoding::US_ASCII) do
         snapshot.read(head_sha, "widget.gemspec")
       end
@@ -78,7 +79,7 @@ RSpec.describe TestPlan::DependencyDelta::GitSnapshot do
       git(directory, "commit", "-am", "base tip")
       base_sha = git(directory, "rev-parse", "HEAD").strip
 
-      snapshot = described_class.new(workspace: directory, base_sha: base_sha, head_sha: head_sha)
+      snapshot = described_class.new(workspace: directory, base_sha:, head_sha:)
 
       expect(snapshot.merge_base_sha).to eq(fork_point)
       expect(snapshot.read(snapshot.merge_base_sha, "Gemfile.lock")).to eq("fork point\n")
@@ -107,7 +108,7 @@ RSpec.describe TestPlan::DependencyDelta::GitSnapshot do
       git(directory, "commit", "-m", "fixtures")
       head_sha = git(directory, "rev-parse", "HEAD").strip
 
-      snapshot = described_class.new(workspace: directory, base_sha: head_sha, head_sha: head_sha)
+      snapshot = described_class.new(workspace: directory, base_sha: head_sha, head_sha:)
 
       expect(snapshot.paths_at(head_sha, "package.json"))
         .to contain_exactly("package.json", "components/widget/package.json")

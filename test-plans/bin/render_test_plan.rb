@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require_relative "../lib/test_plan/response/standard_parser"
 require_relative "../lib/test_plan/response/dependency_parser"
@@ -26,9 +27,9 @@ begin
   read_manifest = -> { JSON.parse(File.read(manifest_path, encoding: Encoding::UTF_8)) }
 
   options = {
-    pull_request_title: pull_request_title,
-    profile_name: profile_name,
-    generation_warning: generation_warning,
+    pull_request_title:,
+    profile_name:,
+    generation_warning:,
   }
 
   if variant == TestPlan::Profile::PLAYBOOK_PLAN
@@ -36,17 +37,17 @@ begin
     # Coverage wording comes from what the action counted. load_file never raises: without
     # facts the plan reads as a sample throughout, which under-claims.
     comment = TestPlan::Output::PlaybookFormatter.new(
-      parsed: parsed, kit_facts: TestPlan::Playbook::KitFacts.load_file(kit_facts_path),
+      parsed:, kit_facts: TestPlan::Playbook::KitFacts.load_file(kit_facts_path),
       manifest: read_manifest.call, **options
     ).render
   elsif variant == TestPlan::Profile::DEPENDENCY_PLAN
     parsed = TestPlan::Response::DependencyParser.parse_file(json_path)
     comment = TestPlan::Output::DependencyFormatter.new(
-      parsed: parsed, manifest: read_manifest.call, **options
+      parsed:, manifest: read_manifest.call, **options
     ).render
   else
     parsed = TestPlan::Response::StandardParser.parse_file(json_path)
-    comment = TestPlan::Output::StandardFormatter.new(parsed: parsed, **options).render
+    comment = TestPlan::Output::StandardFormatter.new(parsed:, **options).render
   end
 
   File.write(comment_path, comment, encoding: Encoding::UTF_8)

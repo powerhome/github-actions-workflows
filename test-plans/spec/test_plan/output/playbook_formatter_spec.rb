@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require_relative "../../spec_helper"
 require "test_plan/output/playbook_formatter"
 require "test_plan/playbook/kit_facts"
@@ -24,8 +25,8 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
   end
 
   def fact(slug:, name:, coverage:, call_sites:, systems_changed: ["rails"], systems_in_use: ["rails"])
-    { slug: slug, name: name, coverage: coverage, call_sites: call_sites,
-      systems_changed: systems_changed, systems_in_use: systems_in_use }
+    { slug:, name:, coverage:, call_sites:,
+      systems_changed:, systems_in_use: }
   end
 
   def render(payload, warning: "", kit_facts: KF.none)
@@ -34,7 +35,7 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
       pull_request_title: "Playbook RC 17.2.0.pre.rc.0",
       profile_name: "Cobra Test Plan",
       generation_warning: warning,
-      kit_facts: kit_facts
+      kit_facts:
     ).render
   end
 
@@ -195,7 +196,7 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
       ]
     ))
     output = described_class.new(
-      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      parsed:, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [
         { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
       ] }
@@ -210,7 +211,7 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
   it "lists other manifest raises even when the provider omits them" do
     parsed = TestPlan::Response::PlaybookParser.new(JSON.generate("kits" => []))
     output = described_class.new(
-      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      parsed:, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [
         { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
         { "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" },
@@ -231,7 +232,7 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
       ]
     ))
     output = described_class.new(
-      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      parsed:, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [
         { "name" => "playbook_ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
         { "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" },
@@ -245,7 +246,7 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
   it "says the Playbook version is unavailable rather than inventing one" do
     parsed = TestPlan::Response::PlaybookParser.new(JSON.generate("kits" => []))
     output = described_class.new(
-      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      parsed:, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [{ "name" => "cgi", "old_version" => "0.5.1", "new_version" => "0.5.2" }] }
     ).render
 
@@ -256,7 +257,7 @@ RSpec.describe TestPlan::Output::PlaybookFormatter do
   it "recognises the npm package as a Playbook raise" do
     parsed = TestPlan::Response::PlaybookParser.new(JSON.generate("kits" => []))
     output = described_class.new(
-      parsed: parsed, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
+      parsed:, pull_request_title: "Playbook upgrade", profile_name: "Cobra Test Plan",
       manifest: { "dependencies" => [
         { "name" => "playbook-ui", "old_version" => "17.0.0", "new_version" => "17.1.0" },
       ] }

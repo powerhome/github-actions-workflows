@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require_relative "../../spec_helper"
 require "test_plan/pull_request/comments"
 
@@ -14,7 +15,7 @@ RSpec.describe TestPlan::PullRequest::Comments do
     end
 
     def call(arguments, input)
-      @calls << { arguments: arguments, input: input && JSON.parse(input) }
+      @calls << { arguments:, input: input && JSON.parse(input) }
       method = arguments[arguments.index("--method") + 1]
       path = arguments[3]
 

@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 module TestPlan
   module Playbook
     # One upstream release published as a gem and a package. Named once because the delta

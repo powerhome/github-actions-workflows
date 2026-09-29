@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -24,14 +25,14 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
 
   def playbook_change(name: "playbook_ui", ecosystem: "bundler")
     TestPlan::DependencyDelta::Change.new(
-      ecosystem: ecosystem, name: name, old_version: "17.0.0", new_version: "17.1.0",
+      ecosystem:, name:, old_version: "17.0.0", new_version: "17.1.0",
       source: "rubygems", old_locator: "https://rubygems.org/",
       new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
     )
   end
 
   def diff(path, priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_RUNTIME)
-    TestPlan::DependencyDelta::SourceDiff.new(path: path, diff: "x", priority: priority)
+    TestPlan::DependencyDelta::SourceDiff.new(path:, diff: "x", priority:)
   end
 
   let(:app) do
