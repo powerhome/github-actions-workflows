@@ -1,11 +1,11 @@
 require_relative "../../spec_helper"
-require "test_plan/playbook/formatter"
+require "test_plan/output/playbook_formatter"
 require "test_plan/playbook/kit_facts"
 require "test_plan/playbook/parser"
 
 require "json"
 
-RSpec.describe TestPlan::Playbook::Formatter do
+RSpec.describe TestPlan::Output::PlaybookFormatter do
   KF = TestPlan::Playbook::KitFacts
 
   def kit(name:, slug: nil, cases: 1, code: nil, system: "rails")

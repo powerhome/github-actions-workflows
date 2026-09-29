@@ -1,17 +1,17 @@
-require_relative "../spec_helper"
+require_relative "../../spec_helper"
 
-require "test_plan/dependency/formatter"
+require "test_plan/output/dependency_formatter"
 require "test_plan/dependency/parser"
-require "test_plan/formatter"
+require "test_plan/output/standard_formatter"
 require "test_plan/parser"
-require "test_plan/playbook/formatter"
+require "test_plan/output/playbook_formatter"
 require "test_plan/playbook/parser"
 
 require "json"
 
 # Asserted against every plan shape at once, because the point of sharing these is that
 # no shape can word them differently.
-RSpec.describe TestPlan::PlanDocument do
+RSpec.describe TestPlan::Output::PlanDocument do
   STANDARD_PAYLOAD = {
     "permissions" => { "required" => "no", "roles" => [], "changes" => [], "subject_actions" => [] },
     "feature_areas" => [], "regression_tests" => []
@@ -20,17 +20,17 @@ RSpec.describe TestPlan::PlanDocument do
   SHAPES = {
     "standard" => lambda do |**options|
       payload = STANDARD_PAYLOAD.merge("feature_areas" => ["not an object", "also not an object"])
-      TestPlan::Formatter.new(parsed: TestPlan::Parser.new(JSON.generate(payload)), **options).render
+      TestPlan::Output::StandardFormatter.new(parsed: TestPlan::Parser.new(JSON.generate(payload)), **options).render
     end,
     "playbook" => lambda do |**options|
       payload = { "kits" => ["not an object", "also not an object"] }
-      TestPlan::Playbook::Formatter.new(
+      TestPlan::Output::PlaybookFormatter.new(
         parsed: TestPlan::Playbook::Parser.new(JSON.generate(payload)), **options
       ).render
     end,
     "dependency" => lambda do |**options|
       payload = { "dependencies" => ["not an object", "also not an object"], "regression_tests" => [] }
-      TestPlan::Dependency::Formatter.new(
+      TestPlan::Output::DependencyFormatter.new(
         parsed: TestPlan::Dependency::Parser.new(JSON.generate(payload)),
         manifest: { "dependencies" => [] }, **options
       ).render

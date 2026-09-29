@@ -1,10 +1,10 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency/formatter"
+require "test_plan/output/dependency_formatter"
 require "test_plan/dependency/parser"
 
 require "json"
 
-RSpec.describe TestPlan::Dependency::Formatter do
+RSpec.describe TestPlan::Output::DependencyFormatter do
   let(:manifest) do
     { "dependencies" => [
       { "ecosystem" => "yarn", "name" => "widget", "source" => "npm",

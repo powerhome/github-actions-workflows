@@ -19,8 +19,8 @@ Lint/ConstantDefinitionInBlock:
 # These formatters use object_id to keep distinct parsed entries separate.
 Lint/HashCompareByIdentity:
   Exclude:
-    - 'test-plans/lib/test_plan/formatter.rb'
-    - 'test-plans/lib/test_plan/playbook/formatter.rb'
+    - 'test-plans/lib/test_plan/output/standard_formatter.rb'
+    - 'test-plans/lib/test_plan/output/playbook_formatter.rb'
 
 # This spec checks a literal interpolation token in source text.
 Lint/InterpolationCheck:

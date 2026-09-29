@@ -1,10 +1,10 @@
-require_relative "../spec_helper"
-require "test_plan/formatter"
+require_relative "../../spec_helper"
+require "test_plan/output/standard_formatter"
 require "test_plan/parser"
 
 require "json"
 
-RSpec.describe TestPlan::Formatter do
+RSpec.describe TestPlan::Output::StandardFormatter do
   let(:payload) do
     {
       "permissions" => {

@@ -1,7 +1,7 @@
-require_relative "../spec_helper"
-require "test_plan/untrusted_text"
+require_relative "../../spec_helper"
+require "test_plan/output/markdown_escaper"
 
-RSpec.describe TestPlan::UntrustedText do
+RSpec.describe TestPlan::Output::MarkdownEscaper do
   def escape(value)
     described_class.escape(value)
   end

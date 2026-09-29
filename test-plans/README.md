@@ -13,7 +13,7 @@ The four stages are marked in `action.yml`; their steps run in this order in the
 | AI generation | The single `AI: Generate test-plan JSON` step, using `ai/providers/cursor.sh` and `ai/prompts/` | Untrusted provider output in `test-plan-agent.json`. This is the only model call. |
 | Deterministic publication | Ruby parsers and formatters, then GitHub comment operations | A validated, escaped Markdown test plan. Provider text is never posted directly. |
 
-`ai/` contains everything that configures or invokes the model. The Ruby library builds evidence before that call and validates and renders its response afterward. A dependency source download or a Git search in the Ruby library is evidence gathering, not AI execution.
+`ai/` contains everything that configures or invokes the model. The Ruby library builds evidence before that call and validates and renders its response afterward. The three plan formatters and their shared Markdown helpers live together in `lib/test_plan/output/`. A dependency source download or a Git search in the Ruby library is evidence gathering, not AI execution.
 
 ## Profiles
 
@@ -186,7 +186,14 @@ test-plans/
   action.yml          composite action definition
   ai/                 prompts, provider adapters, and model CLI permissions
   bin/                Ruby entry points for deterministic action steps
-  lib/test_plan/      deterministic evidence, validation, and rendering code
+  lib/test_plan/
+    dependency_delta/  Git and package evidence gathering
+    pull_request/       GitHub API and comment operations
+    output/             all three plan formatters and shared Markdown helpers
+    dependency/         dependency response parser
+    playbook/           Playbook response parser and kit facts
+    parser.rb           standard response parser
+    provider_response.rb shared response validation
   spec/               specs for the action, Ruby library, and AI adapter
   profiles/           allowlisted profile definitions
 ```

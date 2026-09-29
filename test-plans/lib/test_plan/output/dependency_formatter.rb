@@ -1,10 +1,10 @@
-require_relative "../plan_document"
+require_relative "plan_document"
 
 module TestPlan
-  module Dependency
+  module Output
     # The list of raises is the manifest's, not the provider's, so a raise the response
     # omitted still appears and one it invented does not.
-    class Formatter
+    class DependencyFormatter
       include PlanDocument
 
       NO_REGRESSION_MESSAGE = "No tester-visible use could be established from the available evidence."
