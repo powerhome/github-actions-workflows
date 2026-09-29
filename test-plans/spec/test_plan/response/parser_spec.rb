@@ -1,5 +1,5 @@
-require_relative "../spec_helper"
-require "test_plan/parser"
+require_relative "../../spec_helper"
+require "test_plan/response/parser"
 
 require "json"
 require "tempfile"

@@ -1,7 +1,7 @@
 require "open3"
 
 require_relative "../command_output"
-require_relative "../untrusted_text"
+require_relative "../output/untrusted_text"
 require_relative "./call_site_sample"
 
 module TestPlan

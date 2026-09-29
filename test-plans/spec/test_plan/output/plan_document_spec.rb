@@ -1,11 +1,11 @@
-require_relative "../spec_helper"
+require_relative "../../spec_helper"
 
-require "test_plan/dependency/formatter"
-require "test_plan/dependency/parser"
-require "test_plan/formatter"
-require "test_plan/parser"
-require "test_plan/playbook/formatter"
-require "test_plan/playbook/parser"
+require "test_plan/output/dependency_formatter"
+require "test_plan/response/dependency_parser"
+require "test_plan/output/formatter"
+require "test_plan/response/parser"
+require "test_plan/output/playbook_formatter"
+require "test_plan/response/playbook_parser"
 
 require "json"
 

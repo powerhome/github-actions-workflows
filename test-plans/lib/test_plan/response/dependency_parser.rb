@@ -1,6 +1,6 @@
 require "json"
 
-require_relative "../agent_payload"
+require_relative "agent_payload"
 
 module TestPlan
   module Dependency

@@ -1,7 +1,7 @@
 require "json"
 
 require_relative "../playbook/packages"
-require_relative "../untrusted_text"
+require_relative "../output/untrusted_text"
 require_relative "./change_detector"
 require_relative "./dependency_usage"
 require_relative "./generator"

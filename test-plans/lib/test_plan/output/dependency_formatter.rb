@@ -1,4 +1,4 @@
-require_relative "../plan_document"
+require_relative "plan_document"
 
 module TestPlan
   module Dependency

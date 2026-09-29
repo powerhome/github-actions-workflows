@@ -1,7 +1,7 @@
 require "json"
 
-require_relative "../agent_payload"
-require_relative "./kit_facts"
+require_relative "agent_payload"
+require_relative "../playbook/kit_facts"
 
 module TestPlan
   module Playbook

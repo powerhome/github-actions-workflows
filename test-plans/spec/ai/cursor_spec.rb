@@ -4,13 +4,13 @@ require "fileutils"
 require "open3"
 require "tmpdir"
 
-RSpec.describe "providers/cursor.sh" do
+RSpec.describe "ai/providers/cursor.sh" do
   # System directories only. Inheriting the caller's PATH meant a real Cursor CLI on this
   # machine was found by `command -v agent`, skipping the install branch and running the
   # actual agent against a scratch workspace.
   SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin".freeze
 
-  let(:script) { File.join(ACTION_ROOT, "providers", "cursor.sh") }
+  let(:script) { File.join(ACTION_ROOT, "ai", "providers", "cursor.sh") }
 
   def agent_script(args_path)
     <<~AGENT

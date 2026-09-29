@@ -1,5 +1,5 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency/parser"
+require "test_plan/response/dependency_parser"
 
 require "json"
 

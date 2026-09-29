@@ -1,6 +1,6 @@
-require_relative "../plan_document"
-require_relative "./kit_facts"
-require_relative "./packages"
+require_relative "plan_document"
+require_relative "../playbook/kit_facts"
+require_relative "../playbook/packages"
 
 module TestPlan
   module Playbook

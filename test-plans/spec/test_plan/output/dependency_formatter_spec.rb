@@ -1,6 +1,6 @@
 require_relative "../../spec_helper"
-require "test_plan/dependency/formatter"
-require "test_plan/dependency/parser"
+require "test_plan/output/dependency_formatter"
+require "test_plan/response/dependency_parser"
 
 require "json"
 

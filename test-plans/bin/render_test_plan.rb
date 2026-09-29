@@ -1,12 +1,12 @@
 #!/usr/bin/env ruby
 
-require_relative "../lib/test_plan/formatter"
-require_relative "../lib/test_plan/parser"
-require_relative "../lib/test_plan/dependency/formatter"
-require_relative "../lib/test_plan/dependency/parser"
-require_relative "../lib/test_plan/playbook/formatter"
+require_relative "../lib/test_plan/output/formatter"
+require_relative "../lib/test_plan/response/parser"
+require_relative "../lib/test_plan/output/dependency_formatter"
+require_relative "../lib/test_plan/response/dependency_parser"
+require_relative "../lib/test_plan/output/playbook_formatter"
 require_relative "../lib/test_plan/playbook/kit_facts"
-require_relative "../lib/test_plan/playbook/parser"
+require_relative "../lib/test_plan/response/playbook_parser"
 require_relative "../lib/test_plan/variant"
 
 begin

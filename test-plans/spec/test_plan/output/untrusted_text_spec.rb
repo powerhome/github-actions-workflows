@@ -1,5 +1,5 @@
-require_relative "../spec_helper"
-require "test_plan/untrusted_text"
+require_relative "../../spec_helper"
+require "test_plan/output/untrusted_text"
 
 RSpec.describe TestPlan::UntrustedText do
   def escape(value)

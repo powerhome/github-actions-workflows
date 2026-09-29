@@ -258,14 +258,14 @@ runs:
         provider="${PROVIDER:-cursor}"
 
         # Interpolated into a path, so it has to be a bare name: ../ would otherwise
-        # escape providers/ and run some other reachable script with the provider
+        # escape ai/providers/ and run some other reachable script with the provider
         # credential in the environment.
         if [[ ! "${provider}" =~ ^[a-z][a-z0-9-]*$ ]]; then
           echo "Invalid provider name: ${provider}" >&2
           exit 1
         fi
 
-        provider_script="${{ github.action_path }}/providers/${provider}.sh"
+        provider_script="${{ github.action_path }}/ai/providers/${provider}.sh"
 
         if [[ ! -f "${provider_script}" ]]; then
           echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
