@@ -1,0 +1,54 @@
+# Adopt a small, reviewable rule set for the Ruby used by these actions.
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: disable
+  DisabledByDefault: true
+
+Lint:
+  Enabled: true
+
+# Ruby files are invoked by `ruby`, not as executable programs.
+Lint/ScriptPermission:
+  Enabled: false
+
+# Specs define short fixture constants inside example groups.
+Lint/ConstantDefinitionInBlock:
+  Exclude:
+    - '**/spec/**/*_spec.rb'
+
+# These formatters use object_id to keep distinct parsed entries separate.
+Lint/HashCompareByIdentity:
+  Exclude:
+    - 'test-plans/lib/test_plan/formatter.rb'
+    - 'test-plans/lib/test_plan/playbook/formatter.rb'
+
+# This spec checks a literal interpolation token in source text.
+Lint/InterpolationCheck:
+  Exclude:
+    - 'test-plans/spec/action_wiring_spec.rb'
+
+Layout/TrailingWhitespace:
+  Enabled: true
+Layout/TrailingEmptyLines:
+  Enabled: true
+Layout/SpaceAroundOperators:
+  Enabled: true
+Layout/SpaceAfterComma:
+  Enabled: true
+Layout/IndentationWidth:
+  Enabled: true
+Layout/EndAlignment:
+  Enabled: true
+Layout/DefEndAlignment:
+  Enabled: true
+Layout/EmptyLines:
+  Enabled: true
+Layout/EmptyLineBetweenDefs:
+  Enabled: true
+Layout/LineLength:
+  Enabled: true
+  Max: 120
+
+Style/StringLiterals:
+  Enabled: true
+  EnforcedStyle: double_quotes

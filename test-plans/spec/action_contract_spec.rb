@@ -18,16 +18,31 @@ RSpec.describe "test-plans/action.yml" do
     preflight_index = names.index("Check pull request mergeability")
 
     expect(preflight_index).to be < names.index("Check out repository")
-    expect(preflight_index).to be < names.index("Build external dependency delta")
-    expect(preflight_index).to be < names.index("Run test-plan provider")
+    expect(preflight_index).to be < names.index("Build dependency evidence with Ruby")
+    expect(preflight_index).to be < names.index("AI: Generate test-plan JSON")
   end
 
   it "gates every generation step on the mergeability result" do
-    generation_steps = steps.select do |step|
-      step.fetch("name").match?(/Check out|agent instructions|Fetch base|Fetch through|Compute PR diff|dependency delta|provider|Render test-plan|Upsert test-plan/)
-    end
+    generation_names = [
+      "Post in-progress status comment",
+      "Check out repository",
+      "Clear generated output paths",
+      "Fetch base commit",
+      "Fetch through merge-base",
+      "Remove Git credentials from the workspace",
+      "Compute PR diff",
+      "Build dependency evidence with Ruby",
+      "Select AI prompt from evidence",
+      "Reset agent instructions to the merge base",
+      "AI: Generate test-plan JSON",
+      "Upload test-plan artifacts",
+      "Ruby: Validate AI response and render comment",
+      "Upsert test-plan comment",
+      "Clear in-progress status comment",
+    ]
+    generation_steps = steps.select { |step| generation_names.include?(step.fetch("name")) }
 
-    expect(generation_steps).not_to be_empty
+    expect(generation_steps.length).to eq(generation_names.length)
     generation_steps.each do |step|
       expect(step.fetch("if", "")).to include("pr_metadata.outputs.generate == 'true'")
     end
@@ -51,11 +66,22 @@ RSpec.describe "test-plans/action.yml" do
 
     # Needs the merge base, so it has to follow the merge-base fetch.
     expect(reset_index).to be > names.index("Fetch through merge-base")
-    expect(reset_index).to be < names.index("Run test-plan provider")
+    expect(reset_index).to be < names.index("AI: Generate test-plan JSON")
   end
 
   it "leaves model selection to the provider" do
-    provider_step = steps.find { |step| step.fetch("name") == "Run test-plan provider" }
+    provider_step = steps.find { |step| step.fetch("name") == "AI: Generate test-plan JSON" }
     expect(provider_step.fetch("env")).not_to have_key("MODEL")
+  end
+
+  it "keeps the provider call between deterministic evidence assembly and rendering" do
+    names = steps.map { |step| step.fetch("name") }
+    ai_index = names.index("AI: Generate test-plan JSON")
+
+    expect(ai_index).to be > names.index("Select AI prompt from evidence")
+    expect(ai_index).to be > names.index("Reset agent instructions to the merge base")
+    expect(ai_index).to be < names.index("Ruby: Validate AI response and render comment")
+    expect(steps[ai_index].fetch("run")).to include("/ai/providers/${provider}.sh")
+    expect(steps.count { |step| step.fetch("run", "").include?("/ai/providers/") }).to eq(1)
   end
 end

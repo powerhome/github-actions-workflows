@@ -61,8 +61,8 @@ if [[ ! -f "${TEST_PLAN_PROMPT_PATH}" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ACTION_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CLI_CONFIG_TEMPLATE="${ACTION_ROOT}/config/cli-config.json"
+ACTION_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+CLI_CONFIG_TEMPLATE="${ACTION_ROOT}/ai/config/cli-config.json"
 
 cd "${GITHUB_WORKSPACE}"
 
@@ -74,7 +74,7 @@ PROMPT="$(cat "${TEST_PLAN_PROMPT_PATH}")"
 echo "[test_plan] provider: cursor" >&2
 
 # --trust is required because the headless agent otherwise refuses the workspace.
-# Read-only CLI permissions are copied from config/cli-config.json.
+# Read-only CLI permissions are copied from ai/config/cli-config.json.
 status=0
 agent --print --trust --output-format text "${PROMPT}" >"${TEST_PLAN_JSON_PATH}" || status=$?
 

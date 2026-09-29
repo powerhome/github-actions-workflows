@@ -1,11 +1,11 @@
 require "json"
 
-require_relative "../agent_payload"
+require_relative "../provider_response"
 
 module TestPlan
   module Dependency
     class Parser
-      include AgentPayload
+      include ProviderResponse
 
       attr_reader :dependencies, :regression_tests, :application_checks, :discarded
 
@@ -17,7 +17,9 @@ module TestPlan
         @discarded = []
         payload = JSON.parse(extract_json(json_string))
         raise "Dependency test-plan JSON root must be an object" unless payload.is_a?(Hash)
-        raise 'Dependency test-plan JSON must include a "dependencies" array' unless payload["dependencies"].is_a?(Array)
+        unless payload["dependencies"].is_a?(Array)
+          raise 'Dependency test-plan JSON must include a "dependencies" array'
+        end
 
         @dependencies = payload.fetch("dependencies").each_with_index.filter_map do |entry, index|
           dependency(entry, index + 1)

@@ -2,6 +2,19 @@
 
 Generates structured, non-technical manual QA plans from pull-request merge-base diffs. The action uses the `cobra-test-plan` profile, optionally enriches the PR diff with raised public dependency source changes, and upserts one authoritative PR comment.
 
+## Where Git ends and AI begins
+
+The four stages are marked in `action.yml`; their steps run in this order in the Actions job log:
+
+| Stage | What runs | Result |
+| --- | --- | --- |
+| GitHub coordination | GitHub API preflight and comment status | A mergeable PR and its base/head commits. |
+| Deterministic preparation | Git commands and Ruby code in `bin/` and `lib/test_plan/` | `pr.diff`, dependency evidence, and an allowlisted prompt choice. The final Git operation resets agent instructions to the merge base. |
+| AI generation | The single `AI: Generate test-plan JSON` step, using `ai/providers/cursor.sh` and `ai/prompts/` | Untrusted provider output in `test-plan-agent.json`. This is the only model call. |
+| Deterministic publication | Ruby parsers and formatters, then GitHub comment operations | A validated, escaped Markdown test plan. Provider text is never posted directly. |
+
+`ai/` contains everything that configures or invokes the model. The Ruby library builds evidence before that call and validates and renders its response afterward. A dependency source download or a Git search in the Ruby library is evidence gathering, not AI execution.
+
 ## Profiles
 
 | Profile | Model | Intended use |
@@ -120,7 +133,7 @@ The pull-request head is untrusted: anyone who can open a pull request controls 
 - The workspace holds no credential while the provider runs. `actions/checkout` persists the installation token in `.git/config`, so it is removed once the last fetch is done — every later Git operation is local — rather than left where an agent with `Read(**)` could find it.
 - The unbounded full delta is written outside the workspace and uploaded from there. Inside it, an agent could read it and bypass both the context budget and the generated-file exclusions.
 - The Cursor CLI installer is downloaded before it is run, rather than piped into a shell, and the run logs its size and SHA-256. Piping starts executing while the transfer is still in flight, so an interrupted download leaves the first half already run with no record of what that was. The installer is still unpinned — Cursor documents no version-pinned CI install — so this bounds the failure mode rather than removing it.
-- The provider runs read-only and offline. `config/cli-config.json` allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. Everything a plan says has to come from evidence this action assembled.
+- The provider runs read-only and offline. `ai/config/cli-config.json` allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. Everything a plan says has to come from evidence this action assembled.
 - A part of the response the schema cannot use — a scenario with no steps, a feature area with no test path — is dropped rather than failing the run, since one unusable scenario should not cost an otherwise sound plan. The rendered plan says how many parts were dropped and why, so a partial plan is never mistaken for a complete one.
 - Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published. Every provider-derived field, and the pull-request title, is escaped before rendering: mentions cannot notify anyone, and links, images, and inline HTML cannot be injected into a comment the bot signs. Inline code is the single exception, so a plan can set a route or an identifier apart from the prose around it. A complete code span passes through as written — GitHub renders its contents literally, resolving no mention, autolinking no URL, and interpreting no tag — while a backtick that closes nothing, or one standing behind a backslash that Markdown may read as escaping it, is neutralised like any other markup. A response can neither open a code block that swallows the plan below it nor slip a mention past the escaping by making plain text merely look like code.
 - Cursor selects its default model. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
@@ -171,13 +184,11 @@ Do not add `issue_comment` triggers or pass PR comment bodies to the action.
 ```
 test-plans/
   action.yml          composite action definition
-  bin/                entry points the action steps invoke
-  lib/test_plan/      library code, namespaced under TestPlan
-  spec/               specs, mirroring lib/
+  ai/                 prompts, provider adapters, and model CLI permissions
+  bin/                Ruby entry points for deterministic action steps
+  lib/test_plan/      deterministic evidence, validation, and rendering code
+  spec/               specs for the action, Ruby library, and AI adapter
   profiles/           allowlisted profile definitions
-  prompts/            provider prompts
-  providers/          per-provider shell adapters
-  config/             provider CLI permissions
 ```
 
 ## Local Tests
@@ -192,4 +203,10 @@ A single file works the same way, since each spec loads the shared helper:
 
 ```bash
 ruby test-plans/spec/test_plan/dependency_delta/generator_spec.rb
+```
+
+The repository also runs a small RuboCop rule set for all Ruby code on pushes and pull requests. With RuboCop 1.79.2 installed, run it locally from the repository root:
+
+```bash
+rubocop --cache false
 ```

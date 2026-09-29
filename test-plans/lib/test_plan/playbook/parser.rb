@@ -1,13 +1,13 @@
 require "json"
 
-require_relative "../agent_payload"
+require_relative "../provider_response"
 require_relative "./kit_facts"
 
 module TestPlan
   module Playbook
     # Organizes a Playbook raise by changed kit rather than feature area.
     class Parser
-      include AgentPayload
+      include ProviderResponse
 
       DEFAULT_KIT_CODE = "KIT"
       KIT_CODE_PATTERN = /\A[A-Z][A-Z0-9]{1,5}\z/

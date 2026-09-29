@@ -220,7 +220,9 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       new_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-14.11.0.tgz",
       direct: true, lockfiles: ["yarn.lock"]
     )
-    retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+    retriever = double(
+      "retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")]
+    )
 
     result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
@@ -249,7 +251,9 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       new_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-17.2.0-rc.0.tgz",
       direct: true, lockfiles: ["yarn.lock"]
     )
-    retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+    retriever = double(
+      "retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")]
+    )
 
     result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
@@ -272,7 +276,9 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       new_locator: "https://registry.npmjs.org/widget/-/widget-3.0.0.tgz",
       direct: true, lockfiles: ["yarn.lock"]
     )
-    retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+    retriever = double(
+      "retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")]
+    )
 
     result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
 
@@ -282,7 +288,9 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
   it "names every file it omitted from the provider context" do
     diffs = [
       TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "c" * 1024),
-      TestPlan::DependencyDelta::SourceDiff.new(path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1)),
+      TestPlan::DependencyDelta::SourceDiff.new(
+        path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1)
+      ),
       TestPlan::DependencyDelta::SourceDiff.new(path: "lib/small.rb", diff: "s" * 1024),
     ]
     result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate

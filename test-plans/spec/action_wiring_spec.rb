@@ -115,7 +115,7 @@ module ActionWiring
   end
 
   def provider_step
-    steps.find { |step| step.fetch("name", "") == "Run test-plan provider" }
+    steps.find { |step| step.fetch("name", "") == "AI: Generate test-plan JSON" }
   end
 
   def outputs_consumed
@@ -169,10 +169,10 @@ RSpec.describe "action.yml wiring" do
     end
 
     it "cursor.sh only reads variables the provider step provides" do
-      step = ActionWiring.step_running("providers/${provider}.sh")
+      step = ActionWiring.step_running("ai/providers/${provider}.sh")
       provided = step.fetch("env", {}).keys + ActionWiring::AMBIENT
 
-      expect(ActionWiring.shell_env_reads("providers/cursor.sh") - provided).to be_empty
+      expect(ActionWiring.shell_env_reads("ai/providers/cursor.sh") - provided).to be_empty
     end
   end
 

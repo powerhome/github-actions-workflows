@@ -3,8 +3,8 @@ require "json"
 module TestPlan
   # The provider answers with JSON somewhere inside prose, and nothing it returns can be
   # trusted to be the type the schema says. Includers set @discarded before parsing.
-  module AgentPayload
-  private
+  module ProviderResponse
+    private
 
     def extract_json(raw)
       stripped = strip_code_fences(raw)

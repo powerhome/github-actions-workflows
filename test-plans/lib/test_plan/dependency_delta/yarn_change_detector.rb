@@ -33,7 +33,9 @@ module TestPlan
         added = new_versions - old_versions
 
         added.filter_map do |new_version|
-          old_version = removed.select { |candidate| version(candidate) < version(new_version) }.max_by { |candidate| version(candidate) }
+          old_version = removed
+            .select { |candidate| version(candidate) < version(new_version) }
+            .max_by { |candidate| version(candidate) }
           next unless old_version
 
           old_record = old_records.find { |record| record.version == old_version }

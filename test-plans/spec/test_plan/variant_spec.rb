@@ -4,9 +4,9 @@ require "test_plan/variant"
 RSpec.describe TestPlan::Variant do
   let(:paths) do
     {
-      prompt_path: "/action/prompts/cobra_test_plan.md",
-      playbook_prompt_path: "/action/prompts/cobra_playbook_test_plan.md",
-      dependency_prompt_path: "/action/prompts/cobra_dependency_test_plan.md",
+      prompt_path: "/action/ai/prompts/cobra_test_plan.md",
+      playbook_prompt_path: "/action/ai/prompts/cobra_playbook_test_plan.md",
+      dependency_prompt_path: "/action/ai/prompts/cobra_dependency_test_plan.md",
     }
   end
 

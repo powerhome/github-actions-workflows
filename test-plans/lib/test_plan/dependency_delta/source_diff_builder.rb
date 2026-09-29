@@ -70,7 +70,8 @@ module TestPlan
         state =
           if !File.file?(old_path) then "was added"
           elsif !File.file?(new_path) then "was removed"
-          else "changed"
+          else
+            "changed"
           end
 
         SourceDiff.new(
