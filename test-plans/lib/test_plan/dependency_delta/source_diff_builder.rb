@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "digest"
 require "open3"
 
@@ -70,11 +72,12 @@ module TestPlan
         state =
           if !File.file?(old_path) then "was added"
           elsif !File.file?(new_path) then "was removed"
-          else "changed"
+          else
+            "changed"
           end
 
         SourceDiff.new(
-          path: path,
+          path:,
           diff: "Binary file #{path} #{state} (#{File.size(File.file?(new_path) ? new_path : old_path)} bytes)\n",
           priority: priority(path)
         )

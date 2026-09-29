@@ -1,10 +1,12 @@
+# frozen_string_literal: true
+
 module TestPlan
   module DependencyDelta
     # git grep answers lexicographically, the worst order to sample a monorepo in: pb_body
     # matched 1106 files and the first twenty were all under components/accounting/, so a
     # tester covers one corner while the plan calls the kit covered.
     module CallSiteSample
-      module_function
+    module_function
 
       # A permutation, not a truncation, so one ordering serves both an exhaustive list
       # and a sample taken off the front.

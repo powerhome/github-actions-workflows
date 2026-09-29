@@ -191,3 +191,9 @@ A single file works the same way, since each spec loads the shared helper:
 ```bash
 ruby test-plans/spec/test_plan/dependency_delta/generator_spec.rb
 ```
+
+The repository also runs a small RuboCop rule set for all Ruby code on pushes and pull requests. With RuboCop 1.79.2 installed, run it locally from the repository root:
+
+```bash
+rubocop --cache false
+```

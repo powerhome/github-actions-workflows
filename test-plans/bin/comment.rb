@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require_relative "../lib/test_plan/pull_request/comments"
 
@@ -26,9 +27,9 @@ begin
       body = path.empty? ? inline : File.read(path, encoding: Encoding::UTF_8)
       raise "Refusing to post an empty comment" if body.strip.empty?
 
-      comments.upsert(tag: tag, body: body)
+      comments.upsert(tag:, body:)
     when "delete"
-      comments.delete(tag: tag)
+      comments.delete(tag:)
     else
       raise "Unknown comment mode: #{mode.inspect} (expected upsert or delete)"
     end

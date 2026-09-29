@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "json"
 
 require_relative "../playbook/packages"
@@ -23,16 +25,16 @@ module TestPlan
       def run
         workspace = ENV.fetch("GITHUB_WORKSPACE")
         snapshot = GitSnapshot.new(
-          workspace: workspace,
+          workspace:,
           base_sha: ENV.fetch("BASE_SHA"),
           head_sha: ENV.fetch("HEAD_SHA")
         )
         detector = ChangeDetector.new(snapshot, scope: ENV.fetch("DEPENDENCY_SCOPE", "umbrella"))
         changes = detector.detect
-        kit_usage = PlaybookKitUsage.new(workspace: workspace)
+        kit_usage = PlaybookKitUsage.new(workspace:)
         result = Generator.new(
-          changes: changes,
-          kit_usage: kit_usage,
+          changes:,
+          kit_usage:,
           problems: detector.problems,
           out_of_scope: detector.out_of_scope
         ).generate
@@ -44,7 +46,7 @@ module TestPlan
         File.write(full_path, result.fetch(:full), encoding: Encoding::UTF_8)
         File.write(context_path, result.fetch(:context), encoding: Encoding::UTF_8)
         File.write(
-          ENV.fetch("DEPENDENCY_USAGE_PATH"), DependencyUsage.new(workspace: workspace).report(changes),
+          ENV.fetch("DEPENDENCY_USAGE_PATH"), DependencyUsage.new(workspace:).report(changes),
           encoding: Encoding::UTF_8
         )
 
@@ -158,8 +160,8 @@ module TestPlan
 
       def other_raises_section(changes)
         others = changes
-          .reject { |change| Playbook::PACKAGE_NAMES.include?(change.name) }
-          .sort_by(&:name)
+                 .reject { |change| Playbook::PACKAGE_NAMES.include?(change.name) }
+                 .sort_by(&:name)
         return "\n#{OTHER_RAISES_HEADING}\n\nNone.\n" if others.empty?
 
         lines = others.map { |c| "- #{c.name} #{c.old_version} -> #{c.new_version}" }
@@ -173,55 +175,65 @@ module TestPlan
         summary_path = ENV["GITHUB_STEP_SUMMARY"]
         return if summary_path.to_s.empty?
 
-        dependencies = manifest.fetch("dependencies")
-        lockfile_warnings = manifest.fetch("lockfile_warnings")
         File.open(summary_path, "a", encoding: Encoding::UTF_8) do |summary|
           summary.puts("## External dependency delta")
-          if dependencies.empty?
-            summary.puts("No raised external Bundler or Yarn dependencies were detected.")
-          else
-            dependencies.each do |entry|
-              summary.puts(
-                "- #{escape(entry.fetch("name"))}: #{escape(entry.fetch("old_version"))} -> " \
-                  "#{escape(entry.fetch("new_version"))} (#{entry.fetch("status")})"
-              )
-              entry.fetch("warnings").each { |warning| summary.puts("  - #{escape(warning)}") }
-              omitted = entry.fetch("omitted_from_context", [])
-              omitted.first(10).each { |path| summary.puts("  - omitted from context: #{escape(path)}") }
-              summary.puts("  - ...and #{omitted.length - 10} more") if omitted.length > 10
-            end
-          end
+          summarize_dependencies(summary, manifest.fetch("dependencies"))
+          summarize_kits(summary, kit_facts.fetch("kits", {}))
+          summarize_lockfile_warnings(summary, manifest.fetch("lockfile_warnings"))
+          summarize_out_of_scope(summary, manifest.fetch("out_of_scope", []))
+        end
+      end
 
-          kits = kit_facts.fetch("kits", {})
-          unless kits.empty?
-            summary.puts("- Playbook kits changed: #{kits.length}")
-            kits.each_value do |kit|
-              sites = kit.fetch("call_sites")
-              summary.puts(
-                "  - #{escape(kit.fetch("name"))}: #{sites} call #{sites == 1 ? "site" : "sites"} " \
-                  "(#{escape(kit.fetch("coverage"))})"
-              )
-            end
-          end
+      def summarize_dependencies(summary, dependencies)
+        if dependencies.empty?
+          summary.puts("No raised external Bundler or Yarn dependencies were detected.")
+          return
+        end
 
-          lockfile_warnings.each do |warning|
-            summary.puts("- #{escape(warning.fetch("lockfile"))}: not analyzed")
-            summary.puts("  - #{escape(warning.fetch("warning"))}")
-          end
-
-          out_of_scope = manifest.fetch("out_of_scope", [])
-          next if out_of_scope.empty?
-
+        dependencies.each do |entry|
           summary.puts(
-            "- #{out_of_scope.length} raised #{out_of_scope.length == 1 ? "dependency" : "dependencies"} " \
-              "reached no root Gemfile.lock and were not analyzed"
+            "- #{escape(entry.fetch("name"))}: #{escape(entry.fetch("old_version"))} -> " \
+              "#{escape(entry.fetch("new_version"))} (#{entry.fetch("status")})"
           )
-          out_of_scope.each do |entry|
-            summary.puts(
-              "  - #{escape(entry.fetch("name"))}: #{escape(entry.fetch("old_version"))} -> " \
-                "#{escape(entry.fetch("new_version"))}"
-            )
-          end
+          entry.fetch("warnings").each { |warning| summary.puts("  - #{escape(warning)}") }
+          omitted = entry.fetch("omitted_from_context", [])
+          omitted.first(10).each { |path| summary.puts("  - omitted from context: #{escape(path)}") }
+          summary.puts("  - ...and #{omitted.length - 10} more") if omitted.length > 10
+        end
+      end
+
+      def summarize_kits(summary, kits)
+        return if kits.empty?
+
+        summary.puts("- Playbook kits changed: #{kits.length}")
+        kits.each_value do |kit|
+          sites = kit.fetch("call_sites")
+          summary.puts(
+            "  - #{escape(kit.fetch("name"))}: #{sites} call #{sites == 1 ? "site" : "sites"} " \
+              "(#{escape(kit.fetch("coverage"))})"
+          )
+        end
+      end
+
+      def summarize_lockfile_warnings(summary, lockfile_warnings)
+        lockfile_warnings.each do |warning|
+          summary.puts("- #{escape(warning.fetch("lockfile"))}: not analyzed")
+          summary.puts("  - #{escape(warning.fetch("warning"))}")
+        end
+      end
+
+      def summarize_out_of_scope(summary, out_of_scope)
+        return if out_of_scope.empty?
+
+        summary.puts(
+          "- #{out_of_scope.length} raised #{out_of_scope.length == 1 ? "dependency" : "dependencies"} " \
+            "reached no root Gemfile.lock and were not analyzed"
+        )
+        out_of_scope.each do |entry|
+          summary.puts(
+            "  - #{escape(entry.fetch("name"))}: #{escape(entry.fetch("old_version"))} -> " \
+              "#{escape(entry.fetch("new_version"))}"
+          )
         end
       end
     end

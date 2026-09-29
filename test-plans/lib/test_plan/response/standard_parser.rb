@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "json"
 
 require_relative "validation"
@@ -147,6 +149,5 @@ module TestPlan::Response
         }
       end
     end
-
   end
 end

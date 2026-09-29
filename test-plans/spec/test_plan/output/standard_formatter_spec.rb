@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/output/standard_formatter"
 require "test_plan/response/standard_parser"
@@ -48,7 +50,10 @@ RSpec.describe TestPlan::Output::StandardFormatter do
     expect(output).to include("## Permissions / Roles")
     expect(output).to include("### View reminder calls — Contact Center")
     expect(output).to include("#### RCH-1 — Default results")
-    expect(output).to include("**Landing Page:** /contact_center/reminder_calls  \n**Permissions:** Reminder Calls — Read")
+    expect(output).to include(
+      "**Landing Page:** /contact_center/reminder_calls  \n" \
+      "**Permissions:** Reminder Calls — Read"
+    )
     expect(output).to include("**Applicable Functional Cases:** RCH-1")
   end
 
@@ -221,7 +226,8 @@ RSpec.describe TestPlan::Output::StandardFormatter do
   it "renders per-case permission fallbacks as standalone metadata" do
     payload["feature_areas"].first["scenarios"].first["permissions"] = []
     expect(render).to include(
-      "**Landing Page:** /contact_center/reminder_calls  \n**Permissions:** Not identified for this case.\n\n- Open the page."
+      "**Landing Page:** /contact_center/reminder_calls  \n" \
+      "**Permissions:** Not identified for this case.\n\n- Open the page."
     )
 
     payload["permissions"]["required"] = "no"

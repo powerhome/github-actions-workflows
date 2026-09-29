@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "spec_helper"
 
 require "yaml"
@@ -23,9 +25,13 @@ RSpec.describe "test-plans/action.yml" do
   end
 
   it "gates every generation step on the mergeability result" do
-    generation_steps = steps.select do |step|
-      step.fetch("name").match?(/Check out|agent instructions|Fetch base|Fetch through|Compute PR diff|dependency delta|provider|Render test-plan|Upsert test-plan/)
-    end
+    generation_step_names = Regexp.union(
+      [
+        "Check out", "agent instructions", "Fetch base", "Fetch through", "Compute PR diff",
+        "dependency delta", "provider", "Render test-plan", "Upsert test-plan"
+      ]
+    )
+    generation_steps = steps.select { |step| step.fetch("name").match?(generation_step_names) }
 
     expect(generation_steps).not_to be_empty
     generation_steps.each do |step|

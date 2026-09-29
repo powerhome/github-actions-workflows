@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "bundler"
 require "set"
 require_relative "./change"
@@ -21,10 +23,10 @@ module TestPlan
           next unless old_spec
 
           build_change(
-            path: path,
-            name: name,
-            old_spec: old_spec,
-            new_spec: new_spec,
+            path:,
+            name:,
+            old_spec:,
+            new_spec:,
             old_git: old_git_sources[name],
             new_git: new_git_sources[name],
             direct: direct_names.include?(name)
@@ -51,9 +53,9 @@ module TestPlan
         # comparable artifacts, so there is nothing to diff. Reporting it keeps the
         # change visible instead of dropping it as though nothing happened.
         if old_git.nil? != new_git.nil?
-          return mixed_source_change(path: path, name: name, old_spec: old_spec,
-                                     new_spec: new_spec, old_git: old_git,
-                                     new_git: new_git, direct: direct)
+          return mixed_source_change(path:, name:, old_spec:,
+                                     new_spec:, old_git:,
+                                     new_git:, direct:)
         end
 
         if new_git
@@ -63,13 +65,13 @@ module TestPlan
 
           return Change.new(
             ecosystem: "bundler",
-            name: name,
+            name:,
             old_version: old_revision,
             new_version: new_revision,
             source: "git",
             old_locator: old_git["remote"],
             new_locator: new_git["remote"],
-            direct: direct,
+            direct:,
             lockfiles: [path]
           )
         end
@@ -78,13 +80,13 @@ module TestPlan
 
         Change.new(
           ecosystem: "bundler",
-          name: name,
+          name:,
           old_version: old_spec.version.to_s,
           new_version: new_spec.version.to_s,
           source: "rubygems",
           old_locator: rubygems_remote(old_spec.source),
           new_locator: rubygems_remote(new_spec.source),
-          direct: direct,
+          direct:,
           lockfiles: [path]
         )
       end
@@ -92,13 +94,13 @@ module TestPlan
       def mixed_source_change(path:, name:, old_spec:, new_spec:, old_git:, new_git:, direct:)
         Change.new(
           ecosystem: "bundler",
-          name: name,
+          name:,
           old_version: old_git ? old_git["revision"].to_s : old_spec.version.to_s,
           new_version: new_git ? new_git["revision"].to_s : new_spec.version.to_s,
           source: "mixed",
           old_locator: old_git ? old_git["remote"] : rubygems_remote(old_spec.source),
           new_locator: new_git ? new_git["remote"] : rubygems_remote(new_spec.source),
-          direct: direct,
+          direct:,
           lockfiles: [path]
         )
       end

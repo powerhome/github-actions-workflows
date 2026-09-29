@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module TestPlan
   # The profile resolves from the label before any lockfile is read, so only the
   # dependency delta knows what was raised. Named so the render step follows the same
@@ -7,7 +9,7 @@ module TestPlan
     DEPENDENCY = "dependency".freeze
     DEFAULT = "".freeze
 
-    module_function
+  module_function
 
     def select(prompt_path:, playbook_prompt_path: "", dependency_prompt_path: "",
                playbook_raised: false, change_count: 0)

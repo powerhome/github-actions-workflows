@@ -1,4 +1,5 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require "json"
 require "open3"
@@ -73,7 +74,7 @@ class GitHubCommentPoster
     "deleted comment #{existing}"
   end
 
-  private
+private
 
   def validate_tag!(tag)
     raise "Invalid comment tag: #{tag.inspect}" unless TAG_PATTERN.match?(tag.to_s)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta/dependency_usage"
 require "test_plan/dependency_delta/change"
@@ -8,7 +10,7 @@ require "tmpdir"
 
 RSpec.describe TestPlan::DependencyDelta::DependencyUsage do
   def change(name)
-    TestPlan::DependencyDelta::Change.new(name: name)
+    TestPlan::DependencyDelta::Change.new(name:)
   end
 
   # git grep answers from the index, so the files only have to be added, not committed.
