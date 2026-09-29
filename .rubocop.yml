@@ -1,0 +1,65 @@
+AllCops:
+  TargetRubyVersion: 3.1
+  NewCops: disable
+  DisabledByDefault: true
+
+Layout:
+  Enabled: true
+
+Layout/AccessModifierIndentation:
+  EnforcedStyle: outdent
+
+Lint:
+  Enabled: true
+
+Lint/ScriptPermission:
+  Enabled: false
+
+Lint/ConstantDefinitionInBlock:
+  Exclude:
+    - '**/spec/**/*_spec.rb'
+
+Lint/HashCompareByIdentity:
+  Exclude:
+    - 'test-plans/lib/test_plan/output/standard_formatter.rb'
+    - 'test-plans/lib/test_plan/output/playbook_formatter.rb'
+
+Lint/InterpolationCheck:
+  Exclude:
+    - 'test-plans/spec/action_wiring_spec.rb'
+
+Metrics/ClassLength:
+  Enabled: true
+  Max: 500
+
+Metrics/MethodLength:
+  Enabled: true
+  Max: 40
+
+Metrics/ModuleLength:
+  Enabled: true
+  Max: 500
+
+Metrics/ParameterLists:
+  Enabled: true
+  Max: 7
+
+Metrics/PerceivedComplexity:
+  Enabled: true
+  Max: 18
+
+Style/StringLiterals:
+  Enabled: true
+  EnforcedStyle: double_quotes
+
+Style/FrozenStringLiteralComment:
+  Enabled: true
+  EnforcedStyle: always
+
+Style/MutableConstant:
+  Enabled: false
+
+Style/HashSyntax:
+  Enabled: true
+  EnforcedStyle: ruby19
+  EnforcedShorthandSyntax: always
