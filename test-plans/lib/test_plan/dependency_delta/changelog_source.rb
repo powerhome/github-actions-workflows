@@ -3,7 +3,7 @@ require "open3"
 require "tempfile"
 require "uri"
 
-require_relative "../command_output"
+require_relative "../runner_text"
 
 require_relative "git_locator"
 require_relative "public_downloader"
@@ -219,10 +219,10 @@ module TestPlan
               old_file.path, new_file.path
             )
             unless [0, 1].include?(status.exitstatus)
-              raise "diff failed for #{path}: #{CommandOutput.utf8(stderr).strip}"
+              raise "diff failed for #{path}: #{RunnerText.utf8(stderr).strip}"
             end
 
-            stdout = CommandOutput.utf8(stdout)
+            stdout = RunnerText.utf8(stdout)
             stdout.empty? ? nil : stdout
           end
         end

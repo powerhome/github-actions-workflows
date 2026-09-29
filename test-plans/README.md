@@ -2,7 +2,7 @@
 
 Generates structured, non-technical manual QA plans from pull-request merge-base diffs. The action uses the `cobra-test-plan` profile, optionally enriches the PR diff with raised public dependency source changes, and upserts one authoritative PR comment.
 
-## Where Git ends and AI begins
+## Information flow: Git, AI, and publication
 
 The four stages are marked in `action.yml`; their steps run in this order in the Actions job log:
 
@@ -11,9 +11,11 @@ The four stages are marked in `action.yml`; their steps run in this order in the
 | GitHub coordination | GitHub API preflight and comment status | A mergeable PR and its base/head commits. |
 | Deterministic preparation | Git commands and Ruby code in `bin/` and `lib/test_plan/` | `pr.diff`, dependency evidence, and an allowlisted prompt choice. The final Git operation resets agent instructions to the merge base. |
 | AI generation | The single `AI: Generate test-plan JSON` step, using `ai/providers/cursor.sh` and `ai/prompts/` | Untrusted provider output in `test-plan-agent.json`. This is the only model call. |
-| Deterministic publication | Ruby parsers and formatters, then GitHub comment operations | A validated, escaped Markdown test plan. Provider text is never posted directly. |
+| Deterministic publication | Ruby response parsers and output formatters, then GitHub comment operations | A validated, escaped Markdown test plan. Provider text is never posted directly. |
 
-`ai/` contains everything that configures or invokes the model. The Ruby library builds evidence before that call and validates and renders its response afterward. The three plan formatters and their shared Markdown helpers live together in `lib/test_plan/output/`. A dependency source download or a Git search in the Ruby library is evidence gathering, not AI execution.
+`ai/` contains everything that configures or invokes the model. The Ruby library builds evidence before that call and validates and renders its response afterward. A dependency source download or a Git search in the Ruby library is evidence gathering, not AI execution.
+
+`Profile.select_prompt` uses dependency evidence to choose the standard, dependency, or Playbook prompt. Cursor writes the raw response to `test-plan-agent.json`. The matching class in `lib/test_plan/response/` extracts and validates the fields for that shape, recording discarded pieces. The matching class in `lib/test_plan/output/` combines those fields with deterministic facts, builds the Markdown, and escapes untrusted text. `bin/render_test_plan.rb` connects the selected parser and formatter; `PullRequest::Comments` posts the resulting file. The blocked-PR path ends after mergeability preflight and never invokes Cursor.
 
 ## Profiles
 
@@ -189,11 +191,11 @@ test-plans/
   lib/test_plan/
     dependency_delta/  Git and package evidence gathering
     pull_request/       GitHub API and comment operations
-    output/             all three plan formatters and shared Markdown helpers
-    dependency/         dependency response parser
-    playbook/           Playbook response parser and kit facts
-    parser.rb           standard response parser
-    provider_response.rb shared response validation
+    response/           three JSON parsers and shared field validation
+    output/             matching Markdown formatters and shared escaping
+    playbook/           Playbook package names and kit facts
+    profile.rb          allowlisted prompts and evidence-based selection
+    runner_text.rb      shared runner text and byte-size handling
   spec/               specs for the action, Ruby library, and AI adapter
   profiles/           allowlisted profile definitions
 ```

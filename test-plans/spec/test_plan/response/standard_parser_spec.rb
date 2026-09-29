@@ -1,10 +1,10 @@
-require_relative "../spec_helper"
-require "test_plan/parser"
+require_relative "../../spec_helper"
+require "test_plan/response/standard_parser"
 
 require "json"
 require "tempfile"
 
-RSpec.describe TestPlan::Parser do
+RSpec.describe TestPlan::Response::StandardParser do
   def payload(overrides = {})
     {
       "permissions" => {

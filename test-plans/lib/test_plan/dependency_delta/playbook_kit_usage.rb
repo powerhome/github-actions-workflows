@@ -1,6 +1,6 @@
 require "open3"
 
-require_relative "../command_output"
+require_relative "../runner_text"
 require_relative "../playbook/kit_facts"
 require_relative "../playbook/packages"
 require_relative "./call_site_sample"
@@ -202,11 +202,11 @@ module TestPlan
         )
         # git grep exits 1 for no matches, which is not an error.
         unless [0, 1].include?(status.exitstatus)
-          record_failure("git grep exited #{status.exitstatus}: #{CommandOutput.utf8(stderr)}")
+          record_failure("git grep exited #{status.exitstatus}: #{RunnerText.utf8(stderr)}")
           return nil
         end
 
-        CommandOutput.utf8(stdout).lines.map(&:chomp).reject(&:empty?)
+        RunnerText.utf8(stdout).lines.map(&:chomp).reject(&:empty?)
       rescue => e
         record_failure("git grep could not be run: #{e.class}: #{e.message}")
         nil

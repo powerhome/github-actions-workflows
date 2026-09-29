@@ -1,6 +1,6 @@
 require "open3"
 
-require_relative "../command_output"
+require_relative "../runner_text"
 require_relative "../output/markdown_escaper"
 require_relative "./call_site_sample"
 
@@ -57,7 +57,7 @@ module TestPlan
         )
         return nil unless [0, 1].include?(status.exitstatus)
 
-        CommandOutput.utf8(stdout).lines.map(&:chomp).reject(&:empty?).reject do |path|
+        RunnerText.utf8(stdout).lines.map(&:chomp).reject(&:empty?).reject do |path|
           path.split("/").any? { |part| NON_APPLICATION_SEGMENTS.include?(part) }
         end
       rescue

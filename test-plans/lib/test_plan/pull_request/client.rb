@@ -1,7 +1,7 @@
 require "json"
 require "open3"
 
-require_relative "../command_output"
+require_relative "../runner_text"
 
 module TestPlan
   module PullRequest
@@ -34,10 +34,10 @@ module TestPlan
           "-F", "number=#{@pull_request_number}"
         )
         unless status.success?
-          raise "GitHub pull-request query failed: #{CommandOutput.utf8(stderr).strip}"
+          raise "GitHub pull-request query failed: #{RunnerText.utf8(stderr).strip}"
         end
 
-        payload = JSON.parse(CommandOutput.utf8(stdout)).dig("data", "repository", "pullRequest")
+        payload = JSON.parse(RunnerText.utf8(stdout)).dig("data", "repository", "pullRequest")
         raise "Pull request #{@pull_request_number} was not found" unless payload.is_a?(Hash)
 
         payload

@@ -1,7 +1,7 @@
 require "digest"
 require "open3"
 
-require_relative "../command_output"
+require_relative "../runner_text"
 
 module TestPlan
   module DependencyDelta
@@ -101,10 +101,10 @@ module TestPlan
           old_input, new_input
         )
         unless [0, 1].include?(status.exitstatus)
-          raise "diff failed for #{relative}: #{CommandOutput.utf8(stderr).strip}"
+          raise "diff failed for #{relative}: #{RunnerText.utf8(stderr).strip}"
         end
 
-        stdout = CommandOutput.utf8(stdout)
+        stdout = RunnerText.utf8(stdout)
         stdout.empty? ? nil : SourceDiff.new(path: relative, diff: stdout, priority: priority(relative))
       end
     end

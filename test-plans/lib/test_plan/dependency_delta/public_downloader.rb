@@ -3,7 +3,7 @@ require "net/http"
 require "tempfile"
 require "uri"
 
-require_relative "../byte_size"
+require_relative "../runner_text"
 
 module TestPlan
   module DependencyDelta
@@ -34,7 +34,7 @@ module TestPlan
                 response.read_body do |chunk|
                   bytes += chunk.bytesize
                   if bytes > MAX_DOWNLOAD_BYTES
-                    raise "Dependency download exceeds #{ByteSize.describe(MAX_DOWNLOAD_BYTES)}: #{url}"
+                    raise "Dependency download exceeds #{RunnerText.human_size(MAX_DOWNLOAD_BYTES)}: #{url}"
                   end
 
                   file.write(chunk)

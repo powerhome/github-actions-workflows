@@ -1,9 +1,9 @@
 #!/usr/bin/env ruby
 
-require_relative "../lib/test_plan/variant"
+require_relative "../lib/test_plan/profile"
 
 begin
-  selection = TestPlan::Variant.select(
+  selection = TestPlan::Profile.select_prompt(
     prompt_path: ENV.fetch("TEST_PLAN_PROMPT_PATH"),
     playbook_prompt_path: ENV["TEST_PLAN_PLAYBOOK_PROMPT_PATH"].to_s,
     dependency_prompt_path: ENV["TEST_PLAN_DEPENDENCY_PROMPT_PATH"].to_s,

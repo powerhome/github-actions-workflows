@@ -1,13 +1,13 @@
 #!/usr/bin/env ruby
 
-require_relative "../lib/test_plan/parser"
-require_relative "../lib/test_plan/dependency/parser"
+require_relative "../lib/test_plan/response/standard_parser"
+require_relative "../lib/test_plan/response/dependency_parser"
 require_relative "../lib/test_plan/output/standard_formatter"
 require_relative "../lib/test_plan/output/dependency_formatter"
 require_relative "../lib/test_plan/output/playbook_formatter"
 require_relative "../lib/test_plan/playbook/kit_facts"
-require_relative "../lib/test_plan/playbook/parser"
-require_relative "../lib/test_plan/variant"
+require_relative "../lib/test_plan/response/playbook_parser"
+require_relative "../lib/test_plan/profile"
 
 begin
   json_path = ENV.fetch("TEST_PLAN_JSON_PATH")
@@ -31,21 +31,21 @@ begin
     generation_warning: generation_warning,
   }
 
-  if variant == TestPlan::Variant::PLAYBOOK
-    parsed = TestPlan::Playbook::Parser.parse_file(json_path)
+  if variant == TestPlan::Profile::PLAYBOOK_PLAN
+    parsed = TestPlan::Response::PlaybookParser.parse_file(json_path)
     # Coverage wording comes from what the action counted. load_file never raises: without
     # facts the plan reads as a sample throughout, which under-claims.
     comment = TestPlan::Output::PlaybookFormatter.new(
       parsed: parsed, kit_facts: TestPlan::Playbook::KitFacts.load_file(kit_facts_path),
       manifest: read_manifest.call, **options
     ).render
-  elsif variant == TestPlan::Variant::DEPENDENCY
-    parsed = TestPlan::Dependency::Parser.parse_file(json_path)
+  elsif variant == TestPlan::Profile::DEPENDENCY_PLAN
+    parsed = TestPlan::Response::DependencyParser.parse_file(json_path)
     comment = TestPlan::Output::DependencyFormatter.new(
       parsed: parsed, manifest: read_manifest.call, **options
     ).render
   else
-    parsed = TestPlan::Parser.parse_file(json_path)
+    parsed = TestPlan::Response::StandardParser.parse_file(json_path)
     comment = TestPlan::Output::StandardFormatter.new(parsed: parsed, **options).render
   end
 

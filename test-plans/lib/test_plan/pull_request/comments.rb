@@ -1,7 +1,7 @@
 require "json"
 require "open3"
 
-require_relative "../command_output"
+require_relative "../runner_text"
 
 module TestPlan
   module PullRequest
@@ -105,7 +105,7 @@ module TestPlan
           # An inline body out of the environment is tagged with the locale's encoding,
           # and JSON.generate on UTF-8 bytes tagged BINARY warns today and raises under
           # json 3.0. Both inline messages contain an em dash.
-          input = JSON.generate("body" => CommandOutput.utf8(body))
+          input = JSON.generate("body" => RunnerText.utf8(body))
         end
 
         stdout = @runner.call(arguments, input)
@@ -117,10 +117,10 @@ module TestPlan
       def capture(arguments, input)
         stdout, stderr, status = Open3.capture3("gh", *arguments, stdin_data: input.to_s)
         unless status.success?
-          raise "gh #{arguments.first(3).join(" ")} failed: #{CommandOutput.utf8(stderr).strip}"
+          raise "gh #{arguments.first(3).join(" ")} failed: #{RunnerText.utf8(stderr).strip}"
         end
 
-        CommandOutput.utf8(stdout)
+        RunnerText.utf8(stdout)
       end
     end
   end

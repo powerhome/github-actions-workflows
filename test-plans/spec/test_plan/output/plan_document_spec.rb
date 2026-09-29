@@ -1,11 +1,11 @@
 require_relative "../../spec_helper"
 
 require "test_plan/output/dependency_formatter"
-require "test_plan/dependency/parser"
+require "test_plan/response/dependency_parser"
 require "test_plan/output/standard_formatter"
-require "test_plan/parser"
+require "test_plan/response/standard_parser"
 require "test_plan/output/playbook_formatter"
-require "test_plan/playbook/parser"
+require "test_plan/response/playbook_parser"
 
 require "json"
 
@@ -20,18 +20,20 @@ RSpec.describe TestPlan::Output::PlanDocument do
   SHAPES = {
     "standard" => lambda do |**options|
       payload = STANDARD_PAYLOAD.merge("feature_areas" => ["not an object", "also not an object"])
-      TestPlan::Output::StandardFormatter.new(parsed: TestPlan::Parser.new(JSON.generate(payload)), **options).render
+      TestPlan::Output::StandardFormatter.new(
+        parsed: TestPlan::Response::StandardParser.new(JSON.generate(payload)), **options
+      ).render
     end,
     "playbook" => lambda do |**options|
       payload = { "kits" => ["not an object", "also not an object"] }
       TestPlan::Output::PlaybookFormatter.new(
-        parsed: TestPlan::Playbook::Parser.new(JSON.generate(payload)), **options
+        parsed: TestPlan::Response::PlaybookParser.new(JSON.generate(payload)), **options
       ).render
     end,
     "dependency" => lambda do |**options|
       payload = { "dependencies" => ["not an object", "also not an object"], "regression_tests" => [] }
       TestPlan::Output::DependencyFormatter.new(
-        parsed: TestPlan::Dependency::Parser.new(JSON.generate(payload)),
+        parsed: TestPlan::Response::DependencyParser.new(JSON.generate(payload)),
         manifest: { "dependencies" => [] }, **options
       ).render
     end,

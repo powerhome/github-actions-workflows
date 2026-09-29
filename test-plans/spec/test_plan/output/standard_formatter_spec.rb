@@ -1,6 +1,6 @@
 require_relative "../../spec_helper"
 require "test_plan/output/standard_formatter"
-require "test_plan/parser"
+require "test_plan/response/standard_parser"
 
 require "json"
 
@@ -35,7 +35,7 @@ RSpec.describe TestPlan::Output::StandardFormatter do
 
   def render(profile: "Cobra Test Plan", warning: "")
     described_class.new(
-      parsed: TestPlan::Parser.new(payload.to_json),
+      parsed: TestPlan::Response::StandardParser.new(payload.to_json),
       pull_request_title: "Reminder Calls migration",
       profile_name: profile,
       generation_warning: warning
@@ -121,7 +121,7 @@ RSpec.describe TestPlan::Output::StandardFormatter do
 
   it "neutralizes a pull-request title the author controls" do
     described = described_class.new(
-      parsed: TestPlan::Parser.new(payload.to_json),
+      parsed: TestPlan::Response::StandardParser.new(payload.to_json),
       pull_request_title: "Fix for @everyone <b>now</b>",
       profile_name: "Cobra Test Plan",
       generation_warning: ""

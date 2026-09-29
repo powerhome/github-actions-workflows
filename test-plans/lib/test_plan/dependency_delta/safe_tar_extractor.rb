@@ -3,7 +3,7 @@ require "pathname"
 require "rubygems/package"
 require "tempfile"
 require "zlib"
-require_relative "../byte_size"
+require_relative "../runner_text"
 require_relative "./public_downloader"
 
 module TestPlan
@@ -28,7 +28,7 @@ module TestPlan
               entry = tar.find { |candidate| candidate.full_name == "data.tar.gz" }
               raise "Gem archive does not contain data.tar.gz" unless entry
               if entry.header.size > PublicDownloader::MAX_DOWNLOAD_BYTES
-                raise "Gem data archive exceeds #{ByteSize.describe(PublicDownloader::MAX_DOWNLOAD_BYTES)}"
+                raise "Gem data archive exceeds #{RunnerText.human_size(PublicDownloader::MAX_DOWNLOAD_BYTES)}"
               end
 
               data_archive.write(entry.read)
@@ -55,7 +55,9 @@ module TestPlan
           # Before metadata entries are skipped: TarReader still inflates and reads past
           # their declared size, so huge PAX payloads would cost unbounded work.
           total_bytes += entry.header.size
-          raise "Archive expands beyond #{ByteSize.describe(MAX_EXTRACTED_BYTES)}" if total_bytes > MAX_EXTRACTED_BYTES
+          if total_bytes > MAX_EXTRACTED_BYTES
+            raise "Archive expands beyond #{RunnerText.human_size(MAX_EXTRACTED_BYTES)}"
+          end
 
           next if PAX_HEADER_TYPEFLAGS.include?(entry.header.typeflag)
 

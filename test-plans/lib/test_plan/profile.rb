@@ -2,6 +2,10 @@ require "json"
 
 module TestPlan
   class Profile
+    STANDARD_PLAN = "".freeze
+    DEPENDENCY_PLAN = "dependency".freeze
+    PLAYBOOK_PLAN = "playbook".freeze
+
     ID_PATTERN = /\A[a-z][a-z0-9-]*\z/
     REQUIRED_STRING_FIELDS = %w[
       id
@@ -37,6 +41,23 @@ module TestPlan
       end
 
       profile
+    end
+
+    # A profile declares the allowed prompts before checkout. Once dependency evidence
+    # exists, choose both the prompt and the response shape from that same declaration.
+    def self.select_prompt(prompt_path:, playbook_prompt_path: "", dependency_prompt_path: "",
+                           playbook_raised: false, change_count: 0)
+      if playbook_raised
+        raise "Playbook prompt required for a Playbook raise" if playbook_prompt_path.to_s.empty?
+
+        return { "name" => PLAYBOOK_PLAN, "prompt_path" => playbook_prompt_path.to_s }
+      end
+
+      if change_count.to_i.positive? && !dependency_prompt_path.to_s.empty?
+        return { "name" => DEPENDENCY_PLAN, "prompt_path" => dependency_prompt_path.to_s }
+      end
+
+      { "name" => STANDARD_PLAN, "prompt_path" => prompt_path.to_s }
     end
 
     def initialize(action_root:, attributes:)

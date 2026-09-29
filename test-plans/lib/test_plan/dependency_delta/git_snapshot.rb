@@ -1,6 +1,6 @@
 require "open3"
 
-require_relative "../command_output"
+require_relative "../runner_text"
 
 module TestPlan
   module DependencyDelta
@@ -57,10 +57,10 @@ module TestPlan
       def git(*args)
         stdout, stderr, status = Open3.capture3("git", *args, chdir: @workspace)
         unless status.success?
-          raise "git #{args.join(" ")} failed: #{CommandOutput.utf8(stderr).strip}"
+          raise "git #{args.join(" ")} failed: #{RunnerText.utf8(stderr).strip}"
         end
 
-        CommandOutput.utf8(stdout)
+        RunnerText.utf8(stdout)
       end
     end
   end

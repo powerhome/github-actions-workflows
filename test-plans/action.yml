@@ -236,7 +236,7 @@ runs:
         TEST_PLAN_DEPENDENCY_PROMPT_PATH: ${{ steps.profile.outputs.dependency_prompt_path }}
         PLAYBOOK_RAISED: ${{ steps.dependency_delta.outputs.playbook_raised }}
         CHANGE_COUNT: ${{ steps.dependency_delta.outputs.change_count }}
-      run: ruby "${{ github.action_path }}/bin/select_variant.rb"
+      run: ruby "${{ github.action_path }}/bin/select_prompt.rb"
 
     - name: Reset agent instructions to the merge base
       if: steps.pr_metadata.outputs.generate == 'true'

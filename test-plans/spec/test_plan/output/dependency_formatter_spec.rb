@@ -1,6 +1,6 @@
 require_relative "../../spec_helper"
 require "test_plan/output/dependency_formatter"
-require "test_plan/dependency/parser"
+require "test_plan/response/dependency_parser"
 
 require "json"
 
@@ -16,7 +16,7 @@ RSpec.describe TestPlan::Output::DependencyFormatter do
 
   def render(payload, warning = "")
     described_class.new(
-      parsed: TestPlan::Dependency::Parser.new(JSON.generate(payload)),
+      parsed: TestPlan::Response::DependencyParser.new(JSON.generate(payload)),
       manifest: manifest, pull_request_title: "Raise dependencies",
       profile_name: "Cobra Test Plan", generation_warning: warning
     ).render
