@@ -3,10 +3,10 @@ require_relative "../playbook/kit_facts"
 require_relative "../playbook/packages"
 
 module TestPlan
-  module Playbook
+  module Output
     # The coverage tier is decided here from the use count rather than taken from the
     # provider, so a sample can never be published as exhaustive.
-    class Formatter
+    class PlaybookFormatter
       include PlanDocument
 
       REGRESSION_BANNER = "**Every kit case below is a regression test.** The Playbook raise " \
@@ -15,7 +15,7 @@ module TestPlan
       NO_OTHER_DEPENDENCIES_MESSAGE = "No other dependency raises in this PR."
 
       def initialize(parsed:, pull_request_title:, profile_name:, generation_warning: "",
-                     kit_facts: KitFacts.none, manifest: { "dependencies" => [] })
+                     kit_facts: Playbook::KitFacts.none, manifest: { "dependencies" => [] })
         @parsed = parsed
         @kit_facts = kit_facts
         @pull_request_title = normalize_text(pull_request_title)
@@ -24,7 +24,7 @@ module TestPlan
         @case_identifiers = build_case_identifiers
         @manifest_dependencies = manifest.fetch("dependencies")
         @playbook_raises, @other_raises = @manifest_dependencies.partition do |entry|
-          PACKAGE_NAMES.include?(entry.fetch("name"))
+          Playbook::PACKAGE_NAMES.include?(entry.fetch("name"))
         end
       end
 
@@ -93,11 +93,11 @@ module TestPlan
             lines << "**What changed:** #{what_changed}"
             lines << ""
           end
-          lines << "**Coverage:** #{KitFacts.sentence(coverage(kit))}"
+          lines << "**Coverage:** #{Playbook::KitFacts.sentence(coverage(kit))}"
           unsearched = systems_not_in_use(kit)
           unless unsearched.empty?
             lines << ""
-            lines << "This upgrade changed the #{KitFacts.systems_label(unsearched)} side of this " \
+            lines << "This upgrade changed the #{Playbook::KitFacts.systems_label(unsearched)} side of this " \
               "kit, but nothing in this repository renders it."
           end
 
@@ -117,7 +117,7 @@ module TestPlan
       def case_metadata(scenario)
         rows = []
         page = sanitize(scenario.fetch("page"))
-        system = KitFacts::SYSTEM_LABELS[scenario.fetch("system")]
+        system = Playbook::KitFacts::SYSTEM_LABELS[scenario.fetch("system")]
         rows << "**Page:** #{page}  " unless page.empty?
         rows << "**System:** #{system}  " if system
         rows.empty? ? ["**Page:** Not identified from this change."] : rows
@@ -183,17 +183,17 @@ module TestPlan
       # there are call sites, since "every use is listed below" would then be false.
       def coverage(kit)
         fact = fact_for(kit)
-        return KitFacts::REPRESENTATIVE unless fact
+        return Playbook::KitFacts::REPRESENTATIVE unless fact
 
-        coverage = fact.fetch("coverage", KitFacts::REPRESENTATIVE)
-        return coverage unless coverage == KitFacts::COMPLETE
-        return KitFacts::REPRESENTATIVE if fact.fetch("call_sites", 0) > kit.fetch("cases").length
+        coverage = fact.fetch("coverage", Playbook::KitFacts::REPRESENTATIVE)
+        return coverage unless coverage == Playbook::KitFacts::COMPLETE
+        return Playbook::KitFacts::REPRESENTATIVE if fact.fetch("call_sites", 0) > kit.fetch("cases").length
 
         coverage
       end
 
       def changed_in(kit)
-        label = KitFacts.systems_label(fact_for(kit)&.fetch("systems_changed") { [] } || [])
+        label = Playbook::KitFacts.systems_label(fact_for(kit)&.fetch("systems_changed") { [] } || [])
         label.empty? ? "" : " — #{label}"
       end
 

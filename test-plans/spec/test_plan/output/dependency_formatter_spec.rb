@@ -4,7 +4,7 @@ require "test_plan/response/dependency_parser"
 
 require "json"
 
-RSpec.describe TestPlan::Dependency::Formatter do
+RSpec.describe TestPlan::Output::DependencyFormatter do
   let(:manifest) do
     { "dependencies" => [
       { "ecosystem" => "yarn", "name" => "widget", "source" => "npm",
@@ -16,7 +16,7 @@ RSpec.describe TestPlan::Dependency::Formatter do
 
   def render(payload, warning = "")
     described_class.new(
-      parsed: TestPlan::Dependency::Parser.new(JSON.generate(payload)),
+      parsed: TestPlan::Response::DependencyParser.new(JSON.generate(payload)),
       manifest: manifest, pull_request_title: "Raise dependencies",
       profile_name: "Cobra Test Plan", generation_warning: warning
     ).render

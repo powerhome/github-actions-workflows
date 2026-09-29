@@ -1,7 +1,7 @@
 require_relative "plan_document"
 
-module TestPlan
-  class Formatter
+module TestPlan::Output
+  class StandardFormatter
     include PlanDocument
 
     NO_MANUAL_QA_MESSAGE = "No manual application QA was identified for this change."

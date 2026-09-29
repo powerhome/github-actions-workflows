@@ -1,11 +1,11 @@
 require "json"
 
-require_relative "agent_payload"
+require_relative "validation"
 
 module TestPlan
-  module Dependency
-    class Parser
-      include AgentPayload
+  module Response
+    class DependencyParser
+      include Validation
 
       attr_reader :dependencies, :regression_tests, :application_checks, :discarded
 

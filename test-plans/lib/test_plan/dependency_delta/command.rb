@@ -1,7 +1,7 @@
 require "json"
 
 require_relative "../playbook/packages"
-require_relative "../output/untrusted_text"
+require_relative "../output/markdown_escaper"
 require_relative "./change_detector"
 require_relative "./dependency_usage"
 require_relative "./generator"
@@ -151,7 +151,7 @@ module TestPlan
       # The summary renders as Markdown and its values come from lockfiles the pull
       # request can edit. Same policy as the comment.
       def escape(value)
-        UntrustedText.escape(value.to_s)
+        Output::MarkdownEscaper.escape(value.to_s)
       end
 
       OTHER_RAISES_HEADING = "# Other dependency raises in this pull request"

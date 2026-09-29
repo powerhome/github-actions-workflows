@@ -3,7 +3,7 @@ require "test_plan/response/dependency_parser"
 
 require "json"
 
-RSpec.describe TestPlan::Dependency::Parser do
+RSpec.describe TestPlan::Response::DependencyParser do
   def parse(payload)
     described_class.new(JSON.generate(payload))
   end

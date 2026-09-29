@@ -2,8 +2,8 @@ require_relative "../../spec_helper"
 
 require "test_plan/output/dependency_formatter"
 require "test_plan/response/dependency_parser"
-require "test_plan/output/formatter"
-require "test_plan/response/parser"
+require "test_plan/output/standard_formatter"
+require "test_plan/response/standard_parser"
 require "test_plan/output/playbook_formatter"
 require "test_plan/response/playbook_parser"
 
@@ -11,7 +11,7 @@ require "json"
 
 # Asserted against every plan shape at once, because the point of sharing these is that
 # no shape can word them differently.
-RSpec.describe TestPlan::PlanDocument do
+RSpec.describe TestPlan::Output::PlanDocument do
   STANDARD_PAYLOAD = {
     "permissions" => { "required" => "no", "roles" => [], "changes" => [], "subject_actions" => [] },
     "feature_areas" => [], "regression_tests" => []
@@ -20,18 +20,18 @@ RSpec.describe TestPlan::PlanDocument do
   SHAPES = {
     "standard" => lambda do |**options|
       payload = STANDARD_PAYLOAD.merge("feature_areas" => ["not an object", "also not an object"])
-      TestPlan::Formatter.new(parsed: TestPlan::Parser.new(JSON.generate(payload)), **options).render
+      TestPlan::Output::StandardFormatter.new(parsed: TestPlan::Response::StandardParser.new(JSON.generate(payload)), **options).render
     end,
     "playbook" => lambda do |**options|
       payload = { "kits" => ["not an object", "also not an object"] }
-      TestPlan::Playbook::Formatter.new(
-        parsed: TestPlan::Playbook::Parser.new(JSON.generate(payload)), **options
+      TestPlan::Output::PlaybookFormatter.new(
+        parsed: TestPlan::Response::PlaybookParser.new(JSON.generate(payload)), **options
       ).render
     end,
     "dependency" => lambda do |**options|
       payload = { "dependencies" => ["not an object", "also not an object"], "regression_tests" => [] }
-      TestPlan::Dependency::Formatter.new(
-        parsed: TestPlan::Dependency::Parser.new(JSON.generate(payload)),
+      TestPlan::Output::DependencyFormatter.new(
+        parsed: TestPlan::Response::DependencyParser.new(JSON.generate(payload)),
         manifest: { "dependencies" => [] }, **options
       ).render
     end,

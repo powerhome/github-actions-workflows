@@ -1,7 +1,7 @@
 require "open3"
 
 require_relative "../command_output"
-require_relative "../output/untrusted_text"
+require_relative "../output/markdown_escaper"
 require_relative "./call_site_sample"
 
 module TestPlan
@@ -29,7 +29,7 @@ module TestPlan
         ]
 
         changes.map(&:name).map(&:to_s).reject(&:empty?).uniq.sort.each do |name|
-          lines.concat(["", "## #{UntrustedText.escape(name.gsub(/\s+/, " "))}", ""])
+          lines.concat(["", "## #{Output::MarkdownEscaper.escape(name.gsub(/\s+/, " "))}", ""])
           matches = paths_for(name)
           if matches.nil?
             lines << "Usage search failed; inspect repository files directly."
@@ -37,7 +37,7 @@ module TestPlan
             lines << "No application source file matched this package name. It may use another import name."
           else
             sampled = CallSiteSample.spread(matches.sort).first(MAX_FILES_PER_PACKAGE)
-            sampled.each { |path| lines << "- #{UntrustedText.escape(path.gsub(/\s+/, " "))}" }
+            sampled.each { |path| lines << "- #{Output::MarkdownEscaper.escape(path.gsub(/\s+/, " "))}" }
             lines << "- ...additional matches omitted" if matches.length > sampled.length
           end
         end
