@@ -9,7 +9,7 @@ RSpec.describe TestPlan::Profile do
 
   it "loads the Cobra profile" do
     profile = described_class.load(
-      action_root: action_root,
+      action_root:,
       profile_id: "cobra-test-plan"
     )
 
@@ -20,11 +20,11 @@ RSpec.describe TestPlan::Profile do
 
   it "rejects unknown and path-traversal profile values" do
     expect do
-      described_class.load(action_root: action_root, profile_id: "missing")
+      described_class.load(action_root:, profile_id: "missing")
     end.to raise_error(RuntimeError, /Unknown/)
 
     expect do
-      described_class.load(action_root: action_root, profile_id: "../cobra-test-plan")
+      described_class.load(action_root:, profile_id: "../cobra-test-plan")
     end.to raise_error(RuntimeError, /Invalid/)
   end
 

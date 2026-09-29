@@ -142,7 +142,7 @@ module TestPlan
         end
 
         def coverage
-          Playbook::KitFacts.coverage(call_sites: call_sites, searchable: searchable?)
+          Playbook::KitFacts.coverage(call_sites:, searchable: searchable?)
         end
 
         # Spread before the slice so the sample buys breadth rather than eight files from

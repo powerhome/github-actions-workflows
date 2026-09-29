@@ -51,7 +51,7 @@ module TestPlan
           changes.concat(
             detecting(path) do
               BundlerChangeDetector.new.detect(
-                path: path,
+                path:,
                 old_content: @snapshot.read(@snapshot.merge_base_sha, path),
                 new_content: @snapshot.read(@snapshot.head_sha, path),
                 direct_names: ruby_direct_names
@@ -64,11 +64,11 @@ module TestPlan
           changes.concat(
             detecting(path) do
               YarnChangeDetector.new.detect(
-                path: path,
+                path:,
                 old_content: @snapshot.read(@snapshot.merge_base_sha, path),
                 new_content: @snapshot.read(@snapshot.head_sha, path),
-                direct_names: direct_names,
-                workspace_names: workspace_names
+                direct_names:,
+                workspace_names:
               )
             end
           )
@@ -96,7 +96,7 @@ module TestPlan
       def detecting(path)
         yield
       rescue => e
-        @problems << LockfileProblem.new(path: path, message: e.message)
+        @problems << LockfileProblem.new(path:, message: e.message)
         []
       end
 
@@ -171,7 +171,7 @@ module TestPlan
 
       def ruby_dependency_names
         paths = @snapshot.paths_at(@snapshot.head_sha, "Gemfile") +
-          @snapshot.paths_at(@snapshot.head_sha, ".gemspec")
+                @snapshot.paths_at(@snapshot.head_sha, ".gemspec")
 
         paths.each_with_object(Set.new) do |path, names|
           content = @snapshot.read(@snapshot.head_sha, path).to_s

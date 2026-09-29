@@ -148,7 +148,7 @@ RSpec.describe TestPlan::DependencyDelta::SafeTarExtractor do
       # size has to count even though nothing is written to disk.
       expect do
         described_class.new.extract_gzip(archive, File.join(directory, "target"))
-      # The message reports the limit actually enforced, not a hard-coded figure.
+        # The message reports the limit actually enforced, not a hard-coded figure.
       end.to raise_error(RuntimeError, /expands beyond 512 bytes/)
     end
   end

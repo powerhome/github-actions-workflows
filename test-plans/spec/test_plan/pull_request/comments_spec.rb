@@ -14,7 +14,7 @@ RSpec.describe TestPlan::PullRequest::Comments do
     end
 
     def call(arguments, input)
-      @calls << { arguments: arguments, input: input && JSON.parse(input) }
+      @calls << { arguments:, input: input && JSON.parse(input) }
       method = arguments[arguments.index("--method") + 1]
       path = arguments[3]
 

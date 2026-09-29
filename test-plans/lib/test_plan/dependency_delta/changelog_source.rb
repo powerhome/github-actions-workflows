@@ -54,8 +54,8 @@ module TestPlan
 
         [
           SourceDiff.new(
-            path: path,
-            diff: diff,
+            path:,
+            diff:,
             context_diff: truncate(diff),
             priority: SourceDiffBuilder::PRIORITY_CHANGELOG
           ),
@@ -107,7 +107,7 @@ module TestPlan
           [repository, [path, *candidate_paths(nil)].compact.uniq]
         when "git"
           repository = GitLocator.repository(change.new_locator) ||
-            GitLocator.repository(change.old_locator)
+                       GitLocator.repository(change.old_locator)
           [repository, candidate_paths(nil)]
         else
           [nil, []]

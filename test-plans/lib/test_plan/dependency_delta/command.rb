@@ -23,16 +23,16 @@ module TestPlan
       def run
         workspace = ENV.fetch("GITHUB_WORKSPACE")
         snapshot = GitSnapshot.new(
-          workspace: workspace,
+          workspace:,
           base_sha: ENV.fetch("BASE_SHA"),
           head_sha: ENV.fetch("HEAD_SHA")
         )
         detector = ChangeDetector.new(snapshot, scope: ENV.fetch("DEPENDENCY_SCOPE", "umbrella"))
         changes = detector.detect
-        kit_usage = PlaybookKitUsage.new(workspace: workspace)
+        kit_usage = PlaybookKitUsage.new(workspace:)
         result = Generator.new(
-          changes: changes,
-          kit_usage: kit_usage,
+          changes:,
+          kit_usage:,
           problems: detector.problems,
           out_of_scope: detector.out_of_scope
         ).generate
@@ -44,7 +44,7 @@ module TestPlan
         File.write(full_path, result.fetch(:full), encoding: Encoding::UTF_8)
         File.write(context_path, result.fetch(:context), encoding: Encoding::UTF_8)
         File.write(
-          ENV.fetch("DEPENDENCY_USAGE_PATH"), DependencyUsage.new(workspace: workspace).report(changes),
+          ENV.fetch("DEPENDENCY_USAGE_PATH"), DependencyUsage.new(workspace:).report(changes),
           encoding: Encoding::UTF_8
         )
 
@@ -158,8 +158,8 @@ module TestPlan
 
       def other_raises_section(changes)
         others = changes
-          .reject { |change| Playbook::PACKAGE_NAMES.include?(change.name) }
-          .sort_by(&:name)
+                 .reject { |change| Playbook::PACKAGE_NAMES.include?(change.name) }
+                 .sort_by(&:name)
         return "\n#{OTHER_RAISES_HEADING}\n\nNone.\n" if others.empty?
 
         lines = others.map { |c| "- #{c.name} #{c.old_version} -> #{c.new_version}" }

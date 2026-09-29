@@ -8,7 +8,7 @@ require "tmpdir"
 
 RSpec.describe TestPlan::DependencyDelta::DependencyUsage do
   def change(name)
-    TestPlan::DependencyDelta::Change.new(name: name)
+    TestPlan::DependencyDelta::Change.new(name:)
   end
 
   # git grep answers from the index, so the files only have to be added, not committed.

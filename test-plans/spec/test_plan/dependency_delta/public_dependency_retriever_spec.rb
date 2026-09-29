@@ -51,7 +51,7 @@ RSpec.describe TestPlan::DependencyDelta::PublicRetriever do
   end
 
   def retriever(downloader)
-    described_class.new(downloader: downloader, extractor: NullExtractor.new)
+    described_class.new(downloader:, extractor: NullExtractor.new)
   end
 
   def npm_change(locator:, integrity:)
@@ -95,7 +95,7 @@ RSpec.describe TestPlan::DependencyDelta::PublicRetriever do
       integrity: nil
     )
 
-    chunks = described_class.new(downloader: downloader, extractor: extractor).retrieve(change)
+    chunks = described_class.new(downloader:, extractor:).retrieve(change)
 
     expect(chunks.map(&:path)).to eq(["lib/widget.js"])
     expect(chunks.first.diff).to include("a/lib/widget.js", "b/lib/widget.js")
@@ -114,7 +114,7 @@ RSpec.describe TestPlan::DependencyDelta::PublicRetriever do
       integrity: nil
     )
 
-    chunks = described_class.new(downloader: downloader, extractor: extractor).retrieve(change)
+    chunks = described_class.new(downloader:, extractor:).retrieve(change)
 
     # Descending into the new side's lone "lib/" would have offset the roots and
     # reported every file as removed and re-added.
@@ -133,7 +133,7 @@ RSpec.describe TestPlan::DependencyDelta::PublicRetriever do
       new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
     )
 
-    chunks = described_class.new(downloader: downloader, extractor: extractor).retrieve(change)
+    chunks = described_class.new(downloader:, extractor:).retrieve(change)
 
     expect(chunks.map(&:path)).to eq(["lib/widget.rb"])
     expect(chunks.first.diff).to include("a/lib/widget.rb", "b/lib/widget.rb")

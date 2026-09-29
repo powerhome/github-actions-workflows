@@ -128,8 +128,8 @@ module TestPlan
             "warning_count" => entries.count { |entry| incomplete?(entry) } +
               lockfile_warnings.length,
           },
-          full: full,
-          context: context,
+          full:,
+          context:,
           kit_usage: @kit_usage.report,
         }
       end
@@ -235,8 +235,8 @@ module TestPlan
 
             group.each do |change|
               related[change.key] = (group - [change])
-                .map { |other| "#{other.ecosystem}:#{other.name}" }
-                .sort
+                                    .map { |other| "#{other.ecosystem}:#{other.name}" }
+                                    .sort
             end
           end
       end
@@ -278,7 +278,6 @@ module TestPlan
         end
         omitted
       end
-
     end
   end
 end

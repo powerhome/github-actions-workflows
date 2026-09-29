@@ -42,7 +42,7 @@ RSpec.describe TestPlan::TrustedAgentInstructions do
       git(root, "commit", "--allow-empty", "-m", "head")
       head_sha = git(root, "rev-parse", "HEAD").strip
 
-      yield root, described_class.new(root: root, base_sha: base_sha, head_sha: head_sha)
+      yield root, described_class.new(root:, base_sha:, head_sha:)
     end
   end
 
@@ -278,7 +278,7 @@ RSpec.describe TestPlan::TrustedAgentInstructions do
       base_sha = git(root, "rev-parse", "HEAD").strip
 
       git(root, "checkout", "feature")
-      result = described_class.new(root: root, base_sha: base_sha, head_sha: head_sha).run
+      result = described_class.new(root:, base_sha:, head_sha:).run
 
       expect(result.restored).to be_empty
       expect(File.read(File.join(root, "AGENTS.md"))).to eq("Fork-point harness.\n")

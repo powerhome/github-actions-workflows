@@ -48,7 +48,7 @@ module TestPlan
         end
       end
 
-      Result.new(restored: restored, removed: removed)
+      Result.new(restored:, removed:)
     end
 
     def merge_base_sha
@@ -67,7 +67,7 @@ module TestPlan
           # Cursor follows the link and reads whatever the pull request put there.
           if File.symlink?(path)
             paths << relative if self.class.instruction_path?(relative) ||
-              DIRECTORY_NAMES.include?(File.basename(path))
+                                 DIRECTORY_NAMES.include?(File.basename(path))
             next
           end
 
@@ -83,7 +83,7 @@ module TestPlan
 
     def base_paths
       @base_paths ||= git("ls-tree", "-r", "--name-only", merge_base_sha)
-        .lines.map(&:chomp).select { |path| self.class.instruction_path?(path) }
+                      .lines.map(&:chomp).select { |path| self.class.instruction_path?(path) }
     end
 
     def read_base(relative)

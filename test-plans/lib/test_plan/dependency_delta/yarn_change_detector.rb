@@ -33,7 +33,9 @@ module TestPlan
         added = new_versions - old_versions
 
         added.filter_map do |new_version|
-          old_version = removed.select { |candidate| version(candidate) < version(new_version) }.max_by { |candidate| version(candidate) }
+          old_version = removed.select { |candidate|
+            version(candidate) < version(new_version)
+          }.max_by { |candidate| version(candidate) }
           next unless old_version
 
           old_record = old_records.find { |record| record.version == old_version }
@@ -42,15 +44,15 @@ module TestPlan
 
           Change.new(
             ecosystem: "yarn",
-            name: name,
-            old_version: old_version,
-            new_version: new_version,
+            name:,
+            old_version:,
+            new_version:,
             source: "npm",
             old_locator: old_record&.resolved,
             new_locator: new_record&.resolved,
             old_integrity: old_record&.integrity,
             new_integrity: new_record&.integrity,
-            direct: direct,
+            direct:,
             lockfiles: [path]
           )
         rescue ArgumentError
@@ -67,13 +69,13 @@ module TestPlan
 
           Change.new(
             ecosystem: "yarn",
-            name: name,
+            name:,
             old_version: git_revision(old_record.resolved),
             new_version: git_revision(new_record.resolved),
             source: "git",
             old_locator: old_record.resolved,
             new_locator: new_record.resolved,
-            direct: direct,
+            direct:,
             lockfiles: [path]
           )
         end
@@ -125,13 +127,13 @@ module TestPlan
         [
           Change.new(
             ecosystem: "yarn",
-            name: name,
+            name:,
             old_version: old_git ? git_revision(old_record.resolved) : old_record.version,
             new_version: new_git ? git_revision(new_record.resolved) : new_record.version,
             source: "mixed",
             old_locator: old_record.resolved,
             new_locator: new_record.resolved,
-            direct: direct,
+            direct:,
             lockfiles: [path]
           ),
         ]

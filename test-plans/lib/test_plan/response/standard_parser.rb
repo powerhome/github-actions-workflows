@@ -147,6 +147,5 @@ module TestPlan::Response
         }
       end
     end
-
   end
 end

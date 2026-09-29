@@ -8,7 +8,7 @@ module TestPlan
   # than trusted. Invalid bytes are replaced: one malformed file is not worth the rest of
   # the evidence.
   module CommandOutput
-    module_function
+  module_function
 
     def utf8(text)
       text.to_s.dup.force_encoding(Encoding::UTF_8).scrub

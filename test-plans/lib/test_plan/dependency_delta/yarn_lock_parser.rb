@@ -29,9 +29,9 @@ module TestPlan
               output << YarnRecord.new(
                 name: installed,
                 alias: requested,
-                version: version,
-                resolved: resolved,
-                integrity: integrity
+                version:,
+                resolved:,
+                integrity:
               )
             end
           end

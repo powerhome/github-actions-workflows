@@ -20,7 +20,8 @@ RSpec.describe TestPlan::Output::PlanDocument do
   SHAPES = {
     "standard" => lambda do |**options|
       payload = STANDARD_PAYLOAD.merge("feature_areas" => ["not an object", "also not an object"])
-      TestPlan::Output::StandardFormatter.new(parsed: TestPlan::Response::StandardParser.new(JSON.generate(payload)), **options).render
+      TestPlan::Output::StandardFormatter.new(parsed: TestPlan::Response::StandardParser.new(JSON.generate(payload)),
+                                              **options).render
     end,
     "playbook" => lambda do |**options|
       payload = { "kits" => ["not an object", "also not an object"] }
@@ -39,7 +40,7 @@ RSpec.describe TestPlan::Output::PlanDocument do
 
   def render(shape, profile_name: "Cobra Test Plan", pull_request_title: "Raise dependencies", warning: "")
     SHAPES.fetch(shape).call(
-      pull_request_title: pull_request_title, profile_name: profile_name, generation_warning: warning
+      pull_request_title:, profile_name:, generation_warning: warning
     )
   end
 

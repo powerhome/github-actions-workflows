@@ -15,9 +15,9 @@ begin
 
   result =
     case mode
-    when "upsert" then poster.upsert(tag: tag, body: body)
-    when "create" then poster.create(body: body)
-    when "delete" then poster.delete(tag: tag)
+    when "upsert" then poster.upsert(tag:, body:)
+    when "create" then poster.create(body:)
+    when "delete" then poster.delete(tag:)
     else raise "Unknown comment mode: #{mode.inspect} (expected upsert, create or delete)"
     end
 

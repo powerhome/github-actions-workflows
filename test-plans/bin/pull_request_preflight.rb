@@ -11,7 +11,7 @@ begin
     repository: ENV.fetch("GITHUB_REPOSITORY"),
     pull_request_number: ENV.fetch("PR_NUMBER")
   )
-  result = TestPlan::PullRequest::Preflight.new(client: client).run
+  result = TestPlan::PullRequest::Preflight.new(client:).run
 
   File.open(ENV.fetch("GITHUB_OUTPUT"), "a", encoding: Encoding::UTF_8) do |output|
     output.puts("base_sha=#{result.fetch("baseRefOid")}")

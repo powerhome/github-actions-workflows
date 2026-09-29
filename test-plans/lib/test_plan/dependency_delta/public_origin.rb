@@ -8,7 +8,7 @@ module TestPlan
     # different project while reading as though it belongs, which is worse than no
     # evidence. Stated once, because every caller resolving to something public comes here.
     module PublicOrigin
-      module_function
+    module_function
 
       PUBLIC_RUBYGEMS_HOSTS = %w[rubygems.org].freeze
       # registry.yarnpkg.com is an alias of registry.npmjs.org.

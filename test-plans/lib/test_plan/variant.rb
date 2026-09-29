@@ -7,7 +7,7 @@ module TestPlan
     DEPENDENCY = "dependency".freeze
     DEFAULT = "".freeze
 
-    module_function
+  module_function
 
     def select(prompt_path:, playbook_prompt_path: "", dependency_prompt_path: "",
                playbook_raised: false, change_count: 0)

@@ -54,12 +54,12 @@ RSpec.describe "ai/providers/cursor.sh" do
       stdout, stderr, status = Open3.capture3(env, "bash", script, unsetenv_others: false)
 
       yield(
-        status: status,
-        stdout: stdout,
-        stderr: stderr,
+        status:,
+        stdout:,
+        stderr:,
         output: File.exist?(json_path) ? File.read(json_path) : nil,
         agent_args: File.exist?(args_path) ? File.read(args_path).split("\n") : [],
-        workspace: workspace
+        workspace:
       )
     end
   end
@@ -151,11 +151,11 @@ RSpec.describe "ai/providers/cursor.sh" do
       _stdout, stderr, status = Open3.capture3(env, "bash", script, unsetenv_others: false)
 
       yield(
-        status: status,
-        stderr: stderr,
+        status:,
+        stderr:,
         output: File.exist?(json_path) ? File.read(json_path) : nil,
         installed: File.join(home, ".local", "bin", "agent"),
-        temp: temp
+        temp:
       )
     end
   end
