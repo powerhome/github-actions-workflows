@@ -182,57 +182,45 @@ RSpec.describe TestPlan::DependencyDelta::BundlerChangeDetector do
     )
   end
 
-  it "ignores decreases and removals" do
+  it "reports decreases in both directions of the same lockfile pair" do
     changes = described_class.new.detect(
       path: "Gemfile.lock",
       old_content: new_lock,
       new_content: old_lock
     )
-    expect(changes.map(&:name)).to eq(["git_tool"])
+    expect(changes.map(&:name)).to contain_exactly("direct_gem", "transitive_gem", "git_tool")
   end
 
-  describe "Playbook alpha builds" do
-    def lock(name, version)
+  describe "version decreases" do
+    def lock(version)
       <<~LOCK
         GEM
           remote: https://rubygems.org/
           specs:
-            #{name} (#{version})
+            widget (#{version})
 
         DEPENDENCIES
-          #{name}
+          widget
       LOCK
     end
 
-    def detect(name, from, to)
-      described_class.new.detect(
-        path: "Gemfile.lock", old_content: lock(name, from), new_content: lock(name, to)
-      )
+    def detect(from, to)
+      described_class.new.detect(path: "Gemfile.lock", old_content: lock(from), new_content: lock(to))
     end
 
-    let(:alpha) { "18.0.0.pre.alpha.play2430fixglobalprops19574" }
-
-    it "reports an alpha that sorts below the installed release candidate" do
-      changes = detect("playbook_ui", "18.1.0.pre.rc.1", alpha)
+    it "reports a gem that moved to a lower version" do
+      changes = detect("2.0.0", "1.0.0")
 
       expect(changes.length).to eq(1)
-      expect(changes.first).to have_attributes(old_version: "18.1.0.pre.rc.1", new_version: alpha)
+      expect(changes.first).to have_attributes(old_version: "2.0.0", new_version: "1.0.0")
     end
 
-    it "reports an alpha replacing the release it was branched from" do
-      expect(detect("playbook_ui", "18.0.0", alpha).length).to eq(1)
+    it "reports a prerelease that sorts below the release it replaces" do
+      expect(detect("18.1.0.pre.rc.1", "18.0.0.pre.alpha.x1").length).to eq(1)
     end
 
-    it "reports one alpha replacing another whatever their order" do
-      expect(detect("playbook_ui", "18.0.0.pre.alpha.zzz9", alpha).length).to eq(1)
-    end
-
-    it "does not report an unchanged alpha" do
-      expect(detect("playbook_ui", alpha, alpha)).to be_empty
-    end
-
-    it "still ignores a lower version for any other gem" do
-      expect(detect("widget", "2.0.0", "1.0.0.pre.alpha.x")).to be_empty
+    it "does not report an unchanged version" do
+      expect(detect("1.0.0", "1.0.0")).to be_empty
     end
   end
 end

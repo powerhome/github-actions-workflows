@@ -161,7 +161,7 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     expect(changes).to be_empty
   end
 
-  it "ignores decreases and removals" do
+  it "reports decreases but ignores removals" do
     old_lock = <<~LOCK
       downgraded@^2.0.0:
         version "2.0.0"
@@ -185,7 +185,7 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
       workspace_names: Set.new
     )
 
-    expect(changes).to be_empty
+    expect(changes.map(&:name)).to eq(["downgraded"])
   end
 
   it "detects a Git revision change when the declared version is unchanged" do
@@ -244,40 +244,43 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     )
   end
 
-  describe "Playbook alpha builds" do
-    def lock(name, version)
-      <<~LOCK
-        #{name}@#{version}:
-          version "#{version}"
-          resolved "https://registry.npmjs.org/#{name}/-/#{name}-#{version}.tgz"
-      LOCK
+  describe "several versions of one package" do
+    def lock(*versions)
+      versions.map do |version|
+        <<~ENTRY
+          widget@#{version}:
+            version "#{version}"
+            resolved "https://registry.npmjs.org/widget/-/widget-#{version}.tgz"
+        ENTRY
+      end.join("\n")
     end
 
-    def detect(name, from, to)
+    def detect(from, to)
       described_class.new.detect(
         path: "yarn.lock",
-        old_content: lock(name, from),
-        new_content: lock(name, to),
-        direct_names: Set[name],
+        old_content: lock(*from),
+        new_content: lock(*to),
+        direct_names: Set["widget"],
         workspace_names: Set.new
       )
     end
 
-    let(:alpha) { "18.0.0-alpha.play2430fixglobalprops19574" }
+    it "pairs a new version with the closest lower one that went away" do
+      changes = detect(%w[1.0.0 1.5.0 3.0.0], %w[2.0.0 3.0.0])
 
-    it "reports an alpha that sorts below the installed release candidate" do
-      changes = detect("playbook-ui", "18.1.0-rc.1", alpha)
-
-      expect(changes.length).to eq(1)
-      expect(changes.first).to have_attributes(old_version: "18.1.0-rc.1", new_version: alpha)
+      expect(changes.map { |change| [change.old_version, change.new_version] }).to eq([%w[1.5.0 2.0.0]])
     end
 
-    it "reports one alpha replacing another whatever their order" do
-      expect(detect("playbook-ui", "18.0.0-alpha.zzz9", alpha).length).to eq(1)
+    it "pairs a lower version with the version it replaced" do
+      changes = detect(%w[2.0.0], %w[1.0.0])
+
+      expect(changes.map { |change| [change.old_version, change.new_version] }).to eq([%w[2.0.0 1.0.0]])
     end
 
-    it "still ignores a lower version for any other package" do
-      expect(detect("widget", "2.0.0", "1.0.0-alpha.x")).to be_empty
+    it "pairs a lower version with the nearest higher one when nothing lower went away" do
+      changes = detect(%w[2.0.0 4.0.0], %w[1.0.0])
+
+      expect(changes.map(&:old_version)).to eq(["2.0.0"])
     end
   end
 end
