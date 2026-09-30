@@ -67,7 +67,7 @@ RSpec.describe "bin/render_test_plan.rb" do
     expect(output).not_to include("## Application Compatibility Checks")
   end
 
-  it "renders a Playbook raise with no changed kit" do
+  it "renders a Playbook change with no changed kit" do
     output = render(
       variant: "playbook",
       payload: { "kits" => [], "regression_tests" => [

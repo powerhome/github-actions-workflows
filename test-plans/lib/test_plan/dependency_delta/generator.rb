@@ -63,7 +63,7 @@ module TestPlan
             "version" => 1,
             "dependencies" => entries,
             "lockfile_warnings" => lockfile_warnings,
-            # Recorded, so a reader can find a raise they know landed.
+            # Recorded, so a reader can find a change they know landed.
             "out_of_scope" => @out_of_scope.map { |change| out_of_scope_entry(change) },
             # Only what cost evidence, which is not everything that warned: build output
             # kept out of a linked release, and a full artifact with room left in the

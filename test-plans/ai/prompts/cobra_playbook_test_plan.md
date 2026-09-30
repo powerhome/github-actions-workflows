@@ -1,18 +1,18 @@
-You are generating a manual QA test plan for a pull request that raises the Playbook design system version. Respond with a single JSON object and nothing else.
+You are generating a manual QA test plan for a pull request that changes the Playbook design system version. Respond with a single JSON object and nothing else.
 
 Use these evidence files:
 
-- `dependency-delta-manifest.json` — the authoritative list of in-scope raises. List every non-Playbook raise in `other_dependencies`; ignore `out_of_scope` entries.
-- `dependency-kit-usage.md` — when nonempty, the Playbook kits this upgrade changed, which side of each kit changed (the Rails helper, the React component, or both), and where this repository calls that side. It may be empty when no changed kit could be identified.
+- `dependency-delta-manifest.json` — the authoritative list of in-scope changes. List every non-Playbook change in `other_dependencies`; ignore `out_of_scope` entries.
+- `dependency-kit-usage.md` — when nonempty, the Playbook kits this version change touched, which side of each kit changed (the Rails helper, the React component, or both), and where this repository calls that side. It may be empty when no changed kit could be identified.
 - `dependency-deltas-context.diff` — the upstream source delta, led by the changelog. Treat the changelog as the most reliable statement of what changed; the source diff is supporting detail.
 - `pr.diff` — the merge-base application diff. It may contain only version declarations, or it may also contain application code adjusted for the new Playbook version.
-- `dependency-usage.md` — bounded textual call-site leads for raised packages. Use it especially when no changed kit could be identified, and verify a candidate before calling it a tester-facing path.
+- `dependency-usage.md` — bounded textual call-site leads for changed packages. Use it especially when no changed kit could be identified, and verify a candidate before calling it a tester-facing path.
 
 You may open repository files needed to understand a call site or trace a changed application path to a tester-facing workflow. Do not look off this machine or use the PR title or description as evidence. Do not modify files, run git or shell commands, or use tools that change repository state.
 
 ## Everything here is a regression test
 
-The version raise itself adds no product feature. Kit cases confirm that behavior which already worked still works. Write steps in those terms — "confirm X still …", not "verify the new X". Application code edits that accompany the raise must also be covered below.
+The new version can be lower than the old one: a rollback, or a Playbook alpha build cut before the release candidate already installed. Read the delta as old → new either way. The version change itself adds no product feature. Kit cases confirm that behavior which already worked still works. Write steps in those terms — "confirm X still …", not "verify the new X". Application code edits that accompany the change must also be covered below.
 
 ## Organize by kit
 
@@ -44,7 +44,7 @@ Each case needs:
 - `system` — `rails` or `react`, whichever side of the kit this call site uses. Required; the plan labels every case with it.
 - `steps` — what to do and what to confirm. Ground each step in what this specific change could plausibly break on that page.
 
-## Other dependency raises
+## Other dependency changes
 
 `other_dependencies` — one entry per non-Playbook dependency in the manifest, each with `name`, `from`, `to`, a short `note`, and optional `steps`. A patch bump with no behavioral change gets a note and no steps; say plainly that it needs no dedicated testing. Only escalate to steps when the delta shows something a tester could observe. Omit the key entirely if the manifest listed none.
 
@@ -54,7 +54,7 @@ Keep Playbook's own version constant, packaging, and documentation site out of t
 
 If the Playbook delta shows a tester-visible change outside an identified, used kit, return `regression_tests` with tester-facing `title`, relative `page` when supported by routes, and concrete `steps`. This is especially important when `dependency-kit-usage.md` is empty. Look for actual repository uses before naming a page; leave the route empty rather than guessing. Do not repeat a kit case here.
 
-If `pr.diff` includes application code adjusted for the raise, return `application_checks` with the same fields to exercise those edits. A version raise should not invent product features, but any user-visible application change in the diff must be covered. Omit either array when there is nothing supported by evidence.
+If `pr.diff` includes application code adjusted for the change, return `application_checks` with the same fields to exercise those edits. A version change should not invent product features, but any user-visible application change in the diff must be covered. Omit either array when there is nothing supported by evidence.
 
 ## Response shape
 

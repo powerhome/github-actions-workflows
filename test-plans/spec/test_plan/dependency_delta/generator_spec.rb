@@ -429,7 +429,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
   end
 
-  # Recorded rather than looking like a raise the run missed, but it cost no evidence.
+  # Recorded rather than looking like a change the run missed, but it cost no evidence.
   it "records the dependencies it skipped without counting them as warnings" do
     skipped = TestPlan::DependencyDelta::Change.new(
       ecosystem: "bundler", name: "minitest", old_version: "5.25.5", new_version: "6.0.6",

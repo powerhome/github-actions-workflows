@@ -93,7 +93,7 @@ module TestPlan
       def unbounded_notice(change)
         "[These notes were read from the default branch, because this project commits " \
           "its changelog after tagging a release. Entries for releases later than " \
-          "#{change.new_version} may appear below and are not part of this upgrade.]\n\n"
+          "#{change.new_version} may appear below and are not part of this change.]\n\n"
       end
 
       # npm records the repository and a monorepo's subdirectory. RubyGems exposes it

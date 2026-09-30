@@ -76,7 +76,7 @@ module TestPlan
           )
         end
 
-        return unless new_spec.version > old_spec.version
+        return if new_spec.version == old_spec.version
 
         Change.new(
           ecosystem: "bundler",

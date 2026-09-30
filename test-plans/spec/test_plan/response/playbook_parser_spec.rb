@@ -75,7 +75,7 @@ RSpec.describe TestPlan::Response::PlaybookParser do
       .kits.first.fetch("code")).to eq("FIL")
   end
 
-  it "reads the dependency raises beyond the kits" do
+  it "reads the dependency changes beyond the kits" do
     parsed = parse(
       "other_dependencies" => [{ "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2", "note" => "Patch bump." }]
     )
@@ -83,7 +83,7 @@ RSpec.describe TestPlan::Response::PlaybookParser do
     expect(parsed.other_dependencies.first).to include("name" => "cgi", "from" => "0.5.1", "to" => "0.5.2")
   end
 
-  it "treats the dependency raises as optional" do
+  it "treats the dependency changes as optional" do
     expect(parse.other_dependencies).to be_empty
   end
 

@@ -24,7 +24,7 @@ RSpec.describe TestPlan::Output::DependencyFormatter do
     ).render
   end
 
-  it "lists every manifest raise and uses provider notes only for exact matches" do
+  it "lists every manifest change and uses provider notes only for exact matches" do
     output = render(
       "dependencies" => [
         { "ecosystem" => "yarn", "name" => "widget", "from" => "1.0.0",
@@ -39,7 +39,7 @@ RSpec.describe TestPlan::Output::DependencyFormatter do
     expect(output).to include("Confirm clearing the menu restores its default state.")
     expect(output).to include("**cgi (bundler) 0.5.1 → 0.5.2**")
     expect(output).to include("Upstream delta unavailable")
-    expect(output).not_to include("Other dependency raises", "Applicable Functional Cases")
+    expect(output).not_to include("Other dependency changes", "Applicable Functional Cases")
   end
 
   # Nothing was retrieved, or something was and the response said nothing about it.
@@ -50,7 +50,7 @@ RSpec.describe TestPlan::Output::DependencyFormatter do
     expect(output).to include("**cgi (bundler) 0.5.1 → 0.5.2** — Upstream delta unavailable")
   end
 
-  # Matching on the manifest's internal `source` enum would cost this raise its note.
+  # Matching on the manifest's internal `source` enum would cost this change its note.
   it "attaches a note that did not echo the manifest's source" do
     output = render(
       "dependencies" => [
@@ -63,7 +63,7 @@ RSpec.describe TestPlan::Output::DependencyFormatter do
     expect(output).to include("**widget (yarn) 1.0.0 → 2.0.0** — The menu changed.")
   end
 
-  it "falls back when the response named a version this pull request did not raise" do
+  it "falls back when the response named a version this pull request did not change" do
     output = render(
       "dependencies" => [
         { "ecosystem" => "yarn", "name" => "widget", "from" => "1.0.0", "to" => "9.9.9", "note" => "Invented." },
@@ -95,7 +95,7 @@ RSpec.describe TestPlan::Output::DependencyFormatter do
   end
 
   # Dropped out loud: a plan publishing fewer cases than were generated reads as complete.
-  it "drops a regression test naming an unraised dependency and says so" do
+  it "drops a regression test naming an unchanged dependency and says so" do
     output = render(
       "dependencies" => [],
       "regression_tests" => [

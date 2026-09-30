@@ -26,7 +26,7 @@ module TestPlan
 
       # Component Gemfile.lock files can resolve gems used only by that component's test
       # suite, where a component yarn.lock resolves code the application serves -- so
-      # every changed yarn.lock is in scope, and a Playbook raise always is.
+      # every changed yarn.lock is in scope, and a Playbook change always is.
       ROOT_GEM_LOCKFILE = "Gemfile.lock"
       SCOPES = %w[umbrella all].freeze
 

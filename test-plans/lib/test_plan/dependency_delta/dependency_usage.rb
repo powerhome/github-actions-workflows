@@ -44,7 +44,7 @@ module TestPlan
           end
         end
 
-        lines << "\nNo in-scope dependency raises were found." if changes.empty?
+        lines << "\nNo in-scope dependency changes were found." if changes.empty?
         "#{lines.join("\n")}\n"
       end
 

@@ -55,7 +55,7 @@ module TestPlan
         report += other_raises_section(changes) unless report.empty?
         File.write(kit_usage_path, report, encoding: Encoding::UTF_8)
 
-        # Written whatever the raise was, so the render step always has a file to read.
+        # Written whatever the change was, so the render step always has a file to read.
         # Outside the workspace deliberately: the provider reads the workspace with
         # Read(**), and this carries the call-site counts withheld from it so it has no
         # number to copy back.
@@ -156,7 +156,7 @@ module TestPlan
         Output::MarkdownEscaper.escape(value.to_s)
       end
 
-      OTHER_RAISES_HEADING = "# Other dependency raises in this pull request"
+      OTHER_RAISES_HEADING = "# Other dependency changes in this pull request"
 
       def other_raises_section(changes)
         others = changes
@@ -186,7 +186,7 @@ module TestPlan
 
       def summarize_dependencies(summary, dependencies)
         if dependencies.empty?
-          summary.puts("No raised external Bundler or Yarn dependencies were detected.")
+          summary.puts("No changed external Bundler or Yarn dependencies were detected.")
           return
         end
 
@@ -226,7 +226,7 @@ module TestPlan
         return if out_of_scope.empty?
 
         summary.puts(
-          "- #{out_of_scope.length} raised #{out_of_scope.length == 1 ? "dependency" : "dependencies"} " \
+          "- #{out_of_scope.length} changed #{out_of_scope.length == 1 ? "dependency" : "dependencies"} " \
             "reached no root Gemfile.lock and were not analyzed"
         )
         out_of_scope.each do |entry|

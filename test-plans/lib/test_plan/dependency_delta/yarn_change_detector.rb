@@ -35,9 +35,9 @@ module TestPlan
         added = new_versions - old_versions
 
         added.filter_map do |new_version|
-          old_version = removed.select { |candidate|
-            version(candidate) < version(new_version)
-          }.max_by { |candidate| version(candidate) }
+          lower, higher = removed.partition { |candidate| version(candidate) < version(new_version) }
+          old_version = lower.max_by { |candidate| version(candidate) } ||
+                        higher.min_by { |candidate| version(candidate) }
           next unless old_version
 
           old_record = old_records.find { |record| record.version == old_version }
@@ -116,7 +116,7 @@ module TestPlan
         return [] if old_records.empty? || new_records.empty?
 
         # One name can carry both npm and Git selectors at once, so asking whether any
-        # record is Git reported a transition on top of the real raise. A transition is
+        # record is Git reported a transition on top of the real change. A transition is
         # only readable when each side is entirely one kind.
         return [] unless uniform?(old_records) && uniform?(new_records)
 
