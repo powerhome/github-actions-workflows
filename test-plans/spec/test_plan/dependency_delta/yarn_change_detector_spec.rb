@@ -243,4 +243,41 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
       new_version: "bbbbbbb"
     )
   end
+
+  describe "Playbook alpha builds" do
+    def lock(name, version)
+      <<~LOCK
+        #{name}@#{version}:
+          version "#{version}"
+          resolved "https://registry.npmjs.org/#{name}/-/#{name}-#{version}.tgz"
+      LOCK
+    end
+
+    def detect(name, from, to)
+      described_class.new.detect(
+        path: "yarn.lock",
+        old_content: lock(name, from),
+        new_content: lock(name, to),
+        direct_names: Set[name],
+        workspace_names: Set.new
+      )
+    end
+
+    let(:alpha) { "18.0.0-alpha.play2430fixglobalprops19574" }
+
+    it "reports an alpha that sorts below the installed release candidate" do
+      changes = detect("playbook-ui", "18.1.0-rc.1", alpha)
+
+      expect(changes.length).to eq(1)
+      expect(changes.first).to have_attributes(old_version: "18.1.0-rc.1", new_version: alpha)
+    end
+
+    it "reports one alpha replacing another whatever their order" do
+      expect(detect("playbook-ui", "18.0.0-alpha.zzz9", alpha).length).to eq(1)
+    end
+
+    it "still ignores a lower version for any other package" do
+      expect(detect("widget", "2.0.0", "1.0.0-alpha.x")).to be_empty
+    end
+  end
 end

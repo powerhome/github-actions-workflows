@@ -2,6 +2,7 @@
 
 require "bundler"
 require "set"
+require_relative "../playbook/packages"
 require_relative "./change"
 
 module TestPlan
@@ -76,7 +77,11 @@ module TestPlan
           )
         end
 
-        return unless new_spec.version > old_spec.version
+        if Playbook.alpha_build?(name, new_spec.version.to_s)
+          return if new_spec.version == old_spec.version
+        elsif new_spec.version <= old_spec.version
+          return
+        end
 
         Change.new(
           ecosystem: "bundler",

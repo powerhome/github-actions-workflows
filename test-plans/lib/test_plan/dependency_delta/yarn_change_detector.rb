@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "./change"
+require_relative "../playbook/packages"
 require_relative "./yarn_lock_parser"
 
 module TestPlan
@@ -35,8 +36,9 @@ module TestPlan
         added = new_versions - old_versions
 
         added.filter_map do |new_version|
+          alpha = Playbook.alpha_build?(name, new_version)
           old_version = removed.select { |candidate|
-            version(candidate) < version(new_version)
+            alpha || version(candidate) < version(new_version)
           }.max_by { |candidate| version(candidate) }
           next unless old_version
 
