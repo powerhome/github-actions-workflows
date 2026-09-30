@@ -141,8 +141,8 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("Dialog: 0 call sites (unused)")
   end
 
-  # A Playbook raise selects the Playbook plan whatever else the pull request did.
-  it "reports a Playbook raise however many other dependencies came with it" do
+  # A Playbook change selects the Playbook plan whatever else the pull request did.
+  it "reports a Playbook change however many other dependencies came with it" do
     changes = [
       TestPlan::DependencyDelta::Change.new(name: "cgi"),
       TestPlan::DependencyDelta::Change.new(name: "playbook_ui"),
@@ -151,13 +151,13 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(written_outputs(changes)).to include("change_count=2", "playbook_raised=true")
   end
 
-  it "reports no Playbook raise when none of the changes is one" do
+  it "reports no Playbook change when none of the changes is one" do
     changes = [TestPlan::DependencyDelta::Change.new(name: "playbook-adjacent")]
 
     expect(written_outputs(changes)).to include("change_count=1", "playbook_raised=false")
   end
 
-  it "writes no change count and no Playbook raise when nothing was raised in scope" do
+  it "writes no change count and no Playbook change when nothing was changed in scope" do
     expect(written_outputs([])).to include("change_count=0", "playbook_raised=false")
   end
 
@@ -306,7 +306,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
       ]
     )
 
-    expect(summary).to include("1 raised dependency reached no root Gemfile.lock")
+    expect(summary).to include("1 changed dependency reached no root Gemfile.lock")
     expect(summary).to include("minitest: 5.25.5 -> 6.0.6")
   end
 

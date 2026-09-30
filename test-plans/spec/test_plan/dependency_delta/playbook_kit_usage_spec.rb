@@ -117,7 +117,7 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
 
         report = usage.report
         expect(report).to include("— changed in Rails and React")
-        expect(report).to include("changed the React side of this kit, but nothing in this repository renders it")
+        expect(report).to include("touched the React side of this kit, but nothing in this repository renders it")
       end
     end
   end

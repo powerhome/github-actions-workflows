@@ -7,7 +7,7 @@ require_relative "../playbook/kit_facts"
 
 module TestPlan
   module Response
-    # Organizes a Playbook raise by changed kit rather than feature area.
+    # Organizes a Playbook change by changed kit rather than feature area.
     class PlaybookParser
       include Validation
 

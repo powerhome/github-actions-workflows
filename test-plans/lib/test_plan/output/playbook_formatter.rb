@@ -13,8 +13,8 @@ module TestPlan
 
       REGRESSION_BANNER = "**Every kit case below is a regression test.** The Playbook raise " \
         "calls for confirming that existing behavior still holds."
-      NO_KITS_MESSAGE = "No changed Playbook kits were identified for this upgrade."
-      NO_OTHER_DEPENDENCIES_MESSAGE = "No other dependency raises in this PR."
+      NO_KITS_MESSAGE = "No changed Playbook kits were identified for this version change."
+      NO_OTHER_DEPENDENCIES_MESSAGE = "No other dependency changes in this PR."
 
       def initialize(parsed:, pull_request_title:, profile_name:, generation_warning: "",
                      kit_facts: Playbook::KitFacts.none, manifest: { "dependencies" => [] })
@@ -99,7 +99,7 @@ module TestPlan
           unsearched = systems_not_in_use(kit)
           unless unsearched.empty?
             lines << ""
-            lines << "This upgrade changed the #{Playbook::KitFacts.systems_label(unsearched)} side of this " \
+            lines << "This version change touched the #{Playbook::KitFacts.systems_label(unsearched)} side of this " \
               "kit, but nothing in this repository renders it."
           end
 
@@ -125,10 +125,10 @@ module TestPlan
         rows.empty? ? ["**Page:** Not identified from this change."] : rows
       end
 
-      # Only the dependency raises: a release also moves Playbook's own version constant,
+      # Only the dependency changes: a release also moves Playbook's own version constant,
       # packaging and docs site, which no tester can act on.
       def beyond_section
-        lines = ["## Other dependency raises in this PR", ""]
+        lines = ["## Other dependency changes in this PR", ""]
         entries = other_dependencies
 
         if entries.empty?
@@ -143,7 +143,7 @@ module TestPlan
         lines.join("\n")
       end
 
-      # Driven by the manifest, not the response: a raise the provider forgot still
+      # Driven by the manifest, not the response: a change the provider forgot still
       # appears and one it invented does not. The response supplies only note and steps.
       def other_dependencies
         return @parsed.other_dependencies if @manifest_dependencies.empty?
@@ -173,7 +173,7 @@ module TestPlan
 
       def dependency_note(entry)
         note = sanitize(entry.fetch("note"))
-        note.empty? ? "Raised alongside the Playbook upgrade." : note
+        note.empty? ? "Changed alongside the Playbook version change." : note
       end
 
       def fact_for(kit)

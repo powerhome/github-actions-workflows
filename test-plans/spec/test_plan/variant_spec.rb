@@ -12,25 +12,25 @@ RSpec.describe TestPlan::Variant do
     }
   end
 
-  it "selects Playbook for a raise even without changed kits or with application edits" do
+  it "selects Playbook for a change even without changed kits or with application edits" do
     expect(described_class.select(**paths, playbook_raised: true, change_count: 2)).to eq(
       "name" => "playbook", "prompt_path" => paths.fetch(:playbook_prompt_path)
     )
   end
 
-  it "selects the dependency plan when other libraries were raised" do
+  it "selects the dependency plan when other libraries were changed" do
     expect(described_class.select(**paths, change_count: 2)).to eq(
       "name" => "dependency", "prompt_path" => paths.fetch(:dependency_prompt_path)
     )
   end
 
-  it "uses the standard plan when no in-scope dependency was raised" do
+  it "uses the standard plan when no in-scope dependency was changed" do
     expect(described_class.select(**paths)).to eq(
       "name" => "", "prompt_path" => paths.fetch(:prompt_path)
     )
   end
 
-  it "requires the Playbook prompt for a Playbook raise" do
+  it "requires the Playbook prompt for a Playbook change" do
     expect {
       described_class.select(**paths.merge(playbook_prompt_path: ""), playbook_raised: true, change_count: 1)
     }.to raise_error(/Playbook prompt required/)

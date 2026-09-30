@@ -56,7 +56,7 @@ RSpec.describe TestPlan::DependencyDelta::BundlerChangeDetector do
     LOCK
   end
 
-  it "detects direct, transitive, and Git raises while excluding PATH components" do
+  it "detects direct, transitive, and Git changes while excluding PATH components" do
     changes = described_class.new.detect(
       path: "Gemfile.lock",
       old_content: old_lock,

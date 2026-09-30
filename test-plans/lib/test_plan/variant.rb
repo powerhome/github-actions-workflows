@@ -2,7 +2,7 @@
 
 module TestPlan
   # The profile resolves from the label before any lockfile is read, so only the
-  # dependency delta knows what was raised. Named so the render step follows the same
+  # dependency delta knows what was changed. Named so the render step follows the same
   # choice the provider was given.
   module Variant
     PLAYBOOK = "playbook".freeze

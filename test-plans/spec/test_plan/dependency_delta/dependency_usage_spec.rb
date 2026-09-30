@@ -109,7 +109,7 @@ RSpec.describe TestPlan::DependencyDelta::DependencyUsage do
   it "says plainly when there was nothing to search for" do
     report = described_class.new(workspace: "/unused").report([])
 
-    expect(report).to include("No in-scope dependency raises were found.")
+    expect(report).to include("No in-scope dependency changes were found.")
     expect(report).not_to include("Usage search failed")
   end
 

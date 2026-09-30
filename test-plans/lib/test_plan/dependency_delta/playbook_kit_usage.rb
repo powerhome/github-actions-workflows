@@ -68,9 +68,9 @@ module TestPlan
 
         sections = @kits.keys.sort.map { |kit| section(kit) }
         <<~REPORT
-          # Playbook kits changed by this upgrade
+          # Playbook kits touched by this version change
 
-          The upgrade changed #{@kits.length} #{@kits.length == 1 ? "kit" : "kits"}. Each section below
+          The version change touched #{@kits.length} #{@kits.length == 1 ? "kit" : "kits"}. Each section below
           names which side of the kit the release touched -- the Rails helper, the React
           component, or both -- and lists where this repository calls that side, so
           coverage starts from pages a tester can actually open. Paths are
@@ -121,7 +121,7 @@ module TestPlan
         label = "**#{Playbook::KitFacts::SYSTEM_LABELS.fetch(system)} call sites**"
         paths = evidence.sampled(system)
         if paths.empty?
-          return "#{label}\n\nThis upgrade changed the #{Playbook::KitFacts::SYSTEM_LABELS.fetch(system)} " \
+          return "#{label}\n\nThis version change touched the #{Playbook::KitFacts::SYSTEM_LABELS.fetch(system)} " \
             "side of this kit, but nothing in this repository renders it.\n"
         end
 

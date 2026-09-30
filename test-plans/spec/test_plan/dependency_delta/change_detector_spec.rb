@@ -53,14 +53,14 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
 
   describe "dependency scope" do
     # Component Gemfile.lock files can resolve gems used only by their test suites.
-    it "skips a gem raise that reached no root Gemfile.lock" do
+    it "skips a gem change that reached no root Gemfile.lock" do
       detector = described_class.new(scoped_snapshot(["components/pigment/Gemfile.lock"]))
 
       expect(detector.detect).to be_empty
       expect(detector.out_of_scope.map(&:name)).to eq(["shared_gem"])
     end
 
-    it "keeps a Playbook raise from a component lockfile so it can select the Playbook plan" do
+    it "keeps a Playbook change from a component lockfile so it can select the Playbook plan" do
       path = "components/pigment/Gemfile.lock"
       snapshot = FakeSnapshot.new(
         "merge_base" => { path => gem_lock("1.0.0", name: "playbook_ui") },
@@ -74,7 +74,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       expect(detector.out_of_scope).to be_empty
     end
 
-    it "keeps a raise in a root lockfile" do
+    it "keeps a change in a root lockfile" do
       detector = described_class.new(scoped_snapshot(["Gemfile.lock"]))
 
       expect(detector.detect.map(&:name)).to eq(["shared_gem"])
@@ -82,7 +82,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
 
     # Deduplication runs first, so the root copy carries the component ones with it.
-    it "keeps a raise recorded in both a root and a component lockfile" do
+    it "keeps a change recorded in both a root and a component lockfile" do
       detector = described_class.new(
         scoped_snapshot(["Gemfile.lock", "components/pigment/Gemfile.lock"])
       )
@@ -93,7 +93,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       expect(detector.out_of_scope).to be_empty
     end
 
-    it "keeps raises from Pulse and Connect UI yarn.lock files by default" do
+    it "keeps changes from Pulse and Connect UI yarn.lock files by default" do
       old_lock = lambda do |name|
         "#{name}@^1.0.0:\n  version \"1.0.0\"\n"
       end
@@ -171,7 +171,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     expect(changes.first.direct).to be(true)
   end
 
-  it "deduplicates the same raise across lockfiles" do
+  it "deduplicates the same change across lockfiles" do
     lock = lambda do |version|
       <<~LOCK
         GEM
@@ -228,11 +228,11 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
 
     changes = described_class.new(snapshot).detect
 
-    # nested-widget is a workspace member, so its bump is local, not an external raise.
+    # nested-widget is a workspace member, so its bump is local, not an external change.
     expect(changes.map(&:name)).to eq(["external"])
   end
 
-  it "deduplicates a raise recorded through different registry remotes" do
+  it "deduplicates a change recorded through different registry remotes" do
     lock = lambda do |remote, version|
       <<~LOCK
         GEM
@@ -298,7 +298,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       .to eq(through.call("npm.mirror.example", "b/yarn.lock").key)
   end
 
-  it "keeps Git raises from different repositories separate" do
+  it "keeps Git changes from different repositories separate" do
     same_repo = TestPlan::DependencyDelta::Change.new(
       ecosystem: "yarn", name: "widget", old_version: "aaa", new_version: "bbb", source: "git",
       old_locator: "git+https://github.com/example/widget.git#aaa",
@@ -331,7 +331,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
     snapshot = FakeSnapshot.new(
       "merge_base" => { "Gemfile.lock" => lock.call("1.0.0") },
-      # Raised further on the base branch after this PR forked, so not this PR's raise.
+      # Changed further on the base branch after this PR forked, so not this PR's change.
       "base_tip" => { "Gemfile.lock" => lock.call("3.0.0") },
       "head" => { "Gemfile.lock" => lock.call("2.0.0") }
     )

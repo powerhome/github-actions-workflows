@@ -21,7 +21,7 @@ module TestPlan
       COMPLETE_SENTENCE = "Every use in this repository is listed below."
       REPRESENTATIVE_SENTENCE = "Testing every use is not practical; the pages below are a " \
         "representative sample."
-      UNUSED_SENTENCE = "This upgrade changed this kit, but no use of it was found in this " \
+      UNUSED_SENTENCE = "This version change touched this kit, but no use of it was found in this " \
         "repository."
       UNKNOWN_SENTENCE = "The search for uses of this kit could not be completed, so how widely " \
         "it is used here is unknown. Treat the pages below as a starting point rather than as " \

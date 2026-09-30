@@ -24,7 +24,7 @@ module TestPlan
         [ecosystem, name, old_version, new_version, source, *source_identity]
       end
 
-      # The artifact is identity, not the registry URL: one raise recorded through
+      # The artifact is identity, not the registry URL: one change recorded through
       # different remotes in different lockfiles stayed undeduplicated and downloaded
       # twice. A checksum settles it and mirrors share theirs, so proxied copies collapse;
       # without one the registry host is enough to keep a private package from collapsing

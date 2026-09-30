@@ -4,7 +4,7 @@ require_relative "plan_document"
 
 module TestPlan
   module Output
-    # The list of raises is the manifest's, not the provider's, so a raise the response
+    # The list of changes is the manifest's, not the provider's, so a change the response
     # omitted still appears and one it invented does not.
     class DependencyFormatter
       include PlanDocument
@@ -34,7 +34,7 @@ module TestPlan
 
     private
 
-      # Dropped -- it is not testing the raise -- but dropped out loud, since a plan that
+      # Dropped -- it is not testing the change -- but dropped out loud, since a plan that
       # quietly published fewer cases than were generated reads as complete.
       def partition_regression_tests
         names = @manifest_dependencies.map { |entry| entry.fetch("name") }
@@ -45,7 +45,7 @@ module TestPlan
       def discarded
         @discarded ||= @parsed.discarded + @unnamed_cases.map do |test|
           "regression test #{test.fetch("title").inspect} named #{test.fetch("dependency").inspect}, " \
-            "which this pull request did not raise"
+            "which this pull request did not change"
         end
       end
 
@@ -62,7 +62,7 @@ module TestPlan
       end
 
       # Deliberately not matched on `source`: an internal enum the provider sees only in
-      # the manifest, where spelling it "rubygems.org" would cost this raise its note.
+      # the manifest, where spelling it "rubygems.org" would cost this change its note.
       def annotation_for(entry)
         @parsed.dependencies.find do |candidate|
           candidate.fetch("ecosystem") == entry.fetch("ecosystem") &&

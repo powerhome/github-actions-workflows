@@ -92,7 +92,7 @@ module TestPlan
       resolve_prompt("prompt")
     end
 
-    # Optional: what was raised is not known until the delta is built, long after this
+    # Optional: what was changed is not known until the delta is built, long after this
     # profile resolved from the label, so alternatives are declared here and chosen later.
     def playbook_prompt_path
       return "" unless attributes.key?("playbook_prompt")
