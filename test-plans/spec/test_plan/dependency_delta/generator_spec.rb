@@ -24,6 +24,30 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
   end
 
+  it "retrieves and reports an alpha against its base release, noting the installed one" do
+    alpha = change.dup.tap do |c|
+      c.old_version = "18.1.0.pre.rc.3"
+      c.new_version = "18.0.0.pre.alpha.PLAY1"
+    end
+    rebased = alpha.dup.tap do |c|
+      c.old_version = "18.0.0"
+      c.installed_version = "18.1.0.pre.rc.3"
+    end
+    baseline = double("baseline")
+    allow(baseline).to receive(:resolve).with(alpha).and_return(rebased)
+    retriever = double("retriever")
+    allow(retriever).to receive(:retrieve).and_return([])
+
+    result = generator(changes: [alpha], retriever:, alpha_baseline: baseline).generate
+    entry = result.dig(:manifest, "dependencies", 0)
+
+    expect(retriever).to have_received(:retrieve).with(rebased)
+    expect(entry).to include("old_version" => "18.0.0", "installed_version" => "18.1.0.pre.rc.3")
+    expect(entry.fetch("warnings")).to contain_exactly(a_string_including("18.0.0", "18.1.0.pre.rc.3"))
+    expect(result.fetch(:full)).to include("(18.0.0 -> 18.0.0.pre.alpha.PLAY1)")
+    expect(result.dig(:manifest, "warning_count")).to eq(0)
+  end
+
   it "records retrieval failures as warnings without raising" do
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve).and_raise("not public")
