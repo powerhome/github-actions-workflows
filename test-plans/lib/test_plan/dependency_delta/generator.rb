@@ -2,6 +2,7 @@
 
 require_relative "../playbook/packages"
 require_relative "./changelog_source"
+require_relative "./playbook_alpha_baseline"
 require_relative "./playbook_kit_usage"
 require_relative "./public_dependency_retriever"
 require_relative "./version_spelling"
@@ -23,7 +24,8 @@ module TestPlan
       DEFAULT_CONTEXT_SHARE = 1
 
       def initialize(changes:, retriever: PublicRetriever.new, changelog: ChangelogSource.new,
-                     kit_usage: PlaybookKitUsage.disabled, problems: [], out_of_scope: [])
+                     kit_usage: PlaybookKitUsage.disabled, problems: [], out_of_scope: [],
+                     alpha_baseline: PlaybookAlphaBaseline.new)
         # Blast radius before name: nearly everything is direct and from a registry, which
         # left the alphabet deciding who got funded first.
         @changes = changes.sort_by do |change|
@@ -39,10 +41,14 @@ module TestPlan
         @kit_usage = kit_usage
         @problems = problems
         @out_of_scope = out_of_scope
-        @related = build_related(@changes)
+        @alpha_baseline = alpha_baseline
       end
 
       def generate
+        # After the baseline, which changes the versions a gem and its package are linked by.
+        @changes = @changes.map { |change| @alpha_baseline.resolve(change) }
+        @related = build_related(@changes)
+
         full = +""
         context = +""
         entries = []
@@ -83,6 +89,7 @@ module TestPlan
         entry = change.to_h
         entry["related"] = related_for(change)
         entry["warnings"] = []
+        entry["warnings"] << baseline_note(change) if change.installed_version
         entry["degraded"] = false
 
         begin
@@ -140,6 +147,11 @@ module TestPlan
         entry["omitted_from_context"] = omitted_from_context.map(&:path).sort
         entry["excluded_generated"] = excluded.map(&:path).sort
         entry["omitted_from_artifact"] = omitted_from_artifact.map(&:path).sort
+      end
+
+      def baseline_note(change)
+        "Read against #{change.old_version}, the release this alpha was built from, not the " \
+          "installed #{change.installed_version}, which the alpha sorts below."
       end
 
       def mark_unavailable(entry, error)

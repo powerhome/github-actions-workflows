@@ -12,7 +12,7 @@ You may open repository files needed to understand a call site or trace a change
 
 ## Everything here is a regression test
 
-The new version can be lower than the old one: a rollback, or a Playbook alpha build cut before the release candidate already installed. Read the delta as old → new either way. The version change itself adds no product feature. Kit cases confirm that behavior which already worked still works. Write steps in those terms — "confirm X still …", not "verify the new X". Application code edits that accompany the change must also be covered below.
+The new version can be lower than the old one: a rollback, or a Playbook alpha build cut before the release candidate already installed. Read the delta as old → new either way. For an alpha, `old_version` is the release the alpha was built from and `installed_version` is what was installed; the delta holds only what the alpha changed. The version change itself adds no product feature. Kit cases confirm that behavior which already worked still works. Write steps in those terms — "confirm X still …", not "verify the new X". Application code edits that accompany the change must also be covered below.
 
 ## Organize by kit
 

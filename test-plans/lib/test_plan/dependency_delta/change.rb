@@ -18,6 +18,7 @@ module TestPlan
       :new_integrity,
       :direct,
       :lockfiles,
+      :installed_version,
       keyword_init: true
     ) do
       def key
@@ -53,7 +54,7 @@ module TestPlan
       end
 
       def to_h
-        {
+        entry = {
           "ecosystem" => ecosystem,
           "name" => name,
           "old_version" => old_version,
@@ -64,6 +65,8 @@ module TestPlan
           "direct" => direct,
           "lockfiles" => lockfiles.sort,
         }
+        entry["installed_version"] = installed_version if installed_version
+        entry
       end
     end
   end
