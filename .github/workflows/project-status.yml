@@ -43,6 +43,10 @@ on:
         description: Status option for closed issues and pull requests.
         type: string
         default: Done
+      priority-field:
+        description: Single-select field a pull request copies from the issues it closes. Empty to leave priorities alone.
+        type: string
+        default: Priority
     secrets:
       private-key:
         description: Private key of the GitHub App that writes to the project.
@@ -161,3 +165,79 @@ jobs:
             -f query='mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) { updateProjectV2ItemFieldValue(input: { projectId: $project, itemId: $item, fieldId: $field, value: { singleSelectOptionId: $option } }) { projectV2Item { id } } }' \
             -f project="$project_id" -f item="$ITEM_ID" -f field="$field_id" -f option="$option_id" > /dev/null
           echo "Set Status to $status"
+
+      - name: Sync linked issues
+        if: github.event.pull_request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ITEM_ID: ${{ steps.add.outputs.itemId }}
+          REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number }}
+          OWNER: ${{ inputs.project-owner }}
+          NUMBER: ${{ inputs.project-number }}
+          IN_PROGRESS: ${{ inputs.status-in-progress }}
+          IN_REVIEW: ${{ inputs.status-in-review }}
+          DONE: ${{ inputs.status-done }}
+          PRIORITY_FIELD: ${{ inputs.priority-field }}
+        shell: python
+        run: |
+          # For the issues this pull request closes ("Closes #123" or a Development link) that
+          # are on the project: while it is open, an issue not yet started moves to In progress,
+          # and the pull request takes the most urgent of their priorities.
+          import json, os, subprocess
+
+          def gql(query, **variables):
+              args = ["gh", "api", "graphql", "-f", f"query={query}"]
+              for key, value in variables.items():
+                  args += ["-F" if isinstance(value, int) else "-f", f"{key}={value}"]
+              return json.loads(subprocess.run(args, check=True, capture_output=True, text=True).stdout)["data"]
+
+          def set_option(project_id, item_id, field_id, option_id):
+              gql(
+                  "mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) { updateProjectV2ItemFieldValue(input: { projectId: $project, itemId: $item, fieldId: $field, value: { singleSelectOptionId: $option } }) { projectV2Item { id } } }",
+                  project=project_id, item=item_id, field=field_id, option=option_id,
+              )
+
+          env = os.environ
+          owner, repo = env["REPO"].split("/")
+          priority_name = env["PRIORITY_FIELD"] or "Priority"
+          project = gql(
+              "query($owner: String!, $number: Int!, $priority: String!) { organization(login: $owner) { projectV2(number: $number) { id status: field(name: \"Status\") { ... on ProjectV2SingleSelectField { id options { id name } } } priority: field(name: $priority) { ... on ProjectV2SingleSelectField { id options { id name } } } } } }",
+              owner=env["OWNER"], number=int(env["NUMBER"]), priority=priority_name,
+          )["organization"]["projectV2"]
+          pull = gql(
+              "query($owner: String!, $repo: String!, $number: Int!, $priority: String!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { state closingIssuesReferences(first: 25) { nodes { url state projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } priority: fieldValueByName(name: $priority) { ... on ProjectV2ItemFieldSingleSelectValue { optionId } } } } } } } } }",
+              owner=owner, repo=repo, number=int(env["PULL"]), priority=priority_name,
+          )["repository"]["pullRequest"]
+
+          linked = [
+              (issue, item)
+              for issue in pull["closingIssuesReferences"]["nodes"]
+              for item in issue["projectItems"]["nodes"]
+              if item["project"]["id"] == project["id"]
+          ]
+          if not linked:
+              print("This pull request closes no issue on the project.")
+              raise SystemExit(0)
+
+          in_progress = next((o["id"] for o in project["status"]["options"] if o["name"] == env["IN_PROGRESS"]), None)
+          started = {env["IN_PROGRESS"], env["IN_REVIEW"], env["DONE"]}
+          if pull["state"] == "OPEN" and in_progress:
+              for issue, item in linked:
+                  if issue["state"] == "OPEN" and (item.get("status") or {}).get("name") not in started:
+                      set_option(project["id"], item["id"], project["status"]["id"], in_progress)
+                      print(f"Moved {issue['url']} to {env['IN_PROGRESS']}")
+
+          if env["PRIORITY_FIELD"] and project.get("priority"):
+              order = [o["id"] for o in project["priority"]["options"]]
+              priorities = [(item.get("priority") or {}).get("optionId") for _, item in linked]
+              priorities = [p for p in priorities if p in order]
+              if priorities:
+                  wanted = min(priorities, key=order.index)
+                  current = gql(
+                      "query($item: ID!, $priority: String!) { node(id: $item) { ... on ProjectV2Item { fieldValueByName(name: $priority) { ... on ProjectV2ItemFieldSingleSelectValue { optionId } } } } }",
+                      item=env["ITEM_ID"], priority=priority_name,
+                  )["node"]["fieldValueByName"]
+                  if (current or {}).get("optionId") != wanted:
+                      set_option(project["id"], env["ITEM_ID"], project["priority"]["id"], wanted)
+                      print(f"Set {priority_name} to {next(o['name'] for o in project['priority']['options'] if o['id'] == wanted)}")
