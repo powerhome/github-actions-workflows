@@ -11,6 +11,8 @@ Adds a repository's issues and pull requests to an organization project (Project
 | Pull request whose latest review requests changes, until review is requested again or it is approved | In progress |
 | Closed or merged pull request | Done |
 
+A pull request also updates the issues it closes, through a closing keyword such as `Closes #123` or a link in its Development sidebar, when they are on the project. While the pull request is open, each open issue that isn't In progress, In review or Done moves to In progress. The pull request takes its issues' priority from the `priority-field` single-select field; when it closes several, it takes the most urgent, which is the option listed first. Mentions such as `Part of #123` don't link an issue, so they change nothing.
+
 Dependabot pull requests and pull requests from forks are skipped, because they cannot read Actions secrets.
 
 Events only trigger a run. Each run works the Status out from the issue or pull request as it is at that moment, including its review history, so runs that start late or out of order still leave the right Status. Runs for the same item also queue behind each other.
@@ -58,8 +60,9 @@ Turn off the project's built-in workflows that set Status (Item added, Item clos
 | status-in-progress | string | false | In progress |
 | status-in-review | string | false | In review |
 | status-done | string | false | Done |
+| priority-field | string | false | Priority |
 
-Issues and pull requests carrying `skip-label` are not added, for example Renovate's Dependency Dashboard. The `status-*` inputs name the Status options, if the project's differ from the defaults.
+Issues and pull requests carrying `skip-label` are not added, for example Renovate's Dependency Dashboard. The `status-*` inputs name the Status options, if the project's differ from the defaults. Set `priority-field` to an empty string to leave priorities alone.
 
 ## Secrets
 
