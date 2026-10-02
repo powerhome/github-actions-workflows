@@ -5,5 +5,6 @@ nav:
   - 'Home': 'README.md'
   - 'Test Plans': 'test-plans.md'
   - 'Project Status': 'project-status.md'
+  - 'Project Iteration Rollover': 'project-iteration-rollover.md'
 plugins:
   - techdocs-core
