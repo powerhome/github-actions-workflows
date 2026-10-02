@@ -85,12 +85,16 @@ jobs:
           dry_run = os.environ["DRY_RUN"] == "true"
 
           project = gql(
-              "query($owner: String!, $number: Int!, $field: String!) { organization(login: $owner) { projectV2(number: $number) { id field(name: $field) { ... on ProjectV2IterationField { id configuration { iterations { id title startDate duration } completedIterations { id title startDate duration } } } } } } }",
+              "query($owner: String!, $number: Int!, $field: String!) { organization(login: $owner) { projectV2(number: $number) { id status: field(name: \"Status\") { ... on ProjectV2SingleSelectField { options { name } } } field(name: $field) { ... on ProjectV2IterationField { id configuration { iterations { id title startDate duration } completedIterations { id title startDate duration } } } } } } }",
               owner=owner, number=number, field=field_name,
           )["organization"]["projectV2"]
           field = project["field"]
           if not field or "configuration" not in field:
               sys.exit(f"::error::The project has no iteration field named \"{field_name}\".")
+
+          options = [o["name"] for o in (project.get("status") or {}).get("options", [])]
+          if done not in options:
+              sys.exit(f"::error::The project's Status field has no \"{done}\" option, so finished work can't be told apart from unfinished work.")
 
           today = datetime.date.today()
           iterations = field["configuration"]["iterations"] + field["configuration"]["completedIterations"]
@@ -107,14 +111,18 @@ jobs:
           moves, cursor = [], None
           while True:
               page = gql(
-                  "query($owner: String!, $number: Int!, $field: String!, $cursor: String) { organization(login: $owner) { projectV2(number: $number) { items(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { id iteration: fieldValueByName(name: $field) { ... on ProjectV2ItemFieldIterationValue { iterationId } } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } content { ... on Issue { state url } ... on PullRequest { state url } ... on DraftIssue { title } } } } } } }",
+                  "query($owner: String!, $number: Int!, $field: String!, $cursor: String) { organization(login: $owner) { projectV2(number: $number) { items(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { id iteration: fieldValueByName(name: $field) { ... on ProjectV2ItemFieldIterationValue { iterationId } } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } content { __typename ... on Issue { state url } ... on PullRequest { state url } ... on DraftIssue { title } } } } } } }",
                   owner=owner, number=number, field=field_name, cursor=cursor,
               )["organization"]["projectV2"]["items"]
               for item in page["nodes"]:
                   iteration = (item.get("iteration") or {}).get("iterationId")
                   status = (item.get("status") or {}).get("name")
-                  content = item.get("content") or {}
-                  if iteration in ended and status != done and content.get("state", "OPEN") == "OPEN":
+                  # An item whose issue or pull request can't be read is never assumed open.
+                  content = item.get("content")
+                  if not content:
+                      continue
+                  is_open = content["__typename"] == "DraftIssue" or content.get("state") == "OPEN"
+                  if iteration in ended and status != done and is_open:
                       moves.append((item["id"], ended[iteration], content.get("url") or content.get("title", item["id"])))
               if not page["pageInfo"]["hasNextPage"]:
                   break
