@@ -18,6 +18,10 @@ Generates profile-driven manual QA plans for pull requests.
 
 Adds issues and pull requests to an organization project and sets their Status.
 
+[project-iteration-rollover](project-iteration-rollover.md) 🔁
+
+Carries unfinished project items over to the current iteration when an iteration ends.
+
 ## Maintenance 🚧
 
 These packages are maintained by [Power's](https://github.com/powerhome) Heroes for Hire team.

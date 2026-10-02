@@ -1,0 +1,138 @@
+# Carries unfinished work over to the current iteration of an organization project. Run it on
+# a schedule; see docs/project-iteration-rollover.md.
+#
+# Every item whose iteration has ended, whose Status is not the done option, and whose issue
+# or pull request is still open moves to the iteration that contains today. Items with no
+# iteration, in the current or a future iteration, or already done are left alone. When
+# today falls in a gap between iterations nothing moves.
+
+name: Project iteration rollover
+
+on:
+  workflow_call:
+    inputs:
+      project-owner:
+        description: Organization that owns the project.
+        type: string
+        required: true
+      project-number:
+        description: Number of the project, from its URL.
+        type: number
+        required: true
+      client-id:
+        description: Client ID of the GitHub App that writes to the project.
+        type: string
+        required: true
+      iteration-field:
+        description: Name of the project's iteration field.
+        type: string
+        default: Iteration
+      status-done:
+        description: Status option for finished work, which is never carried over.
+        type: string
+        default: Done
+      dry-run:
+        description: List what would move without changing anything.
+        type: boolean
+        default: false
+    secrets:
+      private-key:
+        description: Private key of the GitHub App that writes to the project.
+        required: true
+
+permissions: {}
+
+jobs:
+  rollover:
+    name: Carry unfinished items over to the current iteration
+    concurrency:
+      group: project-iteration-rollover-${{ inputs.project-owner }}-${{ inputs.project-number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mint project App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ inputs.client-id }}
+          private-key: ${{ secrets.private-key }}
+          owner: ${{ inputs.project-owner }}
+          permission-issues: read
+          permission-pull-requests: read
+          permission-organization-projects: write
+
+      - name: Carry items over
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          OWNER: ${{ inputs.project-owner }}
+          NUMBER: ${{ inputs.project-number }}
+          FIELD: ${{ inputs.iteration-field }}
+          DONE: ${{ inputs.status-done }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        shell: python
+        run: |
+          import datetime, json, os, subprocess, sys
+
+          def gql(query, **variables):
+              args = ["gh", "api", "graphql", "-f", f"query={query}"]
+              for key, value in variables.items():
+                  if value is not None:
+                      args += ["-F" if isinstance(value, int) else "-f", f"{key}={value}"]
+              return json.loads(subprocess.run(args, check=True, capture_output=True, text=True).stdout)["data"]
+
+          owner, number, field_name, done = os.environ["OWNER"], int(os.environ["NUMBER"]), os.environ["FIELD"], os.environ["DONE"]
+          dry_run = os.environ["DRY_RUN"] == "true"
+
+          project = gql(
+              "query($owner: String!, $number: Int!, $field: String!) { organization(login: $owner) { projectV2(number: $number) { id status: field(name: \"Status\") { ... on ProjectV2SingleSelectField { options { name } } } field(name: $field) { ... on ProjectV2IterationField { id configuration { iterations { id title startDate duration } completedIterations { id title startDate duration } } } } } } }",
+              owner=owner, number=number, field=field_name,
+          )["organization"]["projectV2"]
+          field = project["field"]
+          if not field or "configuration" not in field:
+              sys.exit(f"::error::The project has no iteration field named \"{field_name}\".")
+
+          options = [o["name"] for o in (project.get("status") or {}).get("options", [])]
+          if done not in options:
+              sys.exit(f"::error::The project's Status field has no \"{done}\" option, so finished work can't be told apart from unfinished work.")
+
+          today = datetime.date.today()
+          iterations = field["configuration"]["iterations"] + field["configuration"]["completedIterations"]
+          def span(i):
+              start = datetime.date.fromisoformat(i["startDate"])
+              return start, start + datetime.timedelta(days=i["duration"])
+          current = next((i for i in iterations if span(i)[0] <= today < span(i)[1]), None)
+          if current is None:
+              print(f"No iteration contains {today}, so nothing moves.")
+              sys.exit(0)
+          ended = {i["id"]: i["title"] for i in iterations if span(i)[1] <= today}
+          print(f"Current iteration: {current['title']}")
+
+          moves, cursor = [], None
+          while True:
+              page = gql(
+                  "query($owner: String!, $number: Int!, $field: String!, $cursor: String) { organization(login: $owner) { projectV2(number: $number) { items(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { id iteration: fieldValueByName(name: $field) { ... on ProjectV2ItemFieldIterationValue { iterationId } } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } content { __typename ... on Issue { state url } ... on PullRequest { state url } ... on DraftIssue { title } } } } } } }",
+                  owner=owner, number=number, field=field_name, cursor=cursor,
+              )["organization"]["projectV2"]["items"]
+              for item in page["nodes"]:
+                  iteration = (item.get("iteration") or {}).get("iterationId")
+                  status = (item.get("status") or {}).get("name")
+                  # An item whose issue or pull request can't be read is never assumed open.
+                  content = item.get("content")
+                  if not content:
+                      continue
+                  is_open = content["__typename"] == "DraftIssue" or content.get("state") == "OPEN"
+                  if iteration in ended and status != done and is_open:
+                      moves.append((item["id"], ended[iteration], content.get("url") or content.get("title", item["id"])))
+              if not page["pageInfo"]["hasNextPage"]:
+                  break
+              cursor = page["pageInfo"]["endCursor"]
+
+          for item_id, from_title, label in moves:
+              print(f"{'Would move' if dry_run else 'Moving'} {label} from {from_title} to {current['title']}")
+              if not dry_run:
+                  gql(
+                      "mutation($project: ID!, $item: ID!, $field: ID!, $iteration: String!) { updateProjectV2ItemFieldValue(input: { projectId: $project, itemId: $item, fieldId: $field, value: { iterationId: $iteration } }) { projectV2Item { id } } }",
+                      project=project["id"], item=item_id, field=field["id"], iteration=current["id"],
+                  )
+          print(f"{len(moves)} item{'s' if len(moves) != 1 else ''} {'would move' if dry_run else 'moved'}.")
