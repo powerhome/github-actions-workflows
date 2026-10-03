@@ -8,7 +8,9 @@ Adds a repository's issues and pull requests to an organization project (Project
 | Closed issue | Done |
 | Draft pull request | In progress |
 | Pull request ready for review | In review |
+| Pull request approved, with no reviewer's requested changes outstanding | Ready |
 | Pull request whose latest review requests changes, until review is requested again or it is approved | In progress |
+| Pull request with review requested again after an approval | In review |
 | Closed or merged pull request | Done |
 
 A pull request also updates the issues it closes, through a closing keyword such as `Closes #123` or a link in its Development sidebar, when they are on the project. While the pull request is open, each open issue that isn't In progress, In review or Done moves to In progress. The pull request takes its issues' priority from the `priority-field` single-select field; when it closes several, it takes the most urgent, which is the option listed first. Mentions such as `Part of #123` don't link an issue, so they change nothing.
@@ -59,10 +61,11 @@ Turn off the project's built-in workflows that set Status (Item added, Item clos
 | skip-label | string | false | |
 | status-in-progress | string | false | In progress |
 | status-in-review | string | false | In review |
+| status-ready | string | false | Ready |
 | status-done | string | false | Done |
 | priority-field | string | false | Priority |
 
-Issues and pull requests carrying `skip-label` are not added, for example Renovate's Dependency Dashboard. The `status-*` inputs name the Status options, if the project's differ from the defaults. Set `priority-field` to an empty string to leave priorities alone.
+Issues and pull requests carrying `skip-label` are not added, for example Renovate's Dependency Dashboard. The `status-*` inputs name the Status options, if the project's differ from the defaults. Set `priority-field` to an empty string to leave priorities alone, and `status-ready` to an empty string to keep approved pull requests In review.
 
 ## Secrets
 

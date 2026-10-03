@@ -2,9 +2,10 @@
 # their Status. See docs/project-status.md for the triggers a caller needs.
 #
 # - Open issues have no Status, so they wait for triage, and closed issues are Done.
-# - Pull requests are In progress while in draft, In review once ready, back to In progress
-#   while a review's requested changes are outstanding, until review is requested again or
-#   the pull request is approved, and Done when closed.
+# - Pull requests are In progress while in draft, In review once ready, Ready once approved
+#   with no reviewer's requested changes outstanding, back to In progress while a review's
+#   requested changes are outstanding, back to In review when review is requested again, and
+#   Done when closed.
 # - Issues and pull requests carrying skip-label are left off the project.
 #
 # Events only trigger a run: each run works the Status out from the item as it is now, so
@@ -39,6 +40,10 @@ on:
         description: Status option for pull requests waiting on review.
         type: string
         default: In review
+      status-ready:
+        description: Status option for approved pull requests. Empty to leave them In review.
+        type: string
+        default: Ready
       status-done:
         description: Status option for closed issues and pull requests.
         type: string
@@ -100,6 +105,7 @@ jobs:
           NUMBER: ${{ inputs.project-number }}
           IN_PROGRESS: ${{ inputs.status-in-progress }}
           IN_REVIEW: ${{ inputs.status-in-review }}
+          READY: ${{ inputs.status-ready }}
           DONE: ${{ inputs.status-done }}
         run: |
           set -euo pipefail
@@ -108,16 +114,18 @@ jobs:
               -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { state isDraft } } }' \
               -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" \
               --jq '.data.repository.pullRequest | if .state != "OPEN" then "closed" elif .isDraft then "draft" else "" end')
-            # Changes are outstanding when the latest review decision, review request or
-            # ready-for-review event is a review requesting changes. Comment-only and
-            # dismissed reviews don't count. Page back through the timeline until one is found.
+            # The latest review decision, review request or ready-for-review event decides:
+            # a review requesting changes means changes are outstanding, an approval means
+            # approved, and a review request or being marked ready means waiting on review.
+            # Comment-only and dismissed reviews don't count. Page back through the timeline
+            # until one is found.
             before=()
             while [ -z "$live" ]; do
               page=$(gh api graphql \
                 -f query='query($owner: String!, $repo: String!, $number: Int!, $before: String) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { timelineItems(last: 100, before: $before, itemTypes: [PULL_REQUEST_REVIEW, REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) { pageInfo { hasPreviousPage startCursor } nodes { __typename ... on PullRequestReview { state } } } } } }' \
                 -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" ${before[@]+"${before[@]}"} \
                 --jq '.data.repository.pullRequest.timelineItems')
-              live=$(jq -r '[.nodes[] | select(.__typename != "PullRequestReview" or .state == "CHANGES_REQUESTED" or .state == "APPROVED")] | last | if . == null then "" elif .state == "CHANGES_REQUESTED" then "changes-requested" else "ready" end' <<<"$page")
+              live=$(jq -r '[.nodes[] | select(.__typename != "PullRequestReview" or .state == "CHANGES_REQUESTED" or .state == "APPROVED")] | last | if . == null then "" elif .state == "CHANGES_REQUESTED" then "changes-requested" elif .state == "APPROVED" then "approved" else "ready" end' <<<"$page")
               if [ -z "$live" ]; then
                 if [ "$(jq -r '.pageInfo.hasPreviousPage' <<<"$page")" != "true" ]; then
                   live="ready"
@@ -126,8 +134,17 @@ jobs:
                 fi
               fi
             done
+            # An approval only counts while no other reviewer's latest review requests changes.
+            if [ "$live" = "approved" ]; then
+              outstanding=$(gh api graphql \
+                -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { latestOpinionatedReviews(first: 100) { nodes { state } } } } }' \
+                -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" \
+                --jq '[.data.repository.pullRequest.latestOpinionatedReviews.nodes[] | select(.state == "CHANGES_REQUESTED")] | length')
+              if [ "$outstanding" != "0" ]; then live="changes-requested"; fi
+            fi
             case "$live" in
               closed) status="$DONE" ;;
+              approved) status="${READY:-$IN_REVIEW}" ;;
               ready) status="$IN_REVIEW" ;;
               draft | changes-requested) status="$IN_PROGRESS" ;;
             esac
