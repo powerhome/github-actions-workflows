@@ -95,6 +95,7 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
 
       - name: Set status
+        id: status
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ITEM_ID: ${{ steps.add.outputs.itemId }}
@@ -153,6 +154,7 @@ jobs:
             if [ "$live" = "closed" ]; then status="$DONE"; else status=""; fi
           fi
           echo "The item is $live"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
           project=$(gh api graphql \
             -f query='query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } }' \
             -f owner="$OWNER" -F number="$NUMBER" \
@@ -194,13 +196,16 @@ jobs:
           NUMBER: ${{ inputs.project-number }}
           IN_PROGRESS: ${{ inputs.status-in-progress }}
           IN_REVIEW: ${{ inputs.status-in-review }}
+          READY: ${{ inputs.status-ready }}
           DONE: ${{ inputs.status-done }}
+          PR_STATUS: ${{ steps.status.outputs.status }}
           PRIORITY_FIELD: ${{ inputs.priority-field }}
         shell: python
         run: |
           # For the issues this pull request closes ("Closes #123" or a Development link) that
-          # are on the project: while it is open, an issue not yet started moves to In progress,
-          # and the pull request takes the most urgent of their priorities.
+          # are on the project: each open issue follows the open pull requests that close it,
+          # taking the least advanced of their Statuses (In progress, In review, Ready), and the
+          # pull request takes the most urgent of the issues' priorities.
           import json, os, subprocess
 
           def gql(query, **variables):
@@ -223,7 +228,7 @@ jobs:
               owner=env["OWNER"], number=int(env["NUMBER"]), priority=priority_name,
           )["organization"]["projectV2"]
           pull = gql(
-              "query($owner: String!, $repo: String!, $number: Int!, $priority: String!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { state closingIssuesReferences(first: 25) { nodes { url state projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } priority: fieldValueByName(name: $priority) { ... on ProjectV2ItemFieldSingleSelectValue { optionId } } } } } } } } }",
+              "query($owner: String!, $repo: String!, $number: Int!, $priority: String!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { id state closingIssuesReferences(first: 25) { nodes { url state closedByPullRequestsReferences(first: 25, includeClosedPrs: false) { nodes { id projectItems(first: 20) { nodes { project { id } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } priority: fieldValueByName(name: $priority) { ... on ProjectV2ItemFieldSingleSelectValue { optionId } } } } } } } } }",
               owner=owner, repo=repo, number=int(env["PULL"]), priority=priority_name,
           )["repository"]["pullRequest"]
 
@@ -237,13 +242,27 @@ jobs:
               print("This pull request closes no issue on the project.")
               raise SystemExit(0)
 
-          in_progress = next((o["id"] for o in project["status"]["options"] if o["name"] == env["IN_PROGRESS"]), None)
-          started = {env["IN_PROGRESS"], env["IN_REVIEW"], env["DONE"]}
-          if pull["state"] == "OPEN" and in_progress:
-              for issue, item in linked:
-                  if issue["state"] == "OPEN" and (item.get("status") or {}).get("name") not in started:
-                      set_option(project["id"], item["id"], project["status"]["id"], in_progress)
-                      print(f"Moved {issue['url']} to {env['IN_PROGRESS']}")
+          # Less to more advanced; an empty READY input leaves approved pull requests In review.
+          order = [env["IN_PROGRESS"], env["IN_REVIEW"]] + ([env["READY"]] if env["READY"] else [])
+          options = {o["name"]: o["id"] for o in project["status"]["options"]}
+          for issue, item in linked:
+              current = (item.get("status") or {}).get("name")
+              if issue["state"] != "OPEN" or current == env["DONE"]:
+                  continue
+              statuses = []
+              for other in issue["closedByPullRequestsReferences"]["nodes"]:
+                  if other["id"] == pull["id"]:
+                      status = env["PR_STATUS"]
+                  else:
+                      status = next(((i.get("status") or {}).get("name") for i in other["projectItems"]["nodes"] if i["project"]["id"] == project["id"]), None)
+                  if status in order:
+                      statuses.append(status)
+              if not statuses:
+                  continue
+              wanted = min(statuses, key=order.index)
+              if wanted != current and wanted in options:
+                  set_option(project["id"], item["id"], project["status"]["id"], options[wanted])
+                  print(f"Moved {issue['url']} from {current or 'no Status'} to {wanted}")
 
           if env["PRIORITY_FIELD"] and project.get("priority"):
               order = [o["id"] for o in project["priority"]["options"]]
