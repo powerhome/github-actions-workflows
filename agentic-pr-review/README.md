@@ -1,6 +1,6 @@
 # Agentic PR Review
 
-Runs a headless review agent against the **merge-base diff** for a pull request, then posts the result as a **GitHub PR review** (summary plus optional inline comments). The default provider is **Cursor** (`agent` CLI with `CURSOR_API_KEY`).
+Runs a headless review agent against the **merge-base diff** for a pull request, then posts the result as a **GitHub PR review** (summary plus optional inline comments). The default provider is **Cursor** (`agent` CLI with `CURSOR_API_KEY`); **Claude** (`claude` CLI with `ANTHROPIC_API_KEY`) is also supported.
 
 ## What it does
 
@@ -18,10 +18,11 @@ Artifacts: uploads `review-agent.json` from the workspace when present (for debu
 | --- | --- | --- |
 | `app-id` | yes | GitHub App ID used with `actions/create-github-app-token`. |
 | `private-key` | yes | GitHub App private key (PEM). |
-| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`). |
+| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; Claude: becomes `ANTHROPIC_API_KEY`). |
 | `pull-request-number` | yes | PR number to review. |
-| `provider` | no | Review backend; the action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
+| `provider` | no | Review backend: `cursor` or `claude`. The action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
+| `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 
 ## Secrets and permissions
@@ -56,6 +57,21 @@ Use `additional-prompt` when you want to append user-supplied context, such as a
     provider-api-key: ${{ secrets.AGENTIC_REVIEW_PROVIDER_API_KEY }}
     pull-request-number: ${{ github.event.issue.number }}
     additional-prompt: ${{ github.event.comment.body }}
+```
+
+### Review a PR with Claude
+
+Set `provider: claude` and pass an Anthropic API key. `model` is optional; leave it out to use Claude Code's default.
+
+```yaml
+- uses: ./.github/actions/agentic-pr-review
+  with:
+    app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
+    private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
+    provider: claude
+    provider-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    model: claude-opus-5-5
+    pull-request-number: ${{ github.event.pull_request.number }}
 ```
 
 Use `github.event.pull_request.number` when the workflow runs on `pull_request` events. Use `github.event.issue.number` for `issue_comment` events on a pull request.
@@ -122,3 +138,12 @@ shorthand, so 3.1 is the floor.
 mkdir -p .cursor
 cp path/to/agentic-pr-review/config/cli-config.json .cursor/cli-config.json
 ```
+
+### Claude (read-only)
+
+[`config/claude-settings.json`](config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, and `WebSearch`. The CLI also runs with:
+
+- `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt.
+- `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
+
+Deny rules take precedence over allow rules from every settings source, so a `.claude/settings.json` in the reviewed repository cannot re-enable a denied tool.

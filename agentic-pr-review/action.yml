@@ -9,11 +9,11 @@ inputs:
     description: GitHub App private key (PEM)
     required: true
   provider:
-    description: Review backend (supported values — cursor)
+    description: Review backend (supported values — cursor, claude)
     required: false
     default: cursor
   provider-api-key:
-    description: API credential for the selected provider (e.g. Cursor maps this to CURSOR_API_KEY)
+    description: API credential for the selected provider (Cursor maps this to CURSOR_API_KEY, Claude to ANTHROPIC_API_KEY)
     required: true
   pull-request-number:
     description: Pull request number to review
