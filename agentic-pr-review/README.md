@@ -146,4 +146,4 @@ cp path/to/agentic-pr-review/config/cli-config.json .cursor/cli-config.json
 - `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt.
 - `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
 
-Deny rules take precedence over allow rules from every settings source, so a `.claude/settings.json` in the reviewed repository cannot re-enable a denied tool.
+The CLI runs in the PR's own checkout, so the reviewed repository must not be able to configure it. `--setting-sources user` keeps its `.claude/settings.json` and `.claude/settings.local.json` from loading: their hooks would run shell commands outside the tool permissions, with the API key in the environment, and their `env` could point the API URL at another host. The settings file also sets `disableAllHooks`.

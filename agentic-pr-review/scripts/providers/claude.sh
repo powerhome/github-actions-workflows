@@ -48,11 +48,16 @@ if [[ -n "${MODEL:-}" ]]; then
 fi
 
 # Read-only permissions come from config/claude-settings.json, passed with --settings rather
-# than copied into the workspace. Deny rules win over any settings the reviewed repository
-# ships, and dontAsk denies every tool the settings do not allow instead of prompting.
-# --strict-mcp-config with no --mcp-config keeps the repository's MCP servers from loading.
-# stdin is /dev/null because --print otherwise waits for piped input before it starts.
+# than copied into the workspace, and dontAsk denies every tool it does not allow instead of
+# prompting. The working directory is the PR's own checkout, so nothing in it may configure
+# the CLI: --setting-sources user skips the repository's .claude/settings*.json, whose hooks
+# would run shell commands outside the tool permissions and whose env could repoint the API
+# URL at another host, and the settings file disables hooks again in case a future CLI loads
+# them from elsewhere. --strict-mcp-config with no --mcp-config keeps the repository's MCP
+# servers from loading. stdin is /dev/null because --print otherwise waits for piped input
+# before it starts.
 claude --print --output-format text \
+  --setting-sources user \
   --settings "${SETTINGS_PATH}" \
   --permission-mode dontAsk \
   --strict-mcp-config \

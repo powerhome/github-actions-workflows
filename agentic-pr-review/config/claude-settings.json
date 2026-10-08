@@ -1,4 +1,5 @@
 {
+  "disableAllHooks": true,
   "permissions": {
     "allow": ["Read", "Glob", "Grep"],
     "deny": ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"]
