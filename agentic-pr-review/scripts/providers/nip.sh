@@ -52,6 +52,14 @@ export ANTHROPIC_DEFAULT_SONNET_MODEL="${model}"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="${model}"
 export CLAUDE_CODE_SUBAGENT_MODEL="${model}"
 
+# Claude Code has no catalog entry for NIP models, so it assumes a 200k window and warns.
+# Give it the gateway's max_input_tokens for the model instead (nitro-intelligence
+# deploy/config/base/litellm/values.yaml): GLM-5.3 is served at 1,048,576 tokens, less the
+# 131,072 the gateway reserves for output. Other models keep Claude Code's default.
+case "${model}" in
+  zai-org/GLM-5.3) export CLAUDE_CODE_MAX_CONTEXT_TOKENS=917504 ;;
+esac
+
 # The gateway rejects request parameters a model does not allow, rather than ignoring them,
 # so keep Claude Code to the plain Messages API: no beta headers, no thinking budget (GLM-5.3
 # reasons on its own). Non-essential traffic covers telemetry and error reporting, which
