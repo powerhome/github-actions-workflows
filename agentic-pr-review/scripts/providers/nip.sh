@@ -96,9 +96,34 @@ fi
 # ships, and dontAsk denies every tool the settings do not allow instead of prompting.
 # --strict-mcp-config with no --mcp-config keeps the repository's MCP servers from loading.
 # stdin is /dev/null because --print otherwise waits for piped input before it starts.
-claude --print --output-format text \
+#
+# The whole run is kept as a stream-json transcript rather than printed as text: a model
+# behind the gateway can end a run without a text reply, and the transcript is the only
+# record of why. The review is the final result event's text.
+TRANSCRIPT_PATH="${NIP_TRANSCRIPT_PATH:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/nip-review-transcript.jsonl}"
+claude_status=0
+claude --print --output-format stream-json --verbose \
   --settings "${SETTINGS_PATH}" \
   --permission-mode dontAsk \
   --strict-mcp-config \
   --model "${model}" \
-  "${PROMPT}" </dev/null >"${REVIEW_JSON_PATH}"
+  "${PROMPT}" </dev/null >"${TRANSCRIPT_PATH}" || claude_status=$?
+
+result_event="$(jq -c 'select(.type == "result")' "${TRANSCRIPT_PATH}" | tail -n 1)"
+[[ -n "${result_event}" ]] || result_event="{}"
+review="$(jq -r '.result // empty' <<<"${result_event}")"
+
+if [[ "${claude_status}" -ne 0 || -z "${review//[[:space:]]/}" ]]; then
+  {
+    echo "nip provider: no review text (claude exit ${claude_status}). Transcript: ${TRANSCRIPT_PATH}"
+    echo "Result event:"
+    jq '{subtype, is_error, num_turns, duration_ms, stop_reason, usage}' <<<"${result_event}"
+    echo "Assistant messages (stop reason, then each content block's type and size):"
+    jq -c 'select(.type == "assistant") | .message
+      | {stop_reason, content: [.content[] | {type, chars: ((.text // .thinking // (.input | tostring)) | length)}]}' \
+      "${TRANSCRIPT_PATH}"
+  } >&2
+  exit 1
+fi
+
+printf '%s\n' "${review}" >"${REVIEW_JSON_PATH}"
