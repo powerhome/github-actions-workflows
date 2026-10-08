@@ -21,7 +21,7 @@ Artifacts: uploads `review-agent.json` from the workspace when present (for debu
 | `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; NIP: an inference gateway key). |
 | `pull-request-number` | yes | PR number to review. |
 | `provider` | no | Review backend: `cursor` or `nip`. The action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
-| `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
+| `deepen-length` | no | Commits to deepen the shallow clone by on each fetch while looking for the merge-base (default: `30`). |
 | `model` | no | Model passed to the provider CLI. Empty uses the CLI's default; for NIP, `zai-org/GLM-5.3`. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 
