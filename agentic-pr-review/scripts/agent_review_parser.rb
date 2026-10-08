@@ -8,8 +8,11 @@ class AgentReviewParser
   # Bump when changing review posting behavior or summary format.
   REVIEW_POSTER_VERSION = "1.0.0"
 
+  # UTF-8 explicitly: File.read otherwise tags the text with the locale's encoding --
+  # US-ASCII when nothing sets LANG, as on a bare container -- and the first non-ASCII
+  # byte in a review, such as an em dash, raises "invalid byte sequence".
   def self.parse_file(path)
-    new(File.read(path))
+    new(File.read(path, encoding: Encoding::UTF_8))
   end
 
   def initialize(json_string)
