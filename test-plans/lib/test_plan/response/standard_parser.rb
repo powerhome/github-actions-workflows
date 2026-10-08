@@ -14,15 +14,18 @@ module TestPlan::Response
 
     attr_reader :permissions, :feature_areas, :regression_tests, :discarded
 
-    def self.parse_file(path)
-      new(File.read(path, encoding: Encoding::UTF_8))
+    def self.parse_file(path, access: "consent")
+      new(File.read(path, encoding: Encoding::UTF_8), access:)
     end
 
-    def initialize(json_string)
+    # A sign_in plan has no Consent to report, so it carries no permissions object and
+    # each scenario names an account instead.
+    def initialize(json_string, access: "consent")
       @discarded = []
+      @consent = access == "consent"
       @payload = JSON.parse(extract_json(json_string))
       validate_root!
-      @permissions = build_permissions
+      @permissions = build_permissions if @consent
       @feature_areas = build_feature_areas
       @regression_tests = build_regression_tests
     end
@@ -31,6 +34,15 @@ module TestPlan::Response
 
     def validate_root!
       raise "Test-plan JSON root must be a JSON object" unless @payload.is_a?(Hash)
+
+      validate_permissions! if @consent
+      raise 'Test-plan JSON must include a "feature_areas" array' unless @payload["feature_areas"].is_a?(Array)
+      unless @payload["regression_tests"].is_a?(Array)
+        raise 'Test-plan JSON must include a "regression_tests" array'
+      end
+    end
+
+    def validate_permissions!
       raise 'Test-plan JSON must include a "permissions" object' unless @payload["permissions"].is_a?(Hash)
       unless @payload.dig("permissions", "roles").is_a?(Array)
         raise 'Test-plan permissions must include a "roles" array'
@@ -40,10 +52,6 @@ module TestPlan::Response
       end
       unless @payload.dig("permissions", "changes").is_a?(Array)
         raise 'Test-plan permissions must include a "changes" array'
-      end
-      raise 'Test-plan JSON must include a "feature_areas" array' unless @payload["feature_areas"].is_a?(Array)
-      unless @payload["regression_tests"].is_a?(Array)
-        raise 'Test-plan JSON must include a "regression_tests" array'
       end
     end
 
@@ -99,11 +107,18 @@ module TestPlan::Response
       return discard("scenario #{position} (#{title}) had no steps array of strings") if steps.nil?
       return discard("scenario #{position} (#{title}) had no steps") if steps.empty?
 
+      access =
+        if @consent
+          { "permissions" => permission_pairs(Array(entry["permissions"])) }
+        else
+          { "sign_in_as" => normalize_text(entry["sign_in_as"]) }
+        end
+
       {
         "title" => title,
         "landing_page" => normalize_text(entry["landing_page"]),
         "audience" => normalize_text(entry["audience"]),
-        "permissions" => permission_pairs(Array(entry["permissions"])),
+        **access,
         "include_in_regression" => entry["include_in_regression"] == true,
         "steps" => steps,
       }

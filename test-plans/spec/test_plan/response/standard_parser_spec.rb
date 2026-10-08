@@ -22,6 +22,42 @@ RSpec.describe TestPlan::Response::StandardParser do
     }.merge(overrides)
   end
 
+  describe "a sign-in plan" do
+    let(:sign_in_payload) do
+      {
+        "feature_areas" => [
+          {
+            "test_path" => "Request a quote",
+            "code" => "QTE",
+            "scenarios" => [
+              {
+                "title" => "Submit the form",
+                "sign_in_as" => "  Public visitor\nnot signed in ",
+                "permissions" => [{ "subject" => "Ignored", "action" => "Read" }],
+                "steps" => ["Submit the form.", "Verify the confirmation."],
+              },
+            ],
+          },
+        ],
+        "regression_tests" => [],
+      }
+    end
+
+    it "needs no permissions object and reads the account each scenario signs in as" do
+      parsed = described_class.new(sign_in_payload.to_json, access: "sign_in")
+      scenario = parsed.feature_areas.first.fetch("scenarios").first
+
+      expect(parsed.permissions).to be_nil
+      expect(scenario.fetch("sign_in_as")).to eq("Public visitor not signed in")
+      expect(scenario).not_to have_key("permissions")
+    end
+
+    it "still requires a permissions object for a Consent plan" do
+      expect { described_class.new(sign_in_payload.to_json) }
+        .to raise_error(/must include a "permissions" object/)
+    end
+  end
+
   it "normalizes and deduplicates permission values" do
     raw = payload(
       "permissions" => {

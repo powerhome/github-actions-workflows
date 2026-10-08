@@ -9,7 +9,7 @@ require "tmpdir"
 RSpec.describe "bin/render_test_plan.rb" do
   # Read back as UTF-8, not at the locale's encoding: the plan carries the heading's check
   # mark and the arrow between versions, so otherwise this passes or fails on LANG.
-  def render(variant:, payload:, dependencies:, expect_success: true)
+  def render(variant:, payload:, dependencies:, expect_success: true, access: nil)
     Dir.mktmpdir do |directory|
       json_path = File.join(directory, "response.json")
       manifest_path = File.join(directory, "manifest.json")
@@ -27,12 +27,44 @@ RSpec.describe "bin/render_test_plan.rb" do
         "TEST_PLAN_VARIANT" => variant,
         "TEST_PLAN_PROFILE_NAME" => "Cobra Test Plan",
       }
+      env["TEST_PLAN_ACCESS"] = access if access
       _stdout, stderr, status = Open3.capture3(env, "ruby", File.join(ACTION_ROOT, "bin", "render_test_plan.rb"))
       next stderr unless expect_success
 
       expect(status).to be_success, stderr
       File.read(comment_path, encoding: Encoding::UTF_8)
     end
+  end
+
+  it "renders a sign-in plan without a permissions section" do
+    output = render(
+      variant: "",
+      access: "sign_in",
+      payload: {
+        "feature_areas" => [
+          {
+            "test_path" => "Request a quote",
+            "domain" => "",
+            "code" => "QTE",
+            "scenarios" => [
+              {
+                "title" => "Submit the form",
+                "landing_page" => "/get-a-quote",
+                "audience" => "",
+                "sign_in_as" => "Public visitor, not signed in",
+                "include_in_regression" => false,
+                "steps" => ["Fill in the form and submit it.", "Verify the confirmation appears."],
+              },
+            ],
+          },
+        ],
+        "regression_tests" => [],
+      },
+      dependencies: []
+    )
+
+    expect(output).to include("**Sign in as:** Public visitor, not signed in")
+    expect(output).not_to include("Permissions")
   end
 
   it "renders every manifest dependency through the dependency variant" do
