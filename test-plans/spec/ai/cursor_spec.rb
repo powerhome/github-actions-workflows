@@ -66,11 +66,11 @@ RSpec.describe "ai/providers/cursor.sh" do
     end
   end
 
-  it "writes the agent's response without pinning a model" do
+  it "writes the agent's response from a pinned model" do
     run_provider(mode: "ok") do |result|
       expect(result[:status]).to be_success
       expect(result[:output]).to include('"permissions"')
-      expect(result[:agent_args]).not_to include("--model")
+      expect(result[:agent_args]).to include("--model", "claude-sonnet-5-5-high")
       expect(result[:stderr]).to include("provider: cursor")
     end
   end

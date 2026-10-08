@@ -71,12 +71,16 @@ cp "${CLI_CONFIG_TEMPLATE}" .cursor/cli-config.json
 
 PROMPT="$(cat "${TEST_PLAN_PROMPT_PATH}")"
 
-echo "[test_plan] provider: cursor" >&2
+# Pinned rather than left to Cursor's default, which timed out on the cobra-test-plan
+# profile. `agent --list-models` shows what an account can use.
+MODEL="claude-sonnet-5-5-high"
+
+echo "[test_plan] provider: cursor (model ${MODEL})" >&2
 
 # --trust is required because the headless agent otherwise refuses the workspace.
 # Read-only CLI permissions are copied from ai/config/cli-config.json.
 status=0
-agent --print --trust --output-format text "${PROMPT}" >"${TEST_PLAN_JSON_PATH}" || status=$?
+agent --print --trust --model "${MODEL}" --output-format text "${PROMPT}" >"${TEST_PLAN_JSON_PATH}" || status=$?
 
 # The agent writes its own diagnostics to stdout, which the redirect above captures
 # into the output file rather than the log. Without echoing the file back, a refused

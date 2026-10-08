@@ -60,7 +60,7 @@ RSpec.describe "test-plans/action.yml" do
     expect(reset_index).to be < names.index("Run test-plan provider")
   end
 
-  it "leaves model selection to the provider" do
+  it "takes no caller-supplied model" do
     provider_step = steps.find { |step| step.fetch("name") == "Run test-plan provider" }
     expect(provider_step.fetch("env")).not_to have_key("MODEL")
   end
