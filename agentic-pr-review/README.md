@@ -184,3 +184,4 @@ A caller can widen what the agent may do, for example to let it read PR context 
 - `claude-settings` **replaces** the bundled settings rather than adding to them, and the bundled file denies `Bash` outright. A deny rule wins over any allow, so `--allowed-tools "Bash(...)"` in `claude-args` has no effect unless `claude-settings` also drops that deny.
 - `--setting-sources user` and `--strict-mcp-config` are passed regardless, so the reviewed repository still cannot configure the CLI. `claude-args` comes after them, though, so a caller that passes its own `--setting-sources` changes that.
 - Whatever the settings allow runs with the API key in the environment, against a prompt built from the PR, so allow only what the review needs.
+- The checkout's credential is removed from `.git/config` before the agent runs, so allowed Git commands that need authentication, such as `git fetch`, fail. Local ones — `git log`, `git diff`, `git show` — still work.
