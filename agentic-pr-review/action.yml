@@ -19,7 +19,7 @@ inputs:
     description: Pull request number to review
     required: true
   deepen-length:
-    description: Commits to deepen the shallow clone by on each fetch while looking for the merge-base
+    description: Passed to rmacklin/fetch-through-merge-base as deepen_length
     required: false
     default: "30"
   model:
@@ -97,24 +97,12 @@ runs:
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
         git fetch --depth=1 origin "$BASE_SHA"
 
-    # Inlined from rmacklin/fetch-through-merge-base, which runs its script through
-    # github.action_path and so cannot find it in a container job. Unlike that script, this
-    # stops once the history is no longer shallow instead of deepening forever.
     - name: Fetch through merge-base
-      shell: bash
-      env:
-        BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
-        HEAD_SHA: ${{ steps.pr_gate.outputs.head_sha }}
-        DEEPEN_LENGTH: ${{ inputs.deepen-length }}
-      run: |
-        set -euo pipefail
-        until git merge-base "$BASE_SHA" "$HEAD_SHA" >/dev/null; do
-          if [[ ! -f "$(git rev-parse --git-dir)/shallow" ]]; then
-            echo "No merge-base between ${BASE_SHA} and ${HEAD_SHA}, even with full history" >&2
-            exit 1
-          fi
-          git fetch -q --deepen="${DEEPEN_LENGTH}" origin "$BASE_SHA" "$HEAD_SHA"
-        done
+      uses: rmacklin/fetch-through-merge-base@bfe4d03a86f9afa52bc1a70e9814fc92a07f7b75 # v0
+      with:
+        base_ref: ${{ steps.pr_gate.outputs.base_sha }}
+        head_ref: ${{ steps.pr_gate.outputs.head_sha }}
+        deepen_length: ${{ inputs.deepen-length }}
 
     - name: Compute PR diff
       shell: bash
