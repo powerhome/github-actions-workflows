@@ -11,6 +11,7 @@ module TestPlan
     # reported as unreadable rather than parsed a second way.
     class NpmLockParser
       INSTALL_PREFIX = "node_modules/"
+      SUPPORTED_VERSIONS = [2, 3].freeze
 
       def initialize(content)
         @content = content.to_s
@@ -19,10 +20,13 @@ module TestPlan
       def records
         lockfile = JSON.parse(@content)
         lockfile = {} unless lockfile.is_a?(Hash)
+        version = lockfile["lockfileVersion"]
         packages = lockfile["packages"]
-        unless packages.is_a?(Hash)
-          raise "package-lock.json lockfileVersion #{lockfile["lockfileVersion"].inspect} " \
-                "has no packages map; only lockfileVersion 2 and 3 are supported"
+        # The version as well as the map: a schema npm has not written yet may keep the
+        # name and change what the entries mean.
+        unless SUPPORTED_VERSIONS.include?(version) && packages.is_a?(Hash)
+          raise "package-lock.json lockfileVersion #{version.inspect} is not supported; " \
+                "only lockfileVersion 2 and 3 are"
         end
 
         packages.filter_map do |key, entry|

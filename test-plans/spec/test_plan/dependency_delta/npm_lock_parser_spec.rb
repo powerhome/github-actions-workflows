@@ -61,6 +61,18 @@ RSpec.describe TestPlan::DependencyDelta::NpmLockParser do
     content = JSON.generate("lockfileVersion" => 1, "dependencies" => { "a" => { "version" => "1.0.0" } })
 
     expect { described_class.new(content).records }
-      .to raise_error(/lockfileVersion 1 has no packages map/)
+      .to raise_error(/lockfileVersion 1 is not supported/)
+  end
+
+  it "refuses a version it does not know even when it has a packages map" do
+    ["1", 1, 4, nil].each do |version|
+      content = JSON.generate(
+        "lockfileVersion" => version,
+        "packages" => { "node_modules/a" => { "version" => "1.0.0" } }
+      )
+
+      expect { described_class.new(content).records }
+        .to raise_error(/lockfileVersion #{Regexp.escape(version.inspect)} is not supported/)
+    end
   end
 end
