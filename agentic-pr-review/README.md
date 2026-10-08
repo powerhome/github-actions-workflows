@@ -23,6 +23,8 @@ Artifacts: uploads `review-agent.json` from the workspace when present (for debu
 | `provider` | no | Review backend: `cursor` or `claude`. The action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
 | `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default. |
+| `claude-settings` | no | Claude only. Settings that replace the bundled read-only [`config/claude-settings.json`](config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
+| `claude-args` | no | Claude only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 
 ## Secrets and permissions
@@ -147,3 +149,27 @@ cp path/to/agentic-pr-review/config/cli-config.json .cursor/cli-config.json
 - `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
 
 The CLI runs in the PR's own checkout, so the reviewed repository must not be able to configure it. `--setting-sources user` keeps its `.claude/settings.json` and `.claude/settings.local.json` from loading: their hooks would run shell commands outside the tool permissions, with the API key in the environment, and their `env` could point the API URL at another host. The settings file also sets `disableAllHooks`.
+
+### Overriding the Claude defaults
+
+A caller can widen what the agent may do, for example to let it read PR context with `gh`:
+
+```yaml
+- uses: ./.github/actions/agentic-pr-review
+  with:
+    # ...
+    provider: claude
+    claude-settings: |
+      {
+        "disableAllHooks": true,
+        "permissions": {
+          "allow": ["Read", "Glob", "Grep", "Bash(gh pr view:*)", "Bash(gh pr diff:*)"],
+          "deny": ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"]
+        }
+      }
+    claude-args: --max-turns 30
+```
+
+- `claude-settings` **replaces** the bundled settings rather than adding to them, and the bundled file denies `Bash` outright. A deny rule wins over any allow, so `--allowed-tools "Bash(...)"` in `claude-args` has no effect unless `claude-settings` also drops that deny.
+- `--setting-sources user` and `--strict-mcp-config` are passed regardless, so the reviewed repository still cannot configure the CLI. `claude-args` comes after them, though, so a caller that passes its own `--setting-sources` changes that.
+- Whatever the settings allow runs with the API key in the environment, against a prompt built from the PR, so allow only what the review needs.

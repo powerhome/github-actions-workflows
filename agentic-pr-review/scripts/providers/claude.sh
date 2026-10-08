@@ -47,6 +47,22 @@ if [[ -n "${MODEL:-}" ]]; then
   MODEL_ARGS+=(--model "${MODEL}")
 fi
 
+# The caller's workflow can replace the bundled settings, which deny Bash outright: a deny
+# rule wins over any --allowed-tools, so loosening the tools means supplying settings too.
+if [[ -n "${CLAUDE_SETTINGS:-}" ]]; then
+  SETTINGS_PATH="${CLAUDE_SETTINGS}"
+fi
+
+# claude-args is split with shell quoting, so --allowed-tools "Bash(gh pr view:*)" stays one
+# value, without handing the string to eval.
+EXTRA_ARGS=()
+if [[ -n "${CLAUDE_ARGS:-}" ]]; then
+  extra_args_lines="$(ruby -rshellwords -e 'puts Shellwords.split(ENV.fetch("CLAUDE_ARGS"))')"
+  while IFS= read -r arg; do
+    EXTRA_ARGS+=("${arg}")
+  done <<<"${extra_args_lines}"
+fi
+
 # Read-only permissions come from config/claude-settings.json, passed with --settings rather
 # than copied into the workspace, and dontAsk denies every tool it does not allow instead of
 # prompting. The working directory is the PR's own checkout, so nothing in it may configure
@@ -54,12 +70,13 @@ fi
 # would run shell commands outside the tool permissions and whose env could repoint the API
 # URL at another host, and the settings file disables hooks again in case a future CLI loads
 # them from elsewhere. --strict-mcp-config with no --mcp-config keeps the repository's MCP
-# servers from loading. stdin is /dev/null because --print otherwise waits for piped input
-# before it starts.
+# servers from loading. claude-settings does not touch those two flags. stdin is /dev/null
+# because --print otherwise waits for piped input before it starts.
 claude --print --output-format text \
   --setting-sources user \
   --settings "${SETTINGS_PATH}" \
   --permission-mode dontAsk \
   --strict-mcp-config \
   "${MODEL_ARGS[@]}" \
+  "${EXTRA_ARGS[@]}" \
   "${PROMPT}" </dev/null >"${REVIEW_JSON_PATH}"

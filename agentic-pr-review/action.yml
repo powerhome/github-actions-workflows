@@ -26,6 +26,14 @@ inputs:
     description: Model to use for the review (passed to the provider CLI)
     required: false
     default: ""
+  claude-settings:
+    description: Claude Code settings that replace the bundled read-only config/claude-settings.json, as a file path relative to the workspace or a JSON string (claude provider only)
+    required: false
+    default: ""
+  claude-args:
+    description: Extra arguments for the claude CLI, parsed with shell quoting, e.g. --allowed-tools "Bash(gh pr view:*)" (claude provider only)
+    required: false
+    default: ""
   additional-prompt:
     description: Extra instructions appended to the review prompt (e.g. full text of an @nitro-pr-review PR comment)
     required: false
@@ -111,6 +119,8 @@ runs:
         PROVIDER: ${{ inputs.provider }}
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
         MODEL: ${{ inputs.model }}
+        CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
+        CLAUDE_ARGS: ${{ inputs.claude-args }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
         REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
