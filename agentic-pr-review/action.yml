@@ -9,11 +9,11 @@ inputs:
     description: GitHub App private key (PEM)
     required: true
   provider:
-    description: Review backend (supported values — cursor, nip)
+    description: Review backend (supported values — cursor, claude, nip)
     required: false
     default: cursor
   provider-api-key:
-    description: API credential for the selected provider (Cursor maps this to CURSOR_API_KEY; NIP takes an inference gateway key)
+    description: API credential for the selected provider (Cursor maps this to CURSOR_API_KEY, Claude to ANTHROPIC_API_KEY; NIP takes an inference gateway key)
     required: true
   pull-request-number:
     description: Pull request number to review
@@ -24,6 +24,14 @@ inputs:
     default: "30"
   model:
     description: Model to use for the review (passed to the provider CLI)
+    required: false
+    default: ""
+  claude-settings:
+    description: Claude Code settings that replace the bundled read-only config/claude-settings.json, as a file path relative to the workspace or a JSON string (claude and nip providers)
+    required: false
+    default: ""
+  claude-args:
+    description: Extra arguments for the claude CLI, parsed with shell quoting, e.g. --allowed-tools "Bash(gh pr view:*)" (claude and nip providers)
     required: false
     default: ""
   additional-prompt:
@@ -112,6 +120,8 @@ runs:
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
         PR_NUMBER: ${{ inputs.pull-request-number }}
         MODEL: ${{ inputs.model }}
+        CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
+        CLAUDE_ARGS: ${{ inputs.claude-args }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
         REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}

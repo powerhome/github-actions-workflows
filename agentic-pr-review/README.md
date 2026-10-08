@@ -1,6 +1,6 @@
 # Agentic PR Review
 
-Runs a headless review agent against the **merge-base diff** for a pull request, then posts the result as a **GitHub PR review** (summary plus optional inline comments). The default provider is **Cursor** (`agent` CLI with `CURSOR_API_KEY`). The **NIP** provider runs the Claude Code CLI against a model on the [Nitro Intelligence Platform](https://github.com/powerhome/nitro-intelligence) inference gateway.
+Runs a headless review agent against the **merge-base diff** for a pull request, then posts the result as a **GitHub PR review** (summary plus optional inline comments). The default provider is **Cursor** (`agent` CLI with `CURSOR_API_KEY`). **Claude** (`claude` CLI with `ANTHROPIC_API_KEY`) is also supported, and the **NIP** provider runs the same Claude Code CLI against a model on the [Nitro Intelligence Platform](https://github.com/powerhome/nitro-intelligence) inference gateway.
 
 ## What it does
 
@@ -18,11 +18,13 @@ Artifacts: uploads `review-agent.json` from the workspace when present (for debu
 | --- | --- | --- |
 | `app-id` | yes | GitHub App ID used with `actions/create-github-app-token`. |
 | `private-key` | yes | GitHub App private key (PEM). |
-| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; NIP: an inference gateway key). |
+| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; Claude: becomes `ANTHROPIC_API_KEY`; NIP: an inference gateway key). |
 | `pull-request-number` | yes | PR number to review. |
-| `provider` | no | Review backend: `cursor` or `nip`. The action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
+| `provider` | no | Review backend: `cursor`, `claude`, or `nip`. The action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
-| `model` | no | Model passed to the provider CLI. Empty uses the CLI's default; for NIP, `zai-org/GLM-5.3`. |
+| `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default; for NIP, `zai-org/GLM-5.3`. |
+| `claude-settings` | no | Claude and NIP only. Settings that replace the bundled read-only [`config/claude-settings.json`](config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
+| `claude-args` | no | Claude and NIP only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 
 ## Secrets and permissions
@@ -57,6 +59,21 @@ Use `additional-prompt` when you want to append user-supplied context, such as a
     provider-api-key: ${{ secrets.AGENTIC_REVIEW_PROVIDER_API_KEY }}
     pull-request-number: ${{ github.event.issue.number }}
     additional-prompt: ${{ github.event.comment.body }}
+```
+
+### Review a PR with Claude
+
+Set `provider: claude` and pass an Anthropic API key. `model` is optional; leave it out to use Claude Code's default.
+
+```yaml
+- uses: ./.github/actions/agentic-pr-review
+  with:
+    app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
+    private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
+    provider: claude
+    provider-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    model: claude-opus-5-5
+    pull-request-number: ${{ github.event.pull_request.number }}
 ```
 
 Use `github.event.pull_request.number` when the workflow runs on `pull_request` events. Use `github.event.issue.number` for `issue_comment` events on a pull request.
@@ -143,8 +160,39 @@ mkdir -p .cursor
 cp path/to/agentic-pr-review/config/cli-config.json .cursor/cli-config.json
 ```
 
+### Claude (read-only)
+
+[`config/claude-settings.json`](config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, and `WebSearch`. The CLI also runs with:
+
+- `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt.
+- `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
+
+The CLI runs in the PR's own checkout, so the reviewed repository must not be able to configure it. `--setting-sources user` keeps its `.claude/settings.json` and `.claude/settings.local.json` from loading: their hooks would run shell commands outside the tool permissions, with the API key in the environment, and their `env` could point the API URL at another host. The settings file also sets `disableAllHooks`.
+
+### Overriding the Claude defaults
+
+These apply to the `claude` and `nip` providers. A caller can widen what the agent may do, for example to let it read PR context with `gh`:
+
+```yaml
+- uses: ./.github/actions/agentic-pr-review
+  with:
+    # ...
+    provider: claude
+    claude-settings: |
+      {
+        "disableAllHooks": true,
+        "permissions": {
+          "allow": ["Read", "Glob", "Grep", "Bash(gh pr view:*)", "Bash(gh pr diff:*)"],
+          "deny": ["Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch"]
+        }
+      }
+    claude-args: --max-turns 30
+```
+
+- `claude-settings` **replaces** the bundled settings rather than adding to them, and the bundled file denies `Bash` outright. A deny rule wins over any allow, so `--allowed-tools "Bash(...)"` in `claude-args` has no effect unless `claude-settings` also drops that deny.
+- `--setting-sources user` and `--strict-mcp-config` are passed regardless, so the reviewed repository still cannot configure the CLI. `claude-args` comes after them, though, so a caller that passes its own `--setting-sources` changes that.
+- Whatever the settings allow runs with the API key in the environment, against a prompt built from the PR, so allow only what the review needs.
+
 ### NIP (read-only)
 
-[`config/claude-settings.json`](config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, and `WebSearch`. The CLI also runs with `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt, and `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
-
-The CLI runs in the PR's own checkout, so the reviewed repository must not be able to configure it. `--setting-sources user` keeps its `.claude/settings.json` and `.claude/settings.local.json` from loading: their hooks would run shell commands outside the tool permissions, with the gateway key in the environment, and their `env` could point the gateway URL at another host. The settings file also sets `disableAllHooks`.
+The NIP provider runs the same `claude` CLI, with the same settings and flags, as [Claude](#claude-read-only) above, so the same protections hold, with the gateway key in the environment in place of the Anthropic API key. `claude-settings` and `claude-args` apply to it too.

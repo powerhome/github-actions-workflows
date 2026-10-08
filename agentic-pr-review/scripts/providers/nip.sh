@@ -91,6 +91,22 @@ if [[ -n "${REVIEW_ADDITIONAL_INSTRUCTIONS:-}" ]]; then
   PROMPT+=$'\n\n## Additional instructions from the PR comment\n\n'"${REVIEW_ADDITIONAL_INSTRUCTIONS}"
 fi
 
+# The caller's workflow can replace the bundled settings, which deny Bash outright: a deny
+# rule wins over any --allowed-tools, so loosening the tools means supplying settings too.
+if [[ -n "${CLAUDE_SETTINGS:-}" ]]; then
+  SETTINGS_PATH="${CLAUDE_SETTINGS}"
+fi
+
+# claude-args is split with shell quoting, so --allowed-tools "Bash(gh pr view:*)" stays one
+# value, without handing the string to eval.
+EXTRA_ARGS=()
+if [[ -n "${CLAUDE_ARGS:-}" ]]; then
+  extra_args_lines="$(ruby -rshellwords -e 'puts Shellwords.split(ENV.fetch("CLAUDE_ARGS"))')"
+  while IFS= read -r arg; do
+    EXTRA_ARGS+=("${arg}")
+  done <<<"${extra_args_lines}"
+fi
+
 # Read-only permissions come from config/claude-settings.json, passed with --settings rather
 # than copied into the workspace, and dontAsk denies every tool it does not allow instead of
 # prompting. The working directory is the PR's own checkout, so nothing in it may configure
@@ -98,8 +114,8 @@ fi
 # would run shell commands outside the tool permissions and whose env could repoint the
 # gateway URL at another host, and the settings file disables hooks again in case a future
 # CLI loads them from elsewhere. --strict-mcp-config with no --mcp-config keeps the
-# repository's MCP servers from loading. stdin is /dev/null because --print otherwise waits
-# for piped input before it starts.
+# repository's MCP servers from loading. claude-settings does not touch those two flags.
+# stdin is /dev/null because --print otherwise waits for piped input before it starts.
 #
 # The whole run is kept as a stream-json transcript rather than printed as text, so a run
 # that ends without review text says why. The review is the final result event's text.
@@ -111,6 +127,7 @@ claude --print --output-format stream-json --verbose \
   --permission-mode dontAsk \
   --strict-mcp-config \
   --model "${model}" \
+  "${EXTRA_ARGS[@]}" \
   "${PROMPT}" </dev/null >"${TRANSCRIPT_PATH}" || claude_status=$?
 
 result_event="$(jq -c 'select(.type == "result")' "${TRANSCRIPT_PATH}" | tail -n 1)"
