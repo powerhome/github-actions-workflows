@@ -20,6 +20,17 @@ RSpec.describe TestPlan::Profile do
     expect(profile.prompt_path).to end_with("prompts/cobra_test_plan.md")
   end
 
+  it "loads the generic profile, which names an account rather than Consent permissions" do
+    profile = described_class.load(action_root:, profile_id: "test-plan")
+
+    expect(profile.display_name).to eq("Test Plan")
+    expect(profile.comment_tag).to eq("test-plan")
+    expect(profile.access).to eq("sign_in")
+    expect(profile.prompt_path).to end_with("prompts/test_plan.md")
+    expect(profile.dependency_prompt_path).to end_with("prompts/dependency_test_plan.md")
+    expect(profile.playbook_prompt_path).to end_with("prompts/playbook_test_plan.md")
+  end
+
   it "reads Consent permissions when a profile declares no access" do
     profile = described_class.load(action_root:, profile_id: "cobra-test-plan")
 

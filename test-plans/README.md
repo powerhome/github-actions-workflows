@@ -1,12 +1,15 @@
 # Test Plans
 
-Generates structured, non-technical manual QA plans from pull-request merge-base diffs. The action uses the `cobra-test-plan` profile, optionally enriches the PR diff with the source changes of changed public dependencies, and upserts one authoritative PR comment.
+Generates structured, non-technical manual QA plans from pull-request merge-base diffs. The action uses the profile named by the triggering label, optionally enriches the PR diff with the source changes of changed public dependencies, and upserts one authoritative PR comment.
 
 ## Profiles
 
 | Profile | Model | Intended use |
 | --- | --- | --- |
 | `cobra-test-plan` | Cursor default | Standard CoBRA/Consent test plan. |
+| `test-plan` | Cursor default | General test plan for any other application. |
+
+The two profiles share the dependency and Playbook evidence and plan shapes. They differ in what the standard plan assumes about the application. `cobra-test-plan` resolves Consent permissions to the Subject and Action labels the UI shows and composes component routes with their umbrella mounts. `test-plan` assumes neither: it has no Permissions / Roles section, and each scenario instead names the account to **sign in as** — a public visitor, or a role the application defines — or says it could not be identified. A profile chooses this with `access` (`consent`, the default, or `sign_in`).
 
 Each scenario names the audience it belongs to when an application serves more than one from different hostnames — where the umbrella routes mount two engines at the same prefix behind subdomain constraints, a relative path alone does not identify the page. Applications with no such constraint produce plans with no audience line.
 
@@ -14,7 +17,7 @@ Each scenario names the audience it belongs to when an application serves more t
 
 | Input | Required | Description |
 | --- | --- | --- |
-| `profile` | yes | `cobra-test-plan`. |
+| `profile` | yes | `cobra-test-plan` or `test-plan`. |
 | `app-id` | yes | GitHub App ID used to create an installation token. |
 | `private-key` | yes | GitHub App private key. |
 | `provider-api-key` | yes | Provider credential; Cursor maps it to `CURSOR_API_KEY`. |
@@ -133,7 +136,7 @@ Two residual risks are inherent rather than mitigated. Retrieved dependency sour
 
 ## Caller Workflow
 
-Test plans are activated only through the `cobra-test-plan` label. A consumer workflow should pass that label as the profile and pin this action to an immutable commit SHA.
+Test plans are activated only through a profile's label: `cobra-test-plan` in CoBRA applications, `test-plan` elsewhere. A consumer workflow should pass that label as the profile and pin this action to an immutable commit SHA. The example below is for a CoBRA application; elsewhere, match `test-plan` instead.
 
 ```yaml
 name: Test Plan

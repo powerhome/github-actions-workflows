@@ -3,7 +3,7 @@ description: Generate a profile-driven manual QA plan for a pull request and ups
 
 inputs:
   profile:
-    description: Test-plan profile (cobra-test-plan)
+    description: Test-plan profile (cobra-test-plan or test-plan)
     required: true
   app-id:
     description: GitHub App ID used to create an installation token
