@@ -122,7 +122,9 @@ module TestPlan
         local = Set.new
         packages = []
 
-        @snapshot.paths_at(@snapshot.head_sha, "package.json").each do |path|
+        # A vendored package's manifest names its own dependencies, which would otherwise
+        # mark the application's as direct or, through a file: requirement, as local.
+        @snapshot.paths_at(@snapshot.head_sha, "package.json").reject { |path| vendored?(path) }.each do |path|
           content = @snapshot.read(@snapshot.head_sha, path)
           next unless content
 

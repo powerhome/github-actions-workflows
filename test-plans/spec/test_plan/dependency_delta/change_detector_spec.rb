@@ -160,6 +160,23 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     expect(detector.out_of_scope).to be_empty
   end
 
+  it "reads no direct or local packages out of a vendored package.json" do
+    vendored = "wordpress/wp-content/plugins/maps/vendor/autocomplete/package.json"
+    snapshot = FakeSnapshot.new(
+      "merge_base" => { "package-lock.json" => package_lock("14.0.7") },
+      "head" => {
+        "package-lock.json" => package_lock("14.1.0"),
+        "package.json" => JSON.generate("dependencies" => { "alpinejs" => "3.9.6" }),
+        vendored => JSON.generate("dependencies" => { "swiper" => "file:../swiper" }),
+      }
+    )
+    allow(snapshot).to receive(:changed_dependency_files).and_return(["package-lock.json"])
+
+    changes = described_class.new(snapshot).detect
+
+    expect(changes.map { |change| [change.name, change.direct] }).to eq([["swiper", false]])
+  end
+
   # A WordPress plugin commits its own vendor tree, lockfiles and all; those describe
   # how the plugin was built, not what this application depends on.
   it "ignores lockfiles inside vendored and installed code" do
