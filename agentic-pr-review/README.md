@@ -1,6 +1,6 @@
 # Agentic PR Review
 
-Runs a headless review agent against the **merge-base diff** for a pull request, then posts the result as a **GitHub PR review** (summary plus optional inline comments). The default provider is **Cursor** (`agent` CLI with `CURSOR_API_KEY`).
+Runs a headless review agent against the **merge-base diff** for a pull request, then posts the result as a **GitHub PR review** (summary plus optional inline comments). The default provider is **Cursor** (`agent` CLI with `CURSOR_API_KEY`). The **NIP** provider runs the Claude Code CLI against a model on the [Nitro Intelligence Platform](https://github.com/powerhome/nitro-intelligence) inference gateway.
 
 ## What it does
 
@@ -18,10 +18,11 @@ Artifacts: uploads `review-agent.json` from the workspace when present (for debu
 | --- | --- | --- |
 | `app-id` | yes | GitHub App ID used with `actions/create-github-app-token`. |
 | `private-key` | yes | GitHub App private key (PEM). |
-| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`). |
+| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; NIP: an inference gateway key). |
 | `pull-request-number` | yes | PR number to review. |
-| `provider` | no | Review backend; the action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
+| `provider` | no | Review backend: `cursor` or `nip`. The action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
+| `model` | no | Model passed to the provider CLI. Empty uses the CLI's default; for NIP, `zai-org/GLM-5.3`. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 
 ## Secrets and permissions
@@ -83,6 +84,25 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
     pull-request-number: ${{ github.event.pull_request.number }}
 ```
 
+## NIP provider
+
+`provider: nip` runs the Claude Code CLI against the NIP inference gateway (`https://inference.powerhome.ai`), using its Anthropic-format `/v1/messages` route. Every model slot Claude Code uses is pointed at `model`, which defaults to `zai-org/GLM-5.3`.
+
+- **Runner.** The gateway is only reachable from Power's internal network, so the job must run on a self-hosted runner. The runner also needs what the rest of the action uses: `ruby`, `gh`, `jq`, `git`, and `curl`.
+- **Key.** `provider-api-key` is a gateway key issued to an application's `ai-project` team (see [`powerhome/software`](https://github.com/powerhome/software) `modules/ai-project`), not a personal key.
+- **Spend logs.** Each request carries an `x-litellm-spend-logs-metadata` header with the repository, PR number and workflow run, so gateway spend can be traced back to a run. It sends no trace ID or tags, since the action records nothing in Cerebro; see the NIP [Client Observability Policy](https://github.com/powerhome/nitro-intelligence/blob/main/docs/client-observability-policy.md).
+- **Data handling.** The gateway keeps prompts in its spend logs, and can fail over to third-party providers under load, so the PR diff and any files the agent reads may be served outside Power's datacenters.
+
+```yaml
+- uses: ./.github/actions/agentic-pr-review
+  with:
+    app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
+    private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
+    provider: nip
+    provider-api-key: ${{ secrets.AGENTIC_REVIEW_NIP_API_KEY }}
+    pull-request-number: ${{ github.event.pull_request.number }}
+```
+
 ## Status comments
 
 The in-progress and failure comments are posted through `gh` by [`scripts/post_comment.rb`](scripts/post_comment.rb) rather than a third-party action. The in-progress comment is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "agentic-pr-review-status" -->`) and cleared by an `always()` step at the end of the run; a comment left by the action this replaced is recognised and adopted. The failure comment carries no marker, so a second failure adds a second comment.
@@ -122,3 +142,7 @@ shorthand, so 3.1 is the floor.
 mkdir -p .cursor
 cp path/to/agentic-pr-review/config/cli-config.json .cursor/cli-config.json
 ```
+
+### NIP (read-only)
+
+[`config/claude-settings.json`](config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, and `WebSearch`. The CLI also runs with `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt, and `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded. Deny rules take precedence over allow rules from every settings source, so a `.claude/settings.json` in the reviewed repository cannot re-enable a denied tool.

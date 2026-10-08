@@ -9,11 +9,11 @@ inputs:
     description: GitHub App private key (PEM)
     required: true
   provider:
-    description: Review backend (supported values — cursor)
+    description: Review backend (supported values — cursor, nip)
     required: false
     default: cursor
   provider-api-key:
-    description: API credential for the selected provider (e.g. Cursor maps this to CURSOR_API_KEY)
+    description: API credential for the selected provider (Cursor maps this to CURSOR_API_KEY; NIP takes an inference gateway key)
     required: true
   pull-request-number:
     description: Pull request number to review
@@ -110,6 +110,7 @@ runs:
       env:
         PROVIDER: ${{ inputs.provider }}
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
         MODEL: ${{ inputs.model }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
