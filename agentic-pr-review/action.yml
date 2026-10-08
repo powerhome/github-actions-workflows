@@ -83,11 +83,19 @@ runs:
         fetch-depth: 1
         token: ${{ steps.app_token.outputs.token }}
 
+    # In a job that runs in a container, the checkout is owned by the runner's user while the
+    # steps run as root, and actions/checkout trusts it only for its own git calls (under a
+    # temporary HOME), so git refuses the later fetch and diff steps as dubious ownership.
+    # Trust the workspace globally, as checkout's set-safe-directory does on a plain runner.
     - name: Fetch base commit (for merge-base)
       shell: bash
       env:
         BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
-      run: git fetch --depth=1 origin "$BASE_SHA"
+      run: |
+        set -euo pipefail
+        git config --global --get-all safe.directory | grep -qxF "${GITHUB_WORKSPACE}" ||
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+        git fetch --depth=1 origin "$BASE_SHA"
 
     - name: Fetch through merge-base
       uses: rmacklin/fetch-through-merge-base@bfe4d03a86f9afa52bc1a70e9814fc92a07f7b75 # v0
