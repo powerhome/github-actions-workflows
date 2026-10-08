@@ -12,7 +12,7 @@ inputs:
     description: GitHub App private key (PEM)
     required: true
   provider:
-    description: Test-plan backend (supported values — cursor)
+    description: Test-plan backend (supported values — cursor, claude)
     required: false
     default: cursor
   provider-api-key:
@@ -106,7 +106,7 @@ runs:
         COMMENT_MODE: upsert
         COMMENT_TAG: ${{ steps.profile.outputs.comment_tag }}
         COMMENT_BODY_PATH: ${{ github.workspace }}/test-plan-blocked-comment.md
-      run: ruby "${{ github.action_path }}/bin/comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
 
     - name: Post in-progress status comment
       if: steps.pr_metadata.outputs.generate == 'true'
@@ -120,7 +120,7 @@ runs:
           :hourglass_flowing_sand: **${{ steps.profile.outputs.display_name }}** — in progress
 
           [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
-      run: ruby "${{ github.action_path }}/bin/comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
 
     - name: Check out repository
       if: steps.pr_metadata.outputs.generate == 'true'
@@ -242,7 +242,7 @@ runs:
       env:
         BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
         HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
-      run: ruby "${{ github.action_path }}/bin/trusted_agent_instructions.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/trusted_agent_instructions.rb"
 
     - name: Run test-plan provider
       if: steps.pr_metadata.outputs.generate == 'true'
@@ -250,29 +250,9 @@ runs:
       env:
         PROVIDER: ${{ inputs.provider }}
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
-        TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
-        TEST_PLAN_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
-      run: |
-        set -euo pipefail
-
-        provider="${PROVIDER:-cursor}"
-
-        # Interpolated into a path, so it has to be a bare name: ../ would otherwise
-        # escape ai/providers/ and run some other reachable script with the provider
-        # credential in the environment.
-        if [[ ! "${provider}" =~ ^[a-z][a-z0-9-]*$ ]]; then
-          echo "Invalid provider name: ${provider}" >&2
-          exit 1
-        fi
-
-        provider_script="${{ github.action_path }}/ai/providers/${provider}.sh"
-
-        if [[ ! -f "${provider_script}" ]]; then
-          echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
-          exit 1
-        fi
-
-        exec bash "${provider_script}"
+        AGENT_OUTPUT_PATH: ${{ github.workspace }}/test-plan-agent.json
+        AGENT_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
+      run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
 
     - name: Upload test-plan artifacts
       if: always() && steps.pr_metadata.outputs.generate == 'true'
@@ -318,7 +298,7 @@ runs:
         COMMENT_MODE: upsert
         COMMENT_TAG: ${{ steps.profile.outputs.comment_tag }}
         COMMENT_BODY_PATH: ${{ github.workspace }}/test-plan-comment.md
-      run: ruby "${{ github.action_path }}/bin/comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
 
     - name: Clear previous failure comment
       # Both terminal paths -- a published plan and a blocked message -- supersede any
@@ -332,7 +312,7 @@ runs:
         PR_NUMBER: ${{ inputs.pull-request-number }}
         COMMENT_MODE: delete
         COMMENT_TAG: ${{ steps.profile.outputs.failure_comment_tag }}
-      run: ruby "${{ github.action_path }}/bin/comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
 
     - name: Post failure comment
       if: failure() && steps.profile.outcome == 'success' && steps.pr_metadata.outputs.blocked != 'true' && steps.test_plan_comment.outcome != 'success'
@@ -348,7 +328,7 @@ runs:
           The last successful test plan, if one exists, has been preserved.
 
           [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](https://nitro.powerhrg.com/connect/#rooms/138).
-      run: ruby "${{ github.action_path }}/bin/comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
 
     # thollander's delete-on-completion ran in a post step, which a composite action does
     # not have. always() covers a failed or cancelled job, but a runner that dies outright
@@ -362,4 +342,4 @@ runs:
         PR_NUMBER: ${{ inputs.pull-request-number }}
         COMMENT_MODE: delete
         COMMENT_TAG: ${{ steps.profile.outputs.status_comment_tag }}
-      run: ruby "${{ github.action_path }}/bin/comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
