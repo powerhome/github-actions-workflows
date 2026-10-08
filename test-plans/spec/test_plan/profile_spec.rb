@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../spec_helper"
 require "test_plan/profile"
 
@@ -7,49 +9,24 @@ require "tmpdir"
 RSpec.describe TestPlan::Profile do
   let(:action_root) { ACTION_ROOT }
 
-  it "loads the standard Cobra profile without a model override" do
+  it "loads the Cobra profile" do
     profile = described_class.load(
-      action_root: action_root,
+      action_root:,
       profile_id: "cobra-test-plan"
     )
 
     expect(profile.display_name).to eq("Cobra Test Plan")
-    expect(profile.model).to eq("")
     expect(profile.comment_tag).to eq("cobra-test-plan")
     expect(profile.prompt_path).to end_with("prompts/cobra_test_plan.md")
   end
 
-  # Cursor bakes the effort tier into the model name; it has no bracketed-option
-  # syntax, and rejects an unknown name outright. This spec can only prove the profile
-  # says what we meant it to say -- that the name is one Cursor accepts has to be
-  # checked against the CLI.
-  it "pins the enhanced Cobra profile to Claude Opus 5 at high effort" do
-    profile = described_class.load(
-      action_root: action_root,
-      profile_id: "enhanced-cobra-test-plan"
-    )
-
-    expect(profile.model).to eq("claude-opus-5-high")
-    expect(profile.comment_tag).to eq("enhanced-cobra-test-plan")
-  end
-
-  it "keeps profile comments and artifacts independent while sharing the output contract" do
-    standard = described_class.load(action_root: action_root, profile_id: "cobra-test-plan")
-    enhanced = described_class.load(action_root: action_root, profile_id: "enhanced-cobra-test-plan")
-
-    expect(enhanced.prompt_path).to eq(standard.prompt_path)
-    expect(enhanced.status_comment_tag).not_to eq(standard.status_comment_tag)
-    expect(enhanced.failure_comment_tag).not_to eq(standard.failure_comment_tag)
-    expect(enhanced.artifact_name).not_to eq(standard.artifact_name)
-  end
-
   it "rejects unknown and path-traversal profile values" do
     expect do
-      described_class.load(action_root: action_root, profile_id: "missing")
+      described_class.load(action_root:, profile_id: "missing")
     end.to raise_error(RuntimeError, /Unknown/)
 
     expect do
-      described_class.load(action_root: action_root, profile_id: "../cobra-test-plan")
+      described_class.load(action_root:, profile_id: "../cobra-test-plan")
     end.to raise_error(RuntimeError, /Invalid/)
   end
 
@@ -65,7 +42,6 @@ RSpec.describe TestPlan::Profile do
           "id" => "some-other-plan",
           "display_name" => "Mismatched",
           "prompt" => "prompts/plan.md",
-          "model" => "",
           "comment_tag" => "mismatched",
           "status_comment_tag" => "mismatched-status",
           "failure_comment_tag" => "mismatched-failure",
@@ -81,11 +57,13 @@ RSpec.describe TestPlan::Profile do
     end
   end
 
-  it "resolves the Playbook prompt the shipped profiles declare" do
+  it "resolves the Playbook prompt the Cobra profile declares" do
     profile = TestPlan::Profile.load(action_root: ACTION_ROOT, profile_id: "cobra-test-plan")
 
     expect(profile.playbook_prompt_path).to end_with("prompts/cobra_playbook_test_plan.md")
+    expect(profile.dependency_prompt_path).to end_with("prompts/cobra_dependency_test_plan.md")
     expect(profile.to_h).to have_key("playbook_prompt_path")
+    expect(profile.to_h).to have_key("dependency_prompt_path")
   end
 
   it "has no Playbook prompt when a profile declares none" do
@@ -97,7 +75,7 @@ RSpec.describe TestPlan::Profile do
         File.join(directory, "profiles", "sample.json"),
         JSON.generate(
           "id" => "sample", "display_name" => "Sample", "prompt" => "prompts/plan.md",
-          "model" => "", "comment_tag" => "sample", "status_comment_tag" => "sample-status",
+          "comment_tag" => "sample", "status_comment_tag" => "sample-status",
           "failure_comment_tag" => "sample-failure", "artifact_name" => "sample-artifacts"
         )
       )
@@ -116,7 +94,7 @@ RSpec.describe TestPlan::Profile do
         File.join(directory, "profiles", "sample.json"),
         JSON.generate(
           "id" => "sample", "display_name" => "Sample", "prompt" => "prompts/plan.md",
-          "playbook_prompt" => "prompts/playbook.md", "model" => "",
+          "playbook_prompt" => "prompts/playbook.md",
           "comment_tag" => "sample", "status_comment_tag" => "sample-status",
           "failure_comment_tag" => "sample-failure", "artifact_name" => "sample-artifacts"
         )
@@ -139,7 +117,7 @@ RSpec.describe TestPlan::Profile do
         File.join(directory, "profiles", "sample.json"),
         JSON.generate(
           "id" => "sample", "display_name" => "Sample", "prompt" => "prompts/plan.md",
-          "playbook_prompt" => "../outside.md", "model" => "",
+          "playbook_prompt" => "../outside.md",
           "comment_tag" => "sample", "status_comment_tag" => "sample-status",
           "failure_comment_tag" => "sample-failure", "artifact_name" => "sample-artifacts"
         )
@@ -159,7 +137,6 @@ RSpec.describe TestPlan::Profile do
         "id" => "unsafe-plan",
         "display_name" => "Unsafe",
         "prompt" => "../outside.md",
-        "model" => "",
         "comment_tag" => "unsafe",
         "status_comment_tag" => "unsafe-status",
         "failure_comment_tag" => "unsafe-failure",

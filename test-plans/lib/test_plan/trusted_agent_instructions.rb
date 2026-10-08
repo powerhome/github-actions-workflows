@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "fileutils"
 require "find"
 require "open3"
@@ -13,9 +15,8 @@ module TestPlan
     def self.instruction_path?(relative)
       segments = relative.split("/")
       return true if segments[0..-2].any? { |segment| DIRECTORY_NAMES.include?(segment) }
-      # The reserved name itself counts: a pull request can commit a regular file called
-      # .cursor, which survives a reset that only looks inside such a directory and then
-      # makes the provider fail at `mkdir -p .cursor` instead of producing a plan.
+      # The name itself counts: a regular file called .cursor survives a reset that only
+      # looks inside such a directory, then fails the provider at `mkdir -p .cursor`.
       return true if DIRECTORY_NAMES.include?(segments.last)
 
       FILE_NAMES.include?(segments.last)
@@ -49,7 +50,7 @@ module TestPlan
         end
       end
 
-      Result.new(restored: restored, removed: removed)
+      Result.new(restored:, removed:)
     end
 
     def merge_base_sha
@@ -63,13 +64,12 @@ module TestPlan
         Find.find(@root) do |path|
           relative = path.delete_prefix("#{@root}#{File::SEPARATOR}")
 
-          # Checked before the directory branch, which follows links: a .cursor symlink
-          # reads as a directory and would be skipped, while Find refuses to descend it,
-          # so nothing beneath it is ever seen either. Cursor has no such reluctance --
-          # it follows the link and reads whatever the pull request put there.
+          # Before the directory branch, which follows links: a .cursor symlink reads as a
+          # directory and Find refuses to descend it, so it would be skipped entirely.
+          # Cursor follows the link and reads whatever the pull request put there.
           if File.symlink?(path)
             paths << relative if self.class.instruction_path?(relative) ||
-              DIRECTORY_NAMES.include?(File.basename(path))
+                                 DIRECTORY_NAMES.include?(File.basename(path))
             next
           end
 
@@ -85,30 +85,26 @@ module TestPlan
 
     def base_paths
       @base_paths ||= git("ls-tree", "-r", "--name-only", merge_base_sha)
-        .lines.map(&:chomp).select { |path| self.class.instruction_path?(path) }
+                      .lines.map(&:chomp).select { |path| self.class.instruction_path?(path) }
     end
 
     def read_base(relative)
       git("show", "#{merge_base_sha}:#{relative}")
     end
 
-    # Compared without following links: a symlink standing where a file belongs is a
-    # change the pull request made, whatever it happens to point at.
+    # Without following links: a symlink where a file belongs is a change the pull
+    # request made, whatever it points at.
     def unchanged?(absolute, trusted)
       return false if symlinked_component?(absolute)
 
       File.file?(absolute) && File.binread(absolute) == trusted
     end
 
-    # A pull request can put something other than the expected file at any point along
-    # the path: a symlink, whose target the write would land in rather than the
-    # workspace; a directory where the file belongs, which File.binwrite cannot write
-    # to; or a regular file where a parent directory belongs, which mkdir_p cannot
-    # descend. The last two raise and fail the whole run before a plan is generated.
-    #
-    # Whatever stands in the way is removed first, which is the answer this class gives
-    # everywhere else: what the pull request put there is not what the merge base holds.
-    # FileUtils.rm_rf unlinks a symlink rather than following it.
+    # A pull request can stand anything at any point along the path: a symlink, whose
+    # target the write lands in rather than the workspace; a directory where the file
+    # belongs; or a file where a parent directory belongs. The last two raise and fail the
+    # run. Whatever is in the way is removed first -- rm_rf unlinks a symlink rather than
+    # following it.
     def write_trusted(absolute, trusted)
       components = each_component(absolute).to_a
 
@@ -137,7 +133,6 @@ module TestPlan
       end
     end
 
-    # A path the pull request added may have brought empty directories with it.
     def prune_empty_parents(absolute)
       directory = File.dirname(absolute)
 

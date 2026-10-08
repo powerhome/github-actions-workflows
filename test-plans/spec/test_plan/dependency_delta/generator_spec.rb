@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -22,11 +24,35 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
   end
 
+  it "retrieves and reports an alpha against its base release, noting the installed one" do
+    alpha = change.dup.tap do |c|
+      c.old_version = "18.1.0.pre.rc.3"
+      c.new_version = "18.0.0.pre.alpha.PLAY1"
+    end
+    rebased = alpha.dup.tap do |c|
+      c.old_version = "18.0.0"
+      c.installed_version = "18.1.0.pre.rc.3"
+    end
+    baseline = double("baseline")
+    allow(baseline).to receive(:resolve).with(alpha).and_return(rebased)
+    retriever = double("retriever")
+    allow(retriever).to receive(:retrieve).and_return([])
+
+    result = generator(changes: [alpha], retriever:, alpha_baseline: baseline).generate
+    entry = result.dig(:manifest, "dependencies", 0)
+
+    expect(retriever).to have_received(:retrieve).with(rebased)
+    expect(entry).to include("old_version" => "18.0.0", "installed_version" => "18.1.0.pre.rc.3")
+    expect(entry.fetch("warnings")).to contain_exactly(a_string_including("18.0.0", "18.1.0.pre.rc.3"))
+    expect(result.fetch(:full)).to include("(18.0.0 -> 18.0.0.pre.alpha.PLAY1)")
+    expect(result.dig(:manifest, "warning_count")).to eq(0)
+  end
+
   it "records retrieval failures as warnings without raising" do
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve).and_raise("not public")
 
-    result = generator(changes: [change], retriever: retriever).generate
+    result = generator(changes: [change], retriever:).generate
     entry = result.dig(:manifest, "dependencies", 0)
     expect(entry).to include("status" => "unavailable", "warnings" => ["not public"])
     expect(result.dig(:manifest, "warning_count")).to eq(1)
@@ -43,7 +69,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
 
     result = described_class.new(
       changes: [change],
-      retriever: retriever,
+      retriever:,
       changelog: double("changelog", diffs_for: [changelog])
     ).generate
     entry = result.dig(:manifest, "dependencies", 0)
@@ -64,7 +90,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     allow(retriever).to receive(:retrieve).and_raise("resolves to a non-public registry")
 
     result = described_class.new(
-      changes: [change], retriever: retriever,
+      changes: [change], retriever:,
       changelog: double("changelog", diffs_for: [changelog])
     ).generate
 
@@ -77,7 +103,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
     diff = lambda do |path|
       TestPlan::DependencyDelta::SourceDiff.new(
-        path: path, diff: "x" * 512, priority: builder.send(:priority, path)
+        path:, diff: "x" * 512, priority: builder.send(:priority, path)
       )
     end
     gem_change = TestPlan::DependencyDelta::Change.new(
@@ -95,7 +121,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       candidate.ecosystem == "bundler" ? [diff.call("lib/widget.rb")] : [diff.call("dist/widget.js")]
     end
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
 
     expect(result.dig(:manifest, "warning_count")).to eq(0)
   end
@@ -132,7 +158,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     retriever = double("retriever")
     allow(retriever).to receive(:retrieve).and_raise("not public")
 
-    result = generator(changes: [change], retriever: retriever).generate
+    result = generator(changes: [change], retriever:).generate
 
     expect(result.dig(:manifest, "dependencies", 0)).to include(
       "status" => "unavailable",
@@ -177,7 +203,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = generator(changes: [big, small], retriever: retriever).generate
+    result = generator(changes: [big, small], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -199,10 +225,10 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       new_locator: "https://registry.npmjs.org/b.tgz", direct: true, lockfiles: ["yarn.lock"]
     )
     retriever = double("retriever", retrieve: [
-      TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n", priority: 0),
-    ])
+                         TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n", priority: 0),
+                       ])
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
 
     # Linking drops each half's build output, so a wrong link costs both their evidence.
     expect(result.dig(:manifest, "dependencies").map { |entry| entry.fetch("related") }).to eq([[], []])
@@ -220,9 +246,10 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       new_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-14.11.0.tgz",
       direct: true, lockfiles: ["yarn.lock"]
     )
-    retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+    retriever = double("retriever",
+                       retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -249,9 +276,10 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       new_locator: "https://registry.npmjs.org/playbook-ui/-/playbook-ui-17.2.0-rc.0.tgz",
       direct: true, lockfiles: ["yarn.lock"]
     )
-    retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+    retriever = double("retriever",
+                       retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -272,9 +300,10 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       new_locator: "https://registry.npmjs.org/widget/-/widget-3.0.0.tgz",
       direct: true, lockfiles: ["yarn.lock"]
     )
-    retriever = double("retriever", retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
+    retriever = double("retriever",
+                       retrieve: [TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "x\n")])
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
 
     expect(result.dig(:manifest, "dependencies").map { |entry| entry.fetch("related") }).to eq([[], []])
   end
@@ -282,7 +311,8 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
   it "names every file it omitted from the provider context" do
     diffs = [
       TestPlan::DependencyDelta::SourceDiff.new(path: "CHANGELOG.md", diff: "c" * 1024),
-      TestPlan::DependencyDelta::SourceDiff.new(path: "lib/huge.rb", diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1)),
+      TestPlan::DependencyDelta::SourceDiff.new(path: "lib/huge.rb",
+                                                diff: "h" * (described_class::CONTEXT_TOTAL_LIMIT + 1)),
       TestPlan::DependencyDelta::SourceDiff.new(path: "lib/small.rb", diff: "s" * 1024),
     ]
     result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate
@@ -387,7 +417,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = generator(changes: [small, change], retriever: retriever).generate
+    result = generator(changes: [small, change], retriever:).generate
     entry = result.dig(:manifest, "dependencies").find { |candidate| candidate.fetch("name") == "example" }
 
     expect(entry).to include("status" => "retrieved", "context_files" => 8)
@@ -415,7 +445,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       ]
     end
 
-    result = generator(changes: changes, retriever: retriever).generate
+    result = generator(changes:, retriever:).generate
     entries = result.dig(:manifest, "dependencies")
 
     expect(entries.first.fetch("context_files")).to eq(1)
@@ -423,7 +453,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(result.fetch(:context).bytesize).to be <= described_class::CONTEXT_TOTAL_LIMIT
   end
 
-  # Recorded rather than looking like a raise the run missed, but it cost no evidence.
+  # Recorded rather than looking like a change the run missed, but it cost no evidence.
   it "records the dependencies it skipped without counting them as warnings" do
     skipped = TestPlan::DependencyDelta::Change.new(
       ecosystem: "bundler", name: "minitest", old_version: "5.25.5", new_version: "6.0.6",
@@ -433,7 +463,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
     retriever = double("retriever", retrieve: [])
 
-    result = generator(changes: [change], retriever: retriever, out_of_scope: [skipped]).generate
+    result = generator(changes: [change], retriever:, out_of_scope: [skipped]).generate
 
     expect(result.dig(:manifest, "out_of_scope")).to eq(
       [
@@ -465,7 +495,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       [TestPlan::DependencyDelta::SourceDiff.new(path: "#{candidate.name}.rb", diff: "x" * (200 * 1024))]
     end
 
-    result = generator(changes: [playbook, *others], retriever: retriever).generate
+    result = generator(changes: [playbook, *others], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -487,8 +517,8 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     )
     retriever = double("retriever", retrieve: [])
 
-    names = generator(changes: [narrow, wide], retriever: retriever)
-      .generate.dig(:manifest, "dependencies").map { |entry| entry.fetch("name") }
+    names = generator(changes: [narrow, wide], retriever:)
+            .generate.dig(:manifest, "dependencies").map { |entry| entry.fetch("name") }
 
     expect(names).to eq(%w[zzz-wide aaa-narrow])
   end
@@ -508,7 +538,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
     source_diff = lambda do |path|
       TestPlan::DependencyDelta::SourceDiff.new(
-        path: path,
+        path:,
         diff: "--- a/#{path}\n+++ b/#{path}\n#{"x" * 512}\n",
         priority: builder.send(:priority, path)
       )
@@ -526,7 +556,7 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
       end
     end
 
-    result = generator(changes: [gem_change, npm_change], retriever: retriever).generate
+    result = generator(changes: [gem_change, npm_change], retriever:).generate
     entries = result.dig(:manifest, "dependencies").each_with_object({}) do |entry, index|
       index[entry.fetch("name")] = entry
     end
@@ -547,11 +577,41 @@ RSpec.describe TestPlan::DependencyDelta::Generator do
     expect(result.fetch(:full)).to include("dist/card.js")
   end
 
+  # Weighting, release linking, scope and plan selection all have to agree on which names
+  # are Playbook. A third published name reaching only some of them would leave a raise
+  # selecting the Playbook plan without the context budget or the link that plan assumes.
+  describe "the Playbook package list" do
+    it "weights and links exactly the names the rest of the action recognises" do
+      expect(described_class::WEIGHTED_PACKAGES).to equal(TestPlan::Playbook::PACKAGE_NAMES)
+      expect(described_class::LINKED_RELEASES).to include(TestPlan::Playbook::PACKAGE_NAMES)
+    end
+
+    it "weights every one of them and nothing else" do
+      weight = ->(name) do
+        generator(changes: []).send(:context_weight, TestPlan::DependencyDelta::Change.new(name:))
+      end
+
+      TestPlan::Playbook::PACKAGE_NAMES.each do |name|
+        expect(weight.call(name)).to eq(described_class::WEIGHTED_CONTEXT_SHARE)
+      end
+      expect(weight.call("cgi")).to eq(described_class::DEFAULT_CONTEXT_SHARE)
+    end
+
+    it "links every one of them to the same release" do
+      link = ->(name) do
+        generator(changes: []).send(:linked_release, TestPlan::DependencyDelta::Change.new(name:))
+      end
+
+      expect(TestPlan::Playbook::PACKAGE_NAMES.map { |name| link.call(name) }.uniq.compact.length).to eq(1)
+      expect(link.call("cgi")).to be_nil
+    end
+  end
+
   it "still sends build output for a dependency that has no linked source half" do
     builder = TestPlan::DependencyDelta::SourceDiffBuilder.new
     diffs = [
       TestPlan::DependencyDelta::SourceDiff.new(path: "dist/thing.js", diff: "x" * 2048,
-                     priority: builder.send(:priority, "dist/thing.js")),
+                                                priority: builder.send(:priority, "dist/thing.js")),
     ]
 
     result = generator(changes: [change], retriever: double("r", retrieve: diffs)).generate

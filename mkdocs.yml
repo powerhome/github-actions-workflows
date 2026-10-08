@@ -4,5 +4,7 @@ repo_url: https://github.com/powerhome/github-actions-workflows
 nav:
   - 'Home': 'README.md'
   - 'Test Plans': 'test-plans.md'
+  - 'Project Status': 'project-status.md'
+  - 'Project Iteration Rollover': 'project-iteration-rollover.md'
 plugins:
   - techdocs-core

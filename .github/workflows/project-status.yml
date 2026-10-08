@@ -1,0 +1,279 @@
+# Adds the calling repository's issues and pull requests to an organization project and sets
+# their Status. See docs/project-status.md for the triggers a caller needs.
+#
+# - Open issues have no Status, so they wait for triage, and closed issues are Done.
+# - Pull requests are In progress while in draft, In review once ready, Ready once approved
+#   with no reviewer's requested changes outstanding, back to In progress while a review's
+#   requested changes are outstanding, back to In review when review is requested again, and
+#   Done when closed.
+# - Issues and pull requests carrying skip-label are left off the project.
+#
+# Events only trigger a run: each run works the Status out from the item as it is now, so
+# runs that start late or out of order still leave the latest Status.
+
+name: Project status
+
+on:
+  workflow_call:
+    inputs:
+      project-owner:
+        description: Organization that owns the project.
+        type: string
+        required: true
+      project-number:
+        description: Number of the project, from its URL.
+        type: number
+        required: true
+      client-id:
+        description: Client ID of the GitHub App that writes to the project.
+        type: string
+        required: true
+      skip-label:
+        description: Issues and pull requests with this label are not added.
+        type: string
+        default: ""
+      status-in-progress:
+        description: Status option for work in progress.
+        type: string
+        default: In progress
+      status-in-review:
+        description: Status option for pull requests waiting on review.
+        type: string
+        default: In review
+      status-ready:
+        description: Status option for approved pull requests. Empty to leave them In review.
+        type: string
+        default: Ready
+      status-done:
+        description: Status option for closed issues and pull requests.
+        type: string
+        default: Done
+      priority-field:
+        description: Single-select field a pull request copies from the issues it closes. Empty to leave priorities alone.
+        type: string
+        default: Priority
+    secrets:
+      private-key:
+        description: Private key of the GitHub App that writes to the project.
+        required: true
+
+permissions: {}
+
+jobs:
+  project:
+    name: Add to project and set status
+    # Dependabot and fork pull requests cannot read Actions secrets; comment-only reviews
+    # never change the Status.
+    if: >-
+      github.actor != 'dependabot[bot]'
+      && (github.event.pull_request == null || github.event.pull_request.head.repo.full_name == github.repository)
+      && (inputs.skip-label == '' || (!contains(github.event.issue.labels.*.name, inputs.skip-label) && !contains(github.event.pull_request.labels.*.name, inputs.skip-label)))
+      && (github.event_name != 'pull_request_review' || github.event.review.state != 'commented')
+    # Runs for one issue or pull request queue behind each other, so they write in event order.
+    concurrency:
+      group: project-status-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Mint project App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ inputs.client-id }}
+          private-key: ${{ secrets.private-key }}
+          owner: ${{ inputs.project-owner }}
+          permission-issues: read
+          permission-pull-requests: read
+          permission-organization-projects: write
+
+      - name: Add to project
+        id: add
+        uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd # v2.0.0
+        with:
+          project-url: https://github.com/orgs/${{ inputs.project-owner }}/projects/${{ inputs.project-number }}
+          github-token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set status
+        id: status
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ITEM_ID: ${{ steps.add.outputs.itemId }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          PULL: ${{ github.event.pull_request.number }}
+          OWNER: ${{ inputs.project-owner }}
+          NUMBER: ${{ inputs.project-number }}
+          IN_PROGRESS: ${{ inputs.status-in-progress }}
+          IN_REVIEW: ${{ inputs.status-in-review }}
+          READY: ${{ inputs.status-ready }}
+          DONE: ${{ inputs.status-done }}
+        run: |
+          set -euo pipefail
+          if [ -n "$PULL" ]; then
+            live=$(gh api graphql \
+              -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { state isDraft } } }' \
+              -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" \
+              --jq '.data.repository.pullRequest | if .state != "OPEN" then "closed" elif .isDraft then "draft" else "" end')
+            # The latest review decision, review request or ready-for-review event decides:
+            # a review requesting changes means changes are outstanding, an approval means
+            # approved, and a review request or being marked ready means waiting on review.
+            # Comment-only and dismissed reviews don't count. Page back through the timeline
+            # until one is found.
+            before=()
+            while [ -z "$live" ]; do
+              page=$(gh api graphql \
+                -f query='query($owner: String!, $repo: String!, $number: Int!, $before: String) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { timelineItems(last: 100, before: $before, itemTypes: [PULL_REQUEST_REVIEW, REVIEW_REQUESTED_EVENT, READY_FOR_REVIEW_EVENT]) { pageInfo { hasPreviousPage startCursor } nodes { __typename ... on PullRequestReview { state } } } } } }' \
+                -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" ${before[@]+"${before[@]}"} \
+                --jq '.data.repository.pullRequest.timelineItems')
+              live=$(jq -r '[.nodes[] | select(.__typename != "PullRequestReview" or .state == "CHANGES_REQUESTED" or .state == "APPROVED")] | last | if . == null then "" elif .state == "CHANGES_REQUESTED" then "changes-requested" elif .state == "APPROVED" then "approved" else "ready" end' <<<"$page")
+              if [ -z "$live" ]; then
+                if [ "$(jq -r '.pageInfo.hasPreviousPage' <<<"$page")" != "true" ]; then
+                  live="ready"
+                else
+                  before=(-f before="$(jq -r '.pageInfo.startCursor' <<<"$page")")
+                fi
+              fi
+            done
+            # An approval only counts while no other reviewer's latest review requests changes.
+            if [ "$live" = "approved" ]; then
+              outstanding=$(gh api graphql \
+                -f query='query($owner: String!, $repo: String!, $number: Int!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { latestOpinionatedReviews(first: 100) { nodes { state } } } } }' \
+                -f owner="${REPO%%/*}" -f repo="${REPO#*/}" -F number="$PULL" \
+                --jq '[.data.repository.pullRequest.latestOpinionatedReviews.nodes[] | select(.state == "CHANGES_REQUESTED")] | length')
+              if [ "$outstanding" != "0" ]; then live="changes-requested"; fi
+            fi
+            case "$live" in
+              closed) status="$DONE" ;;
+              approved) status="${READY:-$IN_REVIEW}" ;;
+              ready) status="$IN_REVIEW" ;;
+              draft | changes-requested) status="$IN_PROGRESS" ;;
+            esac
+          else
+            live=$(gh api "repos/$REPO/issues/$ISSUE" --jq '.state')
+            if [ "$live" = "closed" ]; then status="$DONE"; else status=""; fi
+          fi
+          echo "The item is $live"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          project=$(gh api graphql \
+            -f query='query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } }' \
+            -f owner="$OWNER" -F number="$NUMBER" \
+            --jq '.data.organization.projectV2')
+          project_id=$(jq -r '.id' <<<"$project")
+          field_id=$(jq -r '.field.id' <<<"$project")
+          if [ -z "$status" ]; then
+            current=$(gh api graphql \
+              -f query='query($item: ID!) { node(id: $item) { ... on ProjectV2Item { fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { optionId } } } } }' \
+              -f item="$ITEM_ID" --jq '.data.node.fieldValueByName.optionId // empty')
+            if [ -z "$current" ]; then
+              echo "Status already empty for triage"
+              exit 0
+            fi
+            gh api graphql \
+              -f query='mutation($project: ID!, $item: ID!, $field: ID!) { clearProjectV2ItemFieldValue(input: { projectId: $project, itemId: $item, fieldId: $field }) { projectV2Item { id } } }' \
+              -f project="$project_id" -f item="$ITEM_ID" -f field="$field_id" > /dev/null
+            echo "Cleared Status for triage"
+            exit 0
+          fi
+          option_id=$(jq -r --arg status "$status" '.field.options[] | select(.name == $status) | .id' <<<"$project")
+          if [ -z "$option_id" ]; then
+            echo "::error::The project's Status field has no \"$status\" option."
+            exit 1
+          fi
+          gh api graphql \
+            -f query='mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) { updateProjectV2ItemFieldValue(input: { projectId: $project, itemId: $item, fieldId: $field, value: { singleSelectOptionId: $option } }) { projectV2Item { id } } }' \
+            -f project="$project_id" -f item="$ITEM_ID" -f field="$field_id" -f option="$option_id" > /dev/null
+          echo "Set Status to $status"
+
+      - name: Sync linked issues
+        if: github.event.pull_request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ITEM_ID: ${{ steps.add.outputs.itemId }}
+          REPO: ${{ github.repository }}
+          PULL: ${{ github.event.pull_request.number }}
+          OWNER: ${{ inputs.project-owner }}
+          NUMBER: ${{ inputs.project-number }}
+          IN_PROGRESS: ${{ inputs.status-in-progress }}
+          IN_REVIEW: ${{ inputs.status-in-review }}
+          READY: ${{ inputs.status-ready }}
+          DONE: ${{ inputs.status-done }}
+          PR_STATUS: ${{ steps.status.outputs.status }}
+          PRIORITY_FIELD: ${{ inputs.priority-field }}
+        shell: python
+        run: |
+          # For the issues this pull request closes ("Closes #123" or a Development link) that
+          # are on the project: each open issue follows the open pull requests that close it,
+          # taking the least advanced of their Statuses (In progress, In review, Ready), and the
+          # pull request takes the most urgent of the issues' priorities.
+          import json, os, subprocess
+
+          def gql(query, **variables):
+              args = ["gh", "api", "graphql", "-f", f"query={query}"]
+              for key, value in variables.items():
+                  args += ["-F" if isinstance(value, int) else "-f", f"{key}={value}"]
+              return json.loads(subprocess.run(args, check=True, capture_output=True, text=True).stdout)["data"]
+
+          def set_option(project_id, item_id, field_id, option_id):
+              gql(
+                  "mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) { updateProjectV2ItemFieldValue(input: { projectId: $project, itemId: $item, fieldId: $field, value: { singleSelectOptionId: $option } }) { projectV2Item { id } } }",
+                  project=project_id, item=item_id, field=field_id, option=option_id,
+              )
+
+          env = os.environ
+          owner, repo = env["REPO"].split("/")
+          priority_name = env["PRIORITY_FIELD"] or "Priority"
+          project = gql(
+              "query($owner: String!, $number: Int!, $priority: String!) { organization(login: $owner) { projectV2(number: $number) { id status: field(name: \"Status\") { ... on ProjectV2SingleSelectField { id options { id name } } } priority: field(name: $priority) { ... on ProjectV2SingleSelectField { id options { id name } } } } } }",
+              owner=env["OWNER"], number=int(env["NUMBER"]), priority=priority_name,
+          )["organization"]["projectV2"]
+          pull = gql(
+              "query($owner: String!, $repo: String!, $number: Int!, $priority: String!) { repository(owner: $owner, name: $repo) { pullRequest(number: $number) { id state closingIssuesReferences(first: 25) { nodes { url state closedByPullRequestsReferences(first: 25, includeClosedPrs: false) { nodes { id projectItems(first: 20) { nodes { project { id } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } projectItems(first: 20) { nodes { id project { id } status: fieldValueByName(name: \"Status\") { ... on ProjectV2ItemFieldSingleSelectValue { name } } priority: fieldValueByName(name: $priority) { ... on ProjectV2ItemFieldSingleSelectValue { optionId } } } } } } } } }",
+              owner=owner, repo=repo, number=int(env["PULL"]), priority=priority_name,
+          )["repository"]["pullRequest"]
+
+          linked = [
+              (issue, item)
+              for issue in pull["closingIssuesReferences"]["nodes"]
+              for item in issue["projectItems"]["nodes"]
+              if item["project"]["id"] == project["id"]
+          ]
+          if not linked:
+              print("This pull request closes no issue on the project.")
+              raise SystemExit(0)
+
+          # Less to more advanced; an empty READY input leaves approved pull requests In review.
+          order = [env["IN_PROGRESS"], env["IN_REVIEW"]] + ([env["READY"]] if env["READY"] else [])
+          options = {o["name"]: o["id"] for o in project["status"]["options"]}
+          for issue, item in linked:
+              current = (item.get("status") or {}).get("name")
+              if issue["state"] != "OPEN" or current == env["DONE"]:
+                  continue
+              statuses = []
+              for other in issue["closedByPullRequestsReferences"]["nodes"]:
+                  if other["id"] == pull["id"]:
+                      status = env["PR_STATUS"]
+                  else:
+                      status = next(((i.get("status") or {}).get("name") for i in other["projectItems"]["nodes"] if i["project"]["id"] == project["id"]), None)
+                  if status in order:
+                      statuses.append(status)
+              if not statuses:
+                  continue
+              wanted = min(statuses, key=order.index)
+              if wanted != current and wanted in options:
+                  set_option(project["id"], item["id"], project["status"]["id"], options[wanted])
+                  print(f"Moved {issue['url']} from {current or 'no Status'} to {wanted}")
+
+          if env["PRIORITY_FIELD"] and project.get("priority"):
+              order = [o["id"] for o in project["priority"]["options"]]
+              priorities = [(item.get("priority") or {}).get("optionId") for _, item in linked]
+              priorities = [p for p in priorities if p in order]
+              if priorities:
+                  wanted = min(priorities, key=order.index)
+                  current = gql(
+                      "query($item: ID!, $priority: String!) { node(id: $item) { ... on ProjectV2Item { fieldValueByName(name: $priority) { ... on ProjectV2ItemFieldSingleSelectValue { optionId } } } } }",
+                      item=env["ITEM_ID"], priority=priority_name,
+                  )["node"]["fieldValueByName"]
+                  if (current or {}).get("optionId") != wanted:
+                      set_option(project["id"], env["ITEM_ID"], project["priority"]["id"], wanted)
+                      print(f"Set {priority_name} to {next(o['name'] for o in project['priority']['options'] if o['id'] == wanted)}")

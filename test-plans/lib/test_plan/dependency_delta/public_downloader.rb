@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "json"
 require "net/http"
 require "tempfile"
@@ -55,11 +57,15 @@ module TestPlan
       # One fetch serves both.
       def npm_version(name, version)
         encoded_name = URI.encode_www_form_component(name)
-        metadata_url = "https://registry.npmjs.org/#{encoded_name}/#{URI.encode_www_form_component(version)}"
-        Tempfile.create(["npm-metadata", ".json"]) do |metadata|
-          download(metadata_url, metadata.path)
-          JSON.parse(File.read(metadata.path, encoding: Encoding::UTF_8))
-        end
+        fetch_json("https://registry.npmjs.org/#{encoded_name}/#{URI.encode_www_form_component(version)}")
+      end
+
+      # Raises unless the release is published, which is all a caller needs from it.
+      def rubygems_version(name, version)
+        encoded_name = URI.encode_www_form_component(name)
+        fetch_json(
+          "https://rubygems.org/api/v2/rubygems/#{encoded_name}/versions/#{URI.encode_www_form_component(version)}.json"
+        )
       end
 
       def npm_dist(name, version)
@@ -67,6 +73,15 @@ module TestPlan
         raise "npm metadata did not include a tarball for #{name}@#{version}" if dist.to_h["tarball"].to_s.empty?
 
         dist
+      end
+
+    private
+
+      def fetch_json(url)
+        Tempfile.create(["registry-metadata", ".json"]) do |metadata|
+          download(url, metadata.path)
+          JSON.parse(File.read(metadata.path, encoding: Encoding::UTF_8))
+        end
       end
     end
   end

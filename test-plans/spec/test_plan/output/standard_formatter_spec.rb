@@ -1,10 +1,12 @@
-require_relative "../spec_helper"
-require "test_plan/formatter"
-require "test_plan/parser"
+# frozen_string_literal: true
+
+require_relative "../../spec_helper"
+require "test_plan/output/standard_formatter"
+require "test_plan/response/standard_parser"
 
 require "json"
 
-RSpec.describe TestPlan::Formatter do
+RSpec.describe TestPlan::Output::StandardFormatter do
   let(:payload) do
     {
       "permissions" => {
@@ -35,7 +37,7 @@ RSpec.describe TestPlan::Formatter do
 
   def render(profile: "Cobra Test Plan", warning: "")
     described_class.new(
-      parsed: TestPlan::Parser.new(payload.to_json),
+      parsed: TestPlan::Response::StandardParser.new(payload.to_json),
       pull_request_title: "Reminder Calls migration",
       profile_name: profile,
       generation_warning: warning
@@ -48,7 +50,10 @@ RSpec.describe TestPlan::Formatter do
     expect(output).to include("## Permissions / Roles")
     expect(output).to include("### View reminder calls — Contact Center")
     expect(output).to include("#### RCH-1 — Default results")
-    expect(output).to include("**Landing Page:** /contact_center/reminder_calls  \n**Permissions:** Reminder Calls — Read")
+    expect(output).to include(
+      "**Landing Page:** /contact_center/reminder_calls  \n" \
+      "**Permissions:** Reminder Calls — Read"
+    )
     expect(output).to include("**Applicable Functional Cases:** RCH-1")
   end
 
@@ -119,7 +124,7 @@ RSpec.describe TestPlan::Formatter do
 
   it "neutralizes a pull-request title the author controls" do
     described = described_class.new(
-      parsed: TestPlan::Parser.new(payload.to_json),
+      parsed: TestPlan::Response::StandardParser.new(payload.to_json),
       pull_request_title: "Fix for @everyone <b>now</b>",
       profile_name: "Cobra Test Plan",
       generation_warning: ""
@@ -221,7 +226,8 @@ RSpec.describe TestPlan::Formatter do
   it "renders per-case permission fallbacks as standalone metadata" do
     payload["feature_areas"].first["scenarios"].first["permissions"] = []
     expect(render).to include(
-      "**Landing Page:** /contact_center/reminder_calls  \n**Permissions:** Not identified for this case.\n\n- Open the page."
+      "**Landing Page:** /contact_center/reminder_calls  \n" \
+      "**Permissions:** Not identified for this case.\n\n- Open the page."
     )
 
     payload["permissions"]["required"] = "no"
@@ -230,22 +236,23 @@ RSpec.describe TestPlan::Formatter do
     )
   end
 
-  it "keeps Consent UI labels while stripping Markdown backticks" do
+  it "preserves backticks in plan text" do
     payload["permissions"]["changes"] = ["Added permission: `Project Items` — `Edit Comments`."]
     payload["permissions"]["subject_actions"] = [
       { "subject" => "`Project Items`", "action" => "`Edit Comments`" },
     ]
     scenario = payload["feature_areas"].first["scenarios"].first
-    scenario["landing_page"] = "/`unsafe`"
+    scenario["landing_page"] = "`/contact_center/reminder_calls`"
+    scenario["steps"] = ["Open `/contact_center/reminder_calls`."]
     scenario["permissions"] = [
       { "subject" => "`Project Items`", "action" => "`Edit Comments`" },
     ]
 
     output = render
-    expect(output).to include("Added permission: Project Items — Edit Comments.")
-    expect(output).to include("**Landing Page:** /unsafe")
-    expect(output).to include("**Permissions:** Project Items — Edit Comments")
-    expect(output).not_to include("`")
+    expect(output).to include("Added permission: `Project Items` — `Edit Comments`.")
+    expect(output).to include("**Landing Page:** `/contact_center/reminder_calls`")
+    expect(output).to include("**Permissions:** `Project Items` — `Edit Comments`")
+    expect(output).to include("- Open `/contact_center/reminder_calls`.")
   end
 
   it "lists only functional identifiers for regressions covered by cases" do

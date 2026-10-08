@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "json"
 
 module TestPlan
@@ -7,7 +9,6 @@ module TestPlan
       id
       display_name
       prompt
-      model
       comment_tag
       status_comment_tag
       failure_comment_tag
@@ -26,13 +27,13 @@ module TestPlan
       raise "Unknown test-plan profile: #{profile_id}" unless File.file?(path)
 
       profile = new(
-        action_root: action_root,
+        action_root:,
         attributes: JSON.parse(File.read(path, encoding: Encoding::UTF_8))
       ).tap(&:validate!)
 
       # The file is chosen by the requested id, so a definition declaring a different one
-      # would publish under a name nothing asked for -- and the blocked message tells the
-      # author to reapply a label named after it, which would then be the wrong label.
+      # publishes under a name nothing asked for -- and the blocked message would then
+      # tell the author to reapply the wrong label.
       unless profile.id == profile_id
         raise "Test-plan profile #{profile_id} declares a different id: #{profile.id.inspect}"
       end
@@ -59,6 +60,7 @@ module TestPlan
 
       prompt_path
       playbook_prompt_path
+      dependency_prompt_path
       self
     end
 
@@ -68,10 +70,6 @@ module TestPlan
 
     def display_name
       attributes.fetch("display_name")
-    end
-
-    def model
-      attributes.fetch("model")
     end
 
     def comment_tag
@@ -94,26 +92,31 @@ module TestPlan
       resolve_prompt("prompt")
     end
 
-    # Optional. Whether the raise is Playbook is not known until the dependency delta has
-    # been built, long after this profile resolved from the label, so the alternative is
-    # declared here and chosen later. A profile without one keeps its single prompt.
+    # Optional: what was changed is not known until the delta is built, long after this
+    # profile resolved from the label, so alternatives are declared here and chosen later.
     def playbook_prompt_path
       return "" unless attributes.key?("playbook_prompt")
 
       resolve_prompt("playbook_prompt")
     end
 
+    def dependency_prompt_path
+      return "" unless attributes.key?("dependency_prompt")
+
+      resolve_prompt("dependency_prompt")
+    end
+
     def to_h
       {
         "profile_id" => id,
         "display_name" => display_name,
-        "model" => model,
         "comment_tag" => comment_tag,
         "status_comment_tag" => status_comment_tag,
         "failure_comment_tag" => failure_comment_tag,
         "artifact_name" => artifact_name,
         "prompt_path" => prompt_path,
         "playbook_prompt_path" => playbook_prompt_path,
+        "dependency_prompt_path" => dependency_prompt_path,
       }
     end
 

@@ -1,9 +1,11 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
-require "test_plan/playbook/parser"
+require "test_plan/response/playbook_parser"
 
 require "json"
 
-RSpec.describe TestPlan::Playbook::Parser do
+RSpec.describe TestPlan::Response::PlaybookParser do
   def payload(overrides = {})
     {
       "kits" => [
@@ -73,7 +75,7 @@ RSpec.describe TestPlan::Playbook::Parser do
       .kits.first.fetch("code")).to eq("FIL")
   end
 
-  it "reads the dependency raises beyond the kits" do
+  it "reads the dependency changes beyond the kits" do
     parsed = parse(
       "other_dependencies" => [{ "name" => "cgi", "from" => "0.5.1", "to" => "0.5.2", "note" => "Patch bump." }]
     )
@@ -81,8 +83,23 @@ RSpec.describe TestPlan::Playbook::Parser do
     expect(parsed.other_dependencies.first).to include("name" => "cgi", "from" => "0.5.1", "to" => "0.5.2")
   end
 
-  it "treats the dependency raises as optional" do
+  it "treats the dependency changes as optional" do
     expect(parse.other_dependencies).to be_empty
+  end
+
+  it "accepts additional regression and application checks" do
+    parsed = parse(
+      "kits" => [],
+      "regression_tests" => [
+        { "title" => "Existing control", "page" => "/control", "steps" => ["Open it.", "Confirm it works."] },
+      ],
+      "application_checks" => [
+        { "title" => "Updated call site", "steps" => ["Open it.", "Confirm it still works."] },
+      ]
+    )
+
+    expect(parsed.regression_tests.first.fetch("page")).to eq("/control")
+    expect(parsed.application_checks.first.fetch("title")).to eq("Updated call site")
   end
 
   # Playbook's own version constant, packaging and docs site are not a tester's problem,

@@ -1,7 +1,11 @@
-require_relative "untrusted_text"
+# frozen_string_literal: true
 
-module TestPlan
-  class Formatter
+require_relative "plan_document"
+
+module TestPlan::Output
+  class StandardFormatter
+    include PlanDocument
+
     NO_MANUAL_QA_MESSAGE = "No manual application QA was identified for this change."
     NO_REGRESSION_MESSAGE = "No targeted regression testing was identified for this change."
     NO_ROLES_MESSAGE = "Not identified from this change."
@@ -22,9 +26,7 @@ module TestPlan
     end
 
     def render
-      sections = [heading]
-      sections << "> ⚠️ #{@generation_warning}" unless @generation_warning.empty?
-      sections << discarded_notice unless @parsed.discarded.empty?
+      sections = preamble
       sections.concat(
         [
           "---",
@@ -40,23 +42,6 @@ module TestPlan
     end
 
   private
-
-    # Parts of the response that could not be used are dropped rather than failing the
-    # run, so the plan has to say it is not the whole of what was generated.
-    def discarded_notice
-      discarded = @parsed.discarded
-      count = discarded.length
-      lines = ["> ⚠️ #{count} #{count == 1 ? "part" : "parts"} of the generated response could not be used:"]
-      discarded.first(5).each { |reason| lines << "> - #{sanitize(reason)}" }
-      lines << "> - ...and #{count - 5} more" if count > 5
-      lines.join("\n")
-    end
-
-    def heading
-      name = @profile_name.empty? ? "Test Plan" : @profile_name
-      title_suffix = @pull_request_title.empty? ? "" : ": #{sanitize(@pull_request_title)}"
-      "## ✅ #{name}#{title_suffix}"
-    end
 
     def permissions_section
       lines = [
@@ -82,7 +67,12 @@ module TestPlan
 
       subject_actions = @parsed.permissions.fetch("subject_actions")
       if subject_actions.empty?
-        subject_actions_message = @parsed.permissions.fetch("required") == "no" ? "No special permission required." : NO_SUBJECT_ACTIONS_MESSAGE
+        subject_actions_message =
+          if @parsed.permissions.fetch("required") == "no"
+            "No special permission required."
+          else
+            NO_SUBJECT_ACTIONS_MESSAGE
+          end
         lines << "- **Permission Subjects / Actions:** #{subject_actions_message}"
       else
         lines << "- **Permission Subjects / Actions:**"
@@ -176,7 +166,9 @@ module TestPlan
     def scenario_permissions(scenario)
       permissions = scenario.fetch("permissions")
       if permissions.empty?
-        return @parsed.permissions.fetch("required") == "no" ? "No special permission required." : "Not identified for this case."
+        return "No special permission required." if @parsed.permissions.fetch("required") == "no"
+
+        return "Not identified for this case."
       end
 
       permissions.map { |permission| permission_display(permission) }.join("; ")
@@ -191,14 +183,6 @@ module TestPlan
     def format_landing_page(value)
       landing_page = sanitize(value)
       landing_page.empty? ? "Not identified from this change." : landing_page
-    end
-
-    def sanitize(value)
-      UntrustedText.escape(value)
-    end
-
-    def normalize_text(value)
-      value.to_s.strip.gsub(/\s+/, " ")
     end
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -36,7 +38,7 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     LOCK
   end
 
-  it "detects npm raises and excludes workspace packages" do
+  it "detects npm changes and excludes workspace packages" do
     changes = described_class.new.detect(
       path: "yarn.lock",
       old_content: old_lock,
@@ -73,7 +75,7 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     expect(changes.first).to have_attributes(old_version: "aaaaaaa", new_version: "2.0.0")
   end
 
-  it "does not call a raise a transition when one name has both kinds of selector" do
+  it "does not call a change a transition when one name has both kinds of selector" do
     old_lock = <<~LOCK
       mixed@^1.0.0:
         version "1.0.0"
@@ -93,7 +95,7 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
       direct_names: Set["mixed"], workspace_names: Set.new
     )
 
-    # The npm raise is real; the Git selector merely going away is not a transition, and
+    # The npm change is real; the Git selector merely going away is not a transition, and
     # reporting one would have added a second change and a spurious warning.
     expect(changes.map(&:source)).to eq(["npm"])
     expect(changes.first).to have_attributes(old_version: "1.0.0", new_version: "2.0.0")
@@ -159,7 +161,7 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     expect(changes).to be_empty
   end
 
-  it "ignores decreases and removals" do
+  it "reports decreases but ignores removals" do
     old_lock = <<~LOCK
       downgraded@^2.0.0:
         version "2.0.0"
@@ -183,7 +185,7 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
       workspace_names: Set.new
     )
 
-    expect(changes).to be_empty
+    expect(changes.map(&:name)).to eq(["downgraded"])
   end
 
   it "detects a Git revision change when the declared version is unchanged" do
@@ -240,5 +242,45 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
       old_version: "aaaaaaa",
       new_version: "bbbbbbb"
     )
+  end
+
+  describe "several versions of one package" do
+    def lock(*versions)
+      versions.map do |version|
+        <<~ENTRY
+          widget@#{version}:
+            version "#{version}"
+            resolved "https://registry.npmjs.org/widget/-/widget-#{version}.tgz"
+        ENTRY
+      end.join("\n")
+    end
+
+    def detect(from, to)
+      described_class.new.detect(
+        path: "yarn.lock",
+        old_content: lock(*from),
+        new_content: lock(*to),
+        direct_names: Set["widget"],
+        workspace_names: Set.new
+      )
+    end
+
+    it "pairs a new version with the closest lower one that went away" do
+      changes = detect(%w[1.0.0 1.5.0 3.0.0], %w[2.0.0 3.0.0])
+
+      expect(changes.map { |change| [change.old_version, change.new_version] }).to eq([%w[1.5.0 2.0.0]])
+    end
+
+    it "pairs a lower version with the version it replaced" do
+      changes = detect(%w[2.0.0], %w[1.0.0])
+
+      expect(changes.map { |change| [change.old_version, change.new_version] }).to eq([%w[2.0.0 1.0.0]])
+    end
+
+    it "pairs a lower version with the nearest higher one when nothing lower went away" do
+      changes = detect(%w[2.0.0 4.0.0], %w[1.0.0])
+
+      expect(changes.map(&:old_version)).to eq(["2.0.0"])
+    end
   end
 end

@@ -1,36 +1,31 @@
+# frozen_string_literal: true
+
 require "open3"
 
 require_relative "../command_output"
 require_relative "../playbook/kit_facts"
+require_relative "../playbook/packages"
 require_relative "./call_site_sample"
 
 module TestPlan
   module DependencyDelta
-    # A Playbook version bump is the PR shape this whole delta exists for, and it is the
-    # one where pr.diff says least: every file in such a bump is a lockfile. The
-    # changelog tells the model which kits moved, but not the only thing a tester needs
-    # -- which pages to open.
+    # Which pages to open is the one thing a tester needs and the changelog does not say.
+    # Resolving a kit across every call site in a large application is slow and unreliable
+    # for the agent to do itself, so it happens here and is handed over as evidence.
     #
-    # Answering that means resolving a kit across every call site in a large
-    # application. The agent could search for them, but at that scale it is slow and
-    # unreliable, so the search happens here and the answer is handed over as evidence.
-    #
-    # The kits are taken from the gem's own changed file paths rather than the changelog
-    # prose: every kit lives in app/pb_kits/playbook/pb_<kit>/, which is exact, where
-    # matching release-note headings is guesswork. On the 17.0.0 -> 17.1.0 delta the
-    # paths yield materially more kits than the prose does.
+    # Kits come from the gem's changed file paths, not the changelog prose: every kit
+    # lives in app/pb_kits/playbook/pb_<kit>/, which is exact where matching release-note
+    # headings is guesswork, and on the 17.0.0 -> 17.1.0 delta yields materially more.
     class PlaybookKitUsage
-      PACKAGE_NAMES = %w[playbook_ui playbook-ui].freeze
       KIT_PATH = %r{(?:\A|/)app/pb_kits/playbook/pb_([a-z0-9_]+)/}
-      # A kit used this few times can be covered exhaustively, and the plan says so. Past
-      # it the plan tests a sample and says that instead, so SAMPLE_SIZE has to leave
-      # enough call sites to choose a few representative ones from.
+      # At or under this the plan claims exhaustive coverage; past it, a sample. SAMPLE_SIZE
+      # has to leave enough call sites to pick representative ones from.
       SAMPLE_SIZE = 8
       SEARCHED_EXTENSIONS = %w[*.erb *.rb *.haml *.tsx *.jsx *.ts *.js].freeze
-      # A kit is two implementations sharing a name, and a release usually moves only one
-      # of them. Naming which one halves what a tester has to reopen. A stylesheet, or an
-      # extension nothing here recognises, moves both -- reported as both rather than
-      # guessed at, because the cost of guessing wrong is a system nobody retests.
+      # A kit is two implementations sharing a name and a release usually moves one, so
+      # naming which halves what a tester reopens. A stylesheet or an unrecognised
+      # extension is reported as both rather than guessed: guessing wrong costs a system
+      # nobody retests.
       RAILS_EXTENSIONS = %w[.rb .erb .haml].freeze
       REACT_EXTENSIONS = %w[.tsx .jsx .ts .js].freeze
       SEARCH_FAILED = "The search for this kit could not be run, so this section says " \
@@ -48,16 +43,13 @@ module TestPlan
         @failures = []
       end
 
-      # Called for every dependency the generator retrieves; ignores all but Playbook.
       def observe(change, diffs)
         return unless @workspace
-        return unless PACKAGE_NAMES.include?(change.name)
+        return unless Playbook::PACKAGE_NAMES.include?(change.name)
 
         diffs.each do |diff|
-          # A doc example or a test moving is not the kit changing. Playbook ships both
-          # inside the kit directory, so without this a release that only refreshed the
-          # docs site reported the kit as changed and sent testers looking for a
-          # difference there is none of.
+          # Playbook ships docs and tests inside the kit directory, so a release that only
+          # refreshed the docs site reported the kit as changed.
           next unless diff.evidence?
 
           kit = diff.path[KIT_PATH, 1]
@@ -67,7 +59,6 @@ module TestPlan
         end
       end
 
-      # Empty unless the run raised Playbook, which is what shapes the plan by kit.
       def kits
         @kits.keys.sort
       end
@@ -77,9 +68,9 @@ module TestPlan
 
         sections = @kits.keys.sort.map { |kit| section(kit) }
         <<~REPORT
-          # Playbook kits changed by this upgrade
+          # Playbook kits touched by this version change
 
-          The upgrade changed #{@kits.length} #{@kits.length == 1 ? "kit" : "kits"}. Each section below
+          The version change touched #{@kits.length} #{@kits.length == 1 ? "kit" : "kits"}. Each section below
           names which side of the kit the release touched -- the Rails helper, the React
           component, or both -- and lists where this repository calls that side, so
           coverage starts from pages a tester can actually open. Paths are
@@ -90,8 +81,8 @@ module TestPlan
         REPORT
       end
 
-      # The facts the comment is rendered from. Built from the same evidence the report is
-      # written from, so the plan and the provider cannot disagree about a kit's coverage.
+      # Built from the same evidence as the report, so the plan and the provider cannot
+      # disagree about a kit's coverage.
       def facts
         Playbook::KitFacts.document(
           @kits.keys.sort.map do |kit|
@@ -110,18 +101,15 @@ module TestPlan
 
     private
 
-      # No counts appear here on purpose. The provider used to be asked to copy one and
-      # report it back, which is a number nobody could check; the coverage sentence carries
-      # the same decision and there is nothing left to miscopy. The counts stay in the
-      # facts file, the job summary and the run log.
+      # No counts here on purpose: the provider was once asked to copy one back and
+      # reported a kit as used in 1083 files. The coverage sentence carries the same
+      # decision with nothing to miscopy; counts stay in the facts file and the log.
       def section(kit)
         evidence = evidence_for(kit)
         heading = "#{titled(kit)} — changed in #{Playbook::KitFacts.systems_label(evidence.systems_changed)}"
         return "#{heading} · search failed\n\n#{SEARCH_FAILED}\n" unless evidence.searchable?
 
         sentence = Playbook::KitFacts.sentence(evidence.coverage)
-        # Nothing renders this kit at all, which the sentence already says. Listing each
-        # changed system to repeat it per system would say it twice.
         return "#{heading}\n\n#{sentence}\n" if evidence.systems_in_use.empty?
 
         body = evidence.systems_changed.map { |system| system_block(system, evidence) }
@@ -133,7 +121,7 @@ module TestPlan
         label = "**#{Playbook::KitFacts::SYSTEM_LABELS.fetch(system)} call sites**"
         paths = evidence.sampled(system)
         if paths.empty?
-          return "#{label}\n\nThis upgrade changed the #{Playbook::KitFacts::SYSTEM_LABELS.fetch(system)} " \
+          return "#{label}\n\nThis version change touched the #{Playbook::KitFacts::SYSTEM_LABELS.fetch(system)} " \
             "side of this kit, but nothing in this repository renders it.\n"
         end
 
@@ -149,33 +137,30 @@ module TestPlan
           systems_changed.select { |system| !call_sites_by_system[system].to_a.empty? }
         end
 
-        # Counted across the systems the release actually touched, so a React-only change
-        # to a kit with two React call sites and nine hundred Rails ones is exhaustible.
+        # Only the systems the release touched, so a React-only change to a kit with two
+        # React call sites and nine hundred Rails ones is still exhaustible.
         def call_sites
           systems_changed.flat_map { |system| call_sites_by_system[system].to_a }.uniq.length
         end
 
         def coverage
-          Playbook::KitFacts.coverage(call_sites: call_sites, searchable: searchable?)
+          Playbook::KitFacts.coverage(call_sites:, searchable: searchable?)
         end
 
-        # Spread before the slice, so eight pages out of a thousand buy breadth rather
-        # than eight files from whichever component sorts first. Sorted after, so the
-        # block reads in a stable order while still being chosen for breadth.
+        # Spread before the slice so the sample buys breadth rather than eight files from
+        # whichever component sorts first; sorted after, for a stable reading order.
         def sampled(system)
           CallSiteSample.spread(call_sites_by_system[system].to_a).first(SAMPLE_SIZE).sort
         end
       end
 
-      # Memoized because the report and the facts are built from it in the same run, and a
-      # git grep over a monorepo of this size costs seconds rather than milliseconds.
+      # Memoized: the report and the facts both need it, and a git grep over a monorepo
+      # this size costs seconds.
       def evidence_for(kit)
         @evidence[kit] ||= begin
           systems = systems_changed(@kits.fetch(kit, []))
           KitEvidence.new(
             systems_changed: systems,
-            # Only the systems the release touched: a Rails-only change stops paying for a
-            # React search it has no use for.
             call_sites_by_system: systems.to_h { |system| [system, usage(kit, system)] }
           )
         end
@@ -194,11 +179,10 @@ module TestPlan
         end
       end
 
-      # These are POSIX ERE for git grep, not Ruby regexps: \s and (?:...) are silently
-      # unsupported there and match nothing at all, so they are written out longhand.
-      #
-      # Rails kits are called as pb_rails("kit"), pb_rails("kit/sub_template"), and for a
-      # few kits pb_rails("pb_kit"). React kits are used as the camelized tag.
+      # POSIX ERE for git grep, not Ruby: \s and (?:...) are silently unsupported there and
+      # match nothing, so they are written longhand. Rails kits are called as
+      # pb_rails("kit"), pb_rails("kit/sub_template"), or pb_rails("pb_kit"); React kits
+      # as the camelized tag.
       def usage(kit, system)
         pattern =
           if system == "rails"
@@ -211,16 +195,14 @@ module TestPlan
         found&.sort
       end
 
-      # Returns nil rather than an empty list when the search could not run. The two are
-      # opposite claims: no matches tells a tester there is nothing to open, which is the
-      # conclusion this file exists to support, so asserting it on the strength of a
-      # failed search is worse than saying nothing.
+      # nil, not [], when the search could not run: "no matches" tells a tester there is
+      # nothing to open, which a failed search cannot license.
       def git_grep(pattern)
         stdout, stderr, status = Open3.capture3(
           "git", "grep", "--no-color", "-l", "-E", pattern, "--", *SEARCHED_EXTENSIONS,
           chdir: @workspace
         )
-        # git grep exits 1 when nothing matched, which is not an error here.
+        # git grep exits 1 for no matches, which is not an error.
         unless [0, 1].include?(status.exitstatus)
           record_failure("git grep exited #{status.exitstatus}: #{CommandOutput.utf8(stderr)}")
           return nil
@@ -232,9 +214,8 @@ module TestPlan
         nil
       end
 
-      # Annotated on the run rather than carried into the report: the reason comes from
-      # git's stderr, which quotes paths out of the workspace, and the report is read by
-      # the agent as evidence.
+      # Annotated on the run, not carried into the report: git's stderr quotes paths out
+      # of the workspace, and the agent reads the report as evidence.
       def record_failure(detail)
         detail = detail.to_s.strip.lines.first.to_s.strip[0, 200].to_s
         return if @failures.include?(detail)

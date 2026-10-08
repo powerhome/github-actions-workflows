@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -28,15 +30,15 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
   end
 
-  def gem_lock(version)
+  def gem_lock(version, name: "shared_gem")
     <<~LOCK
       GEM
         remote: https://rubygems.org/
         specs:
-          shared_gem (#{version})
+          #{name} (#{version})
 
       DEPENDENCIES
-        shared_gem
+        #{name}
     LOCK
   end
 
@@ -50,16 +52,29 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
   end
 
   describe "dependency scope" do
-    # Only the umbrella application is deployed, so a raise confined to an unmounted
-    # component's lockfile changes nothing a tester can open.
-    it "skips a raise that reached no root lockfile" do
+    # Component Gemfile.lock files can resolve gems used only by their test suites.
+    it "skips a gem change that reached no root Gemfile.lock" do
       detector = described_class.new(scoped_snapshot(["components/pigment/Gemfile.lock"]))
 
       expect(detector.detect).to be_empty
       expect(detector.out_of_scope.map(&:name)).to eq(["shared_gem"])
     end
 
-    it "keeps a raise in a root lockfile" do
+    it "keeps a Playbook change from a component lockfile so it can select the Playbook plan" do
+      path = "components/pigment/Gemfile.lock"
+      snapshot = FakeSnapshot.new(
+        "merge_base" => { path => gem_lock("1.0.0", name: "playbook_ui") },
+        "head" => { path => gem_lock("2.0.0", name: "playbook_ui") }
+      )
+      allow(snapshot).to receive(:changed_dependency_files).and_return([path])
+
+      detector = described_class.new(snapshot)
+
+      expect(detector.detect.map(&:name)).to eq(["playbook_ui"])
+      expect(detector.out_of_scope).to be_empty
+    end
+
+    it "keeps a change in a root lockfile" do
       detector = described_class.new(scoped_snapshot(["Gemfile.lock"]))
 
       expect(detector.detect.map(&:name)).to eq(["shared_gem"])
@@ -67,7 +82,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
 
     # Deduplication runs first, so the root copy carries the component ones with it.
-    it "keeps a raise recorded in both a root and a component lockfile" do
+    it "keeps a change recorded in both a root and a component lockfile" do
       detector = described_class.new(
         scoped_snapshot(["Gemfile.lock", "components/pigment/Gemfile.lock"])
       )
@@ -76,6 +91,35 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       expect(changes.map(&:name)).to eq(["shared_gem"])
       expect(changes.first.lockfiles).to include("components/pigment/Gemfile.lock")
       expect(detector.out_of_scope).to be_empty
+    end
+
+    it "keeps changes from Pulse and Connect UI yarn.lock files by default" do
+      old_lock = lambda do |name|
+        "#{name}@^1.0.0:\n  version \"1.0.0\"\n"
+      end
+      new_lock = lambda do |name|
+        "#{name}@^1.0.0:\n  version \"2.0.0\"\n"
+      end
+      files = {
+        "components/pulse-ui/yarn.lock" => "pulse-widget",
+        "components/connect-web-ui/yarn.lock" => "connect-widget",
+      }
+      snapshot = FakeSnapshot.new(
+        "merge_base" => files.transform_values { |name| old_lock.call(name) }
+          .merge("components/pigment/Gemfile.lock" => gem_lock("1.0.0")),
+        "head" => files.transform_values { |name| new_lock.call(name) }
+          .merge("components/pigment/Gemfile.lock" => gem_lock("2.0.0"))
+      )
+      allow(snapshot).to receive(:changed_dependency_files).and_return(
+        files.keys + ["components/pigment/Gemfile.lock"]
+      )
+
+      detector = described_class.new(snapshot)
+      changes = detector.detect
+
+      expect(changes.map(&:name)).to contain_exactly("pulse-widget", "connect-widget")
+      expect(changes.flat_map(&:lockfiles)).to contain_exactly(*files.keys)
+      expect(detector.out_of_scope.map(&:name)).to eq(["shared_gem"])
     end
 
     it "analyzes every lockfile when told to" do
@@ -127,7 +171,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     expect(changes.first.direct).to be(true)
   end
 
-  it "deduplicates the same raise across lockfiles" do
+  it "deduplicates the same change across lockfiles" do
     lock = lambda do |version|
       <<~LOCK
         GEM
@@ -184,11 +228,11 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
 
     changes = described_class.new(snapshot).detect
 
-    # nested-widget is a workspace member, so its bump is local, not an external raise.
+    # nested-widget is a workspace member, so its bump is local, not an external change.
     expect(changes.map(&:name)).to eq(["external"])
   end
 
-  it "deduplicates a raise recorded through different registry remotes" do
+  it "deduplicates a change recorded through different registry remotes" do
     lock = lambda do |remote, version|
       <<~LOCK
         GEM
@@ -234,8 +278,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       direct: true, lockfiles: ["b/yarn.lock"]
     )
 
-    # Collapsing these would apply one entry's provenance to both, either feeding the
-    # private dependency unrelated public source or suppressing valid public evidence.
+    # Collapsing these applies one entry's provenance to both, either feeding the private
+    # dependency unrelated public source or suppressing valid public evidence.
     expect(public_change.key).not_to eq(private_change.key)
   end
 
@@ -254,7 +298,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
       .to eq(through.call("npm.mirror.example", "b/yarn.lock").key)
   end
 
-  it "keeps Git raises from different repositories separate" do
+  it "keeps Git changes from different repositories separate" do
     same_repo = TestPlan::DependencyDelta::Change.new(
       ecosystem: "yarn", name: "widget", old_version: "aaa", new_version: "bbb", source: "git",
       old_locator: "git+https://github.com/example/widget.git#aaa",
@@ -287,8 +331,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
     snapshot = FakeSnapshot.new(
       "merge_base" => { "Gemfile.lock" => lock.call("1.0.0") },
-      # The base branch raised the gem further after this PR forked. That raise
-      # belongs to the base branch, not to this PR.
+      # Changed further on the base branch after this PR forked, so not this PR's change.
       "base_tip" => { "Gemfile.lock" => lock.call("3.0.0") },
       "head" => { "Gemfile.lock" => lock.call("2.0.0") }
     )
@@ -332,9 +375,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     expect(detector.problems.first.message).to include("Unable to parse broken/Gemfile.lock")
   end
 
-  # Which names count as direct decides ordering and how much of the context budget a
-  # raise gets, so reading a manifest loosely both promotes dependencies nobody declared
-  # and, through the quote pairing, demotes ones somebody did.
+  # Directness decides ordering and context budget, so reading a manifest loosely both
+  # promotes dependencies nobody declared and demotes ones somebody did.
   describe "reading direct dependencies out of a manifest" do
     def bumping(manifests)
       lock = lambda do |version|
@@ -370,9 +412,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
 
     it "still sees a declaration that follows prose containing an apostrophe" do
-      # The comment bundler's own `gem` template writes. Unanchored, its apostrophe
-      # opened a quote whose capture ran to the next one in the file -- the opening
-      # quote of the declaration below -- swallowing the name it was looking for.
+      # Bundler's own template comment. Unanchored, its apostrophe opened a quote whose
+      # capture ran to the declaration below, swallowing the name it was looking for.
       changes = bumping(
         "Gemfile" => <<~GEMFILE
           # Specify your gem's dependencies in widget.gemspec

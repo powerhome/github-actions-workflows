@@ -16,7 +16,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
       - name: Enable npm.powerapp.cloud auth
         shell: bash
         env:
@@ -36,7 +36,7 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.4.9
+          ruby-version: 3.4.11
           bundler-cache: true
           working-directory: ${{ inputs.workdir }}
       - run: gem install license_finder

@@ -1,0 +1,33 @@
+name: Ruby style
+
+on:
+  push:
+    paths:
+      - '**/*.rb'
+      - '**/Gemfile'
+      - '**/Rakefile'
+      - '.rubocop.yml'
+      - '.github/workflows/ruby-style.yml'
+  pull_request:
+    paths:
+      - '**/*.rb'
+      - '**/Gemfile'
+      - '**/Rakefile'
+      - '.rubocop.yml'
+      - '.github/workflows/ruby-style.yml'
+
+jobs:
+  rubocop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Check Ruby readability rules
+        shell: bash
+        env:
+          GEM_HOME: ${{ runner.temp }}/rubocop-gems
+        run: |
+          set -euo pipefail
+          export PATH="${GEM_HOME}/bin:${PATH}"
+
+          gem install rubocop --version 1.79.2 --no-document
+          rubocop --cache false

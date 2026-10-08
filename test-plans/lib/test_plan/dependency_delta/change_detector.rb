@@ -1,6 +1,10 @@
+# frozen_string_literal: true
+
 require "json"
 require "set"
 require_relative "./bundler_change_detector"
+require_relative "../playbook/packages"
+require_relative "./playbook_kit_usage"
 require_relative "./yarn_change_detector"
 
 module TestPlan
@@ -12,21 +16,18 @@ module TestPlan
         end
       end
 
-      # Anchored to the start of a line so a comment is not read as a declaration.
-      # Unanchored, \bgem also matched prose: "Specify your gem's dependencies" opens a
-      # quote, and the capture then ran to the next quote anywhere in the file, which
-      # both invented a name and desynchronised the pairing for the rest of it, so a
-      # real declaration further down could be missed as well.
+      # Anchored to the line start. Unanchored, \bgem matched prose: "Specify your gem's
+      # dependencies" opened a quote whose capture ran to the next quote anywhere in the
+      # file, inventing a name and desynchronising every declaration after it.
       GEM = /^[ \t]*gem\s*\(?\s*["']([^"'\n]+)["']/
       # A gemspec names its receiver: spec.add_dependency, s.add_runtime_dependency.
       ADD_DEPENDENCY =
         /^[ \t]*(?:[A-Za-z_]\w*\.)?add_(?:runtime_)?dependency\s*\(?\s*["']([^"'\n]+)["']/
 
-      # Only the umbrella application is deployed, so a raise reaching nothing but
-      # component lockfiles changes nothing a tester can open. A single-lockfile
-      # repository is unaffected -- its lockfile is the root one. A monorepo that does
-      # mount its components wants "all".
-      UMBRELLA_LOCKFILES = %w[Gemfile.lock yarn.lock].freeze
+      # Component Gemfile.lock files can resolve gems used only by that component's test
+      # suite, where a component yarn.lock resolves code the application serves -- so
+      # every changed yarn.lock is in scope, and a Playbook change always is.
+      ROOT_GEM_LOCKFILE = "Gemfile.lock"
       SCOPES = %w[umbrella all].freeze
 
       attr_reader :problems, :out_of_scope
@@ -52,7 +53,7 @@ module TestPlan
           changes.concat(
             detecting(path) do
               BundlerChangeDetector.new.detect(
-                path: path,
+                path:,
                 old_content: @snapshot.read(@snapshot.merge_base_sha, path),
                 new_content: @snapshot.read(@snapshot.head_sha, path),
                 direct_names: ruby_direct_names
@@ -65,11 +66,11 @@ module TestPlan
           changes.concat(
             detecting(path) do
               YarnChangeDetector.new.detect(
-                path: path,
+                path:,
                 old_content: @snapshot.read(@snapshot.merge_base_sha, path),
                 new_content: @snapshot.read(@snapshot.head_sha, path),
-                direct_names: direct_names,
-                workspace_names: workspace_names
+                direct_names:,
+                workspace_names:
               )
             end
           )
@@ -80,24 +81,24 @@ module TestPlan
 
     private
 
-      # After deduplication: a raise in both a root and a component lockfile is one
-      # change, and partitioning first would have judged the component copy alone.
+      # After deduplication: partitioning first would judge the component copy of a raise
+      # that also reached the root lockfile.
       def scoped(changes)
         return changes if @scope == "all"
 
         in_scope, out = changes.partition do |change|
-          change.lockfiles.any? { |path| UMBRELLA_LOCKFILES.include?(path) }
+          change.ecosystem == "yarn" || change.lockfiles.include?(ROOT_GEM_LOCKFILE) ||
+            Playbook::PACKAGE_NAMES.include?(change.name)
         end
         @out_of_scope = out
         in_scope
       end
 
-      # An unreadable lockfile costs us evidence for that file only. Recording it as a
-      # warning keeps the rest of the delta, and the test plan itself, intact.
+      # An unreadable lockfile costs evidence for that file only.
       def detecting(path)
         yield
       rescue => e
-        @problems << LockfileProblem.new(path: path, message: e.message)
+        @problems << LockfileProblem.new(path:, message: e.message)
         []
       end
 
@@ -136,10 +137,9 @@ module TestPlan
         [direct, local]
       end
 
-      # A workspace glob is relative to the package.json that declares it, not to the
-      # repository root. Flattening every glob into one root-relative list meant a
-      # nested package declaring "packages/*" never matched its own members, and their
-      # upgrades were reported as external dependencies.
+      # A workspace glob is relative to the package.json declaring it, not the repository
+      # root. Flattened into one root-relative list, a nested package declaring
+      # "packages/*" never matched its own members and their upgrades read as external.
       def workspace_globs(package_json_path, package)
         directory = File.dirname(package_json_path)
 
@@ -173,7 +173,7 @@ module TestPlan
 
       def ruby_dependency_names
         paths = @snapshot.paths_at(@snapshot.head_sha, "Gemfile") +
-          @snapshot.paths_at(@snapshot.head_sha, ".gemspec")
+                @snapshot.paths_at(@snapshot.head_sha, ".gemspec")
 
         paths.each_with_object(Set.new) do |path, names|
           content = @snapshot.read(@snapshot.head_sha, path).to_s

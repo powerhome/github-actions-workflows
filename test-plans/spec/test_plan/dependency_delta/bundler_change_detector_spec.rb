@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -54,7 +56,7 @@ RSpec.describe TestPlan::DependencyDelta::BundlerChangeDetector do
     LOCK
   end
 
-  it "detects direct, transitive, and Git raises while excluding PATH components" do
+  it "detects direct, transitive, and Git changes while excluding PATH components" do
     changes = described_class.new.detect(
       path: "Gemfile.lock",
       old_content: old_lock,
@@ -180,12 +182,45 @@ RSpec.describe TestPlan::DependencyDelta::BundlerChangeDetector do
     )
   end
 
-  it "ignores decreases and removals" do
+  it "reports decreases in both directions of the same lockfile pair" do
     changes = described_class.new.detect(
       path: "Gemfile.lock",
       old_content: new_lock,
       new_content: old_lock
     )
-    expect(changes.map(&:name)).to eq(["git_tool"])
+    expect(changes.map(&:name)).to contain_exactly("direct_gem", "transitive_gem", "git_tool")
+  end
+
+  describe "version decreases" do
+    def lock(version)
+      <<~LOCK
+        GEM
+          remote: https://rubygems.org/
+          specs:
+            widget (#{version})
+
+        DEPENDENCIES
+          widget
+      LOCK
+    end
+
+    def detect(from, to)
+      described_class.new.detect(path: "Gemfile.lock", old_content: lock(from), new_content: lock(to))
+    end
+
+    it "reports a gem that moved to a lower version" do
+      changes = detect("2.0.0", "1.0.0")
+
+      expect(changes.length).to eq(1)
+      expect(changes.first).to have_attributes(old_version: "2.0.0", new_version: "1.0.0")
+    end
+
+    it "reports a prerelease that sorts below the release it replaces" do
+      expect(detect("18.1.0.pre.rc.1", "18.0.0.pre.alpha.x1").length).to eq(1)
+    end
+
+    it "does not report an unchanged version" do
+      expect(detect("1.0.0", "1.0.0")).to be_empty
+    end
   end
 end

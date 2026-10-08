@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "uri"
 
 require_relative "./git_locator"
@@ -16,23 +18,19 @@ module TestPlan
       :new_integrity,
       :direct,
       :lockfiles,
+      :installed_version,
       keyword_init: true
     ) do
       def key
         [ecosystem, name, old_version, new_version, source, *source_identity]
       end
 
-      # Registry URLs are mirror detail, not identity: the same raise recorded through
-      # different remotes in different component lockfiles is still one raise, and keying
-      # on the raw URLs left it undeduplicated and downloaded twice.
-      #
-      # What is identity is the artifact. A checksum settles it outright, and mirrors of
-      # one package share theirs, so proxied copies still collapse. Without a checksum
-      # the registry host is the best evidence there is -- enough to keep a private
-      # package from collapsing into a public one of the same name and version, which
-      # would have applied whichever entry came first to both.
-      #
-      # For Git the repository is identity, normalized so equivalent spellings collapse.
+      # The artifact is identity, not the registry URL: one change recorded through
+      # different remotes in different lockfiles stayed undeduplicated and downloaded
+      # twice. A checksum settles it and mirrors share theirs, so proxied copies collapse;
+      # without one the registry host is enough to keep a private package from collapsing
+      # into a public one of the same name and version. For Git it is the repository,
+      # normalized so equivalent spellings collapse.
       def source_identity
         if source == "git"
           return [
@@ -56,7 +54,7 @@ module TestPlan
       end
 
       def to_h
-        {
+        entry = {
           "ecosystem" => ecosystem,
           "name" => name,
           "old_version" => old_version,
@@ -67,6 +65,8 @@ module TestPlan
           "direct" => direct,
           "lockfiles" => lockfiles.sort,
         }
+        entry["installed_version"] = installed_version if installed_version
+        entry
       end
     end
   end

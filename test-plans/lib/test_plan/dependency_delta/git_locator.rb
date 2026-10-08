@@ -1,17 +1,17 @@
+# frozen_string_literal: true
+
 require "uri"
 
 module TestPlan
   module DependencyDelta
-    # Reads owner/repo out of the several shapes a Git dependency is recorded in: a
-    # bundler GIT remote, a `git+https://.../repo.git#sha` yarn locator, the codeload
-    # tarball URL yarn v1 writes for `github:owner/repo#ref`, and the SCP form.
+    # owner/repo out of the shapes a Git dependency is recorded in: a bundler GIT remote,
+    # a `git+https://.../repo.git#sha` locator, the codeload URL yarn v1 writes, and SCP.
     #
-    # The host is matched exactly rather than looked for inside the string. Substring
-    # matching accepted https://evilgithub.com/example/widget.git as example/widget, and
-    # retrieval would then have attached a real, unrelated repository's source and
-    # changelog to the dependency.
+    # The host is matched exactly: substring matching accepted
+    # https://evilgithub.com/example/widget.git as example/widget, attaching a real but
+    # unrelated repository's source and changelog to the dependency.
     module GitLocator
-      module_function
+    module_function
 
       HOSTS = %w[github.com www.github.com codeload.github.com].freeze
       SCP = %r{\Agit@([^:/]+):([^/]+)/(.+)\z}
@@ -23,7 +23,7 @@ module TestPlan
         "#{owner}/#{name}"
       end
 
-      # A changelog_uri points at a blob, which names the file as well as the repository:
+      # A changelog_uri names the file as well as the repository:
       # https://github.com/owner/repo/blob/<ref>/<path>
       def blob(locator)
         uri = parsed(locator)

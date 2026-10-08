@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "./change"
 require_relative "./yarn_lock_parser"
 
@@ -11,9 +13,8 @@ module TestPlan
         new_by_name = YarnLockParser.new(new_content).records.group_by(&:name)
 
         new_by_name.flat_map do |name, new_records|
-          # Grouped by the installed package, since that is the artifact whose evidence
-          # is fetched. A manifest lists the name it asked for, so workspace membership
-          # and direct-dependency status are decided by the alias.
+          # Grouped by the installed package, whose evidence is fetched; a manifest lists
+          # the name it asked for, so membership and directness follow the alias.
           aliases = new_records.map(&:alias)
           next [] if aliases.any? { |requested| workspace_names.include?(requested) }
 
@@ -34,7 +35,9 @@ module TestPlan
         added = new_versions - old_versions
 
         added.filter_map do |new_version|
-          old_version = removed.select { |candidate| version(candidate) < version(new_version) }.max_by { |candidate| version(candidate) }
+          lower, higher = removed.partition { |candidate| version(candidate) < version(new_version) }
+          old_version = lower.max_by { |candidate| version(candidate) } ||
+                        higher.min_by { |candidate| version(candidate) }
           next unless old_version
 
           old_record = old_records.find { |record| record.version == old_version }
@@ -43,15 +46,15 @@ module TestPlan
 
           Change.new(
             ecosystem: "yarn",
-            name: name,
-            old_version: old_version,
-            new_version: new_version,
+            name:,
+            old_version:,
+            new_version:,
             source: "npm",
             old_locator: old_record&.resolved,
             new_locator: new_record&.resolved,
             old_integrity: old_record&.integrity,
             new_integrity: new_record&.integrity,
-            direct: direct,
+            direct:,
             lockfiles: [path]
           )
         rescue ArgumentError
@@ -68,22 +71,21 @@ module TestPlan
 
           Change.new(
             ecosystem: "yarn",
-            name: name,
+            name:,
             old_version: git_revision(old_record.resolved),
             new_version: git_revision(new_record.resolved),
             source: "git",
             old_locator: old_record.resolved,
             new_locator: new_record.resolved,
-            direct: direct,
+            direct:,
             lockfiles: [path]
           )
         end
       end
 
-      # A Git dependency can move revision with or without changing its declared version,
-      # and version_changes deliberately ignores Git records. Match same-version records
-      # first, then pair whatever is left in version order so a simultaneous version and
-      # revision bump is still reported instead of dropped.
+      # A Git dependency can move revision with or without its declared version, and
+      # version_changes ignores Git records. Same-version records pair first, then the
+      # rest in version order, so a simultaneous version and revision bump is not dropped.
       def pair_git_records(old_git, new_git)
         remaining_old = old_git.dup
         pairs = []
@@ -107,17 +109,15 @@ module TestPlan
         pairs
       end
 
-      # version_changes skips any pair with a Git side and git_changes pairs only Git
-      # with Git, so a dependency moving between a Git locator and npm fell through
-      # both and produced no evidence and no warning. The two sides are not comparable
-      # artifacts, so this reports the transition rather than trying to diff it.
+      # A dependency moving between a Git locator and npm falls through both other
+      # detectors. The two sides are not comparable artifacts, so the transition is
+      # reported rather than diffed.
       def mixed_source_changes(path, name, old_records, new_records, direct)
         return [] if old_records.empty? || new_records.empty?
 
-        # One name can legitimately carry both npm and Git selectors at once. Asking
-        # whether any record is Git called that a transition, and reported one on top of
-        # the real raise that version_changes had already found. A transition is only
-        # readable when each side is entirely one kind.
+        # One name can carry both npm and Git selectors at once, so asking whether any
+        # record is Git reported a transition on top of the real change. A transition is
+        # only readable when each side is entirely one kind.
         return [] unless uniform?(old_records) && uniform?(new_records)
 
         old_git = git_locator?(old_records.first.resolved)
@@ -129,13 +129,13 @@ module TestPlan
         [
           Change.new(
             ecosystem: "yarn",
-            name: name,
+            name:,
             old_version: old_git ? git_revision(old_record.resolved) : old_record.version,
             new_version: new_git ? git_revision(new_record.resolved) : new_record.version,
             source: "mixed",
             old_locator: old_record.resolved,
             new_locator: new_record.resolved,
-            direct: direct,
+            direct:,
             lockfiles: [path]
           ),
         ]
@@ -158,8 +158,8 @@ module TestPlan
         locator = value.to_s
         return locator.split("#", 2).last if locator.include?("#")
 
-        # yarn v1 resolves `github:owner/repo#ref` to a codeload tarball URL whose last
-        # path segment is the revision, with no fragment to split on.
+        # yarn v1 resolves `github:owner/repo#ref` to a codeload URL whose last path
+        # segment is the revision, with no fragment to split on.
         match = locator.match(%r{codeload\.github\.com/[^/]+/[^/]+/(?:tar\.gz|zip)/(.+)\z})
         match ? match[1] : locator
       end

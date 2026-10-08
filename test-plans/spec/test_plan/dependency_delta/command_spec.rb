@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -18,11 +20,9 @@ RSpec.describe TestPlan::DependencyDelta::Command do
   end
 
   # Everything else here reaches a private method directly, which is how a reassignment
-  # that left kit_usage holding a String instead of the usage object shipped: run itself
-  # was never called, so nothing noticed that every step would die on String#facts.
-  #
-  # The lockfile resolves from a private registry on purpose, so the retriever refuses it
-  # without reaching the network and the run stays deterministic.
+  # leaving kit_usage holding a String shipped: run was never called, so nothing noticed
+  # every step would die on String#facts. The lockfile resolves from a private registry
+  # on purpose, so the retriever refuses it without reaching the network.
   describe "#run" do
     def lockfile(version)
       <<~LOCK
@@ -59,6 +59,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
         "DEPENDENCY_DELTA_FULL_PATH" => File.join(root, "full.diff"),
         "DEPENDENCY_DELTA_CONTEXT_PATH" => File.join(root, "context.diff"),
         "DEPENDENCY_KIT_USAGE_PATH" => File.join(root, "kit-usage.md"),
+        "DEPENDENCY_USAGE_PATH" => File.join(root, "dependency-usage.md"),
         "PLAYBOOK_KIT_FACTS_PATH" => File.join(root, "kit-facts.json"),
         "GITHUB_OUTPUT" => File.join(root, "output.txt"),
         "GITHUB_STEP_SUMMARY" => File.join(root, "summary.md"),
@@ -81,20 +82,19 @@ RSpec.describe TestPlan::DependencyDelta::Command do
           .to include("version" => 1)
         expect(written.fetch("DEPENDENCY_DELTA_FULL_PATH")).not_to be_nil
         expect(written.fetch("DEPENDENCY_DELTA_CONTEXT_PATH")).not_to be_nil
-        # No Playbook raise, so the facts document is empty rather than absent -- the
-        # render step reads it unconditionally and the artifact upload expects it.
+        # Empty rather than absent: the render step reads it unconditionally.
         expect(JSON.parse(written.fetch("PLAYBOOK_KIT_FACTS_PATH"))).to eq("version" => 1, "kits" => {})
         expect(written.fetch("DEPENDENCY_KIT_USAGE_PATH")).to eq("")
+        expect(written.fetch("DEPENDENCY_USAGE_PATH")).to include("# Dependency usage candidates", "## widget")
 
         output = written.fetch("GITHUB_OUTPUT")
-        expect(output).to include("change_count=1", "playbook_kits_changed=false")
+        expect(output).to include("change_count=1", "playbook_raised=false")
         expect(written.fetch("GITHUB_STEP_SUMMARY")).to include("## External dependency delta")
       end
     end
   end
 
-  # Names, versions and paths come from lockfiles the pull request can edit, and the
-  # summary is rendered as Markdown in the Actions UI.
+  # The summary renders as Markdown and its values come from lockfiles the PR can edit.
   def summary_for(manifest, kit_facts = { "kits" => {} })
     Tempfile.create("summary") do |file|
       ENV["GITHUB_STEP_SUMMARY"] = file.path
@@ -126,8 +126,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("\\[click\\]")
   end
 
-  # The counts left the evidence file so the provider has nothing to copy, which makes the
-  # summary the place a person reads them.
+  # The counts left the evidence file, so the summary is where a person reads them.
   it "reports each changed kit's call sites in the job summary" do
     summary = summary_for(
       { "dependencies" => [], "lockfile_warnings" => [] },
@@ -142,19 +141,33 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(summary).to include("Dialog: 0 call sites (unused)")
   end
 
-  # First point in the run that can say the plan should be shaped by kit -- and whether the
-  # pull request is the lockfile-only shape that plan is written for.
-  it "reports whether the raise changed Playbook kits, and whether anything else changed" do
-    [[%w[dropdown file_upload], true], [[], false]].each do |kits, declarations_only|
-      Tempfile.create("output") do |file|
-        ENV["GITHUB_OUTPUT"] = file.path
-        described_class.new.send(:write_outputs, 4, 0, "", kits, declarations_only)
-        expect(File.read(file.path)).to include(
-          "playbook_kits_changed=#{kits.any?}", "lockfile_only=#{declarations_only}"
-        )
-      ensure
-        ENV.delete("GITHUB_OUTPUT")
-      end
+  # A Playbook change selects the Playbook plan whatever else the pull request did.
+  it "reports a Playbook change however many other dependencies came with it" do
+    changes = [
+      TestPlan::DependencyDelta::Change.new(name: "cgi"),
+      TestPlan::DependencyDelta::Change.new(name: "playbook_ui"),
+    ]
+
+    expect(written_outputs(changes)).to include("change_count=2", "playbook_raised=true")
+  end
+
+  it "reports no Playbook change when none of the changes is one" do
+    changes = [TestPlan::DependencyDelta::Change.new(name: "playbook-adjacent")]
+
+    expect(written_outputs(changes)).to include("change_count=1", "playbook_raised=false")
+  end
+
+  it "writes no change count and no Playbook change when nothing was changed in scope" do
+    expect(written_outputs([])).to include("change_count=0", "playbook_raised=false")
+  end
+
+  def written_outputs(changes)
+    Tempfile.create("output") do |file|
+      ENV["GITHUB_OUTPUT"] = file.path
+      described_class.new.send(:write_outputs, changes, 0, "")
+      File.read(file.path, encoding: Encoding::UTF_8)
+    ensure
+      ENV.delete("GITHUB_OUTPUT")
     end
   end
 
@@ -269,8 +282,8 @@ RSpec.describe TestPlan::DependencyDelta::Command do
     expect(logged).not_to include("more (see the manifest artifact)")
   end
 
-  # A workflow command is only recognised at the start of a line, so JSON's own newline
-  # escaping is the guard.
+  # A workflow command is only recognised at a line start, so JSON's newline escaping
+  # is the guard.
   it "cannot be made to emit a workflow command from lockfile-derived text" do
     manifest = { "dependencies" => [{ "name" => "x\n::error::owned" }] }
 
@@ -293,7 +306,7 @@ RSpec.describe TestPlan::DependencyDelta::Command do
       ]
     )
 
-    expect(summary).to include("1 raised dependency reached no root lockfile")
+    expect(summary).to include("1 changed dependency reached no root Gemfile.lock")
     expect(summary).to include("minitest: 5.25.5 -> 6.0.6")
   end
 

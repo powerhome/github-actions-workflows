@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "./client"
 
 module TestPlan
@@ -21,6 +23,7 @@ module TestPlan
           raise "Unexpected pull-request mergeable state: #{mergeable}" unless VALID_STATES.include?(mergeable)
 
           break unless mergeable == "UNKNOWN"
+
           @sleeper.call(RETRY_DELAY_SECONDS) if attempt < MAX_UNKNOWN_RETRIES
         end
 

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "json"
 require "open3"
 
@@ -8,28 +10,25 @@ module TestPlan
     # Replaces thollander/actions-comment-pull-request, which is pinned to Node 20 and
     # unmaintained since November 2024. Each mode it provided is one list plus one write.
     class Comments
-      # The tag is carried in the comment body, inside an HTML comment -- so a tag holding
-      # "-->" or a quote would break out of the marker. Restricting the shape is cheaper
-      # than escaping it.
+      # The tag goes inside an HTML comment, so one holding "-->" or a quote would break
+      # out of the marker. Restricting the shape is cheaper than escaping it.
       TAG_PATTERN = /\A[a-z][a-z0-9-]*\z/
       REPOSITORY_PATTERN = %r{\A[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\z}
 
-      # Deliberately not named after this action: agentic-pr-review carries a copy of this
-      # client, and an identical marker means a later extraction would not have to migrate
-      # comment identities. The tag already says which comment it is.
+      # Not named after this action: agentic-pr-review carries a copy of this client, and
+      # an identical marker means a later extraction need not migrate comment identities.
       def self.marker(tag)
         %(<!-- powerhome/github-actions-workflows "#{tag}" -->)
       end
 
-      # thollander's marker. Its comments are still on open pull requests, and not
-      # recognising one posts a second test plan beside a stale one. The first upsert
-      # rewrites the body, so this can go once those pull requests have cycled.
+      # thollander's marker, still on open pull requests: not recognising one posts a
+      # second test plan beside a stale one. The first upsert rewrites the body, so this
+      # can go once those pull requests have cycled.
       def self.legacy_marker(tag)
         %(<!-- thollander/actions-comment-pull-request "#{tag}" -->)
       end
 
-      # per_page is the API maximum; MAX_PAGES only stops the loop running forever if the
-      # API keeps answering with full pages.
+      # MAX_PAGES only stops the loop if the API keeps answering with full pages.
       PER_PAGE = 100
       MAX_PAGES = 20
 
@@ -59,8 +58,7 @@ module TestPlan
         end
       end
 
-      # A missing comment is the ordinary case: most runs never wrote the failure comment
-      # that both terminal paths clear.
+      # The ordinary case: most runs never wrote the failure comment both paths clear.
       def delete(tag:)
         validate_tag!(tag)
         existing = find(tag)
@@ -98,8 +96,7 @@ module TestPlan
         nil
       end
 
-      # The body goes over stdin, never an argument: a rendered plan is tens of kilobytes
-      # of model-written text.
+      # Over stdin, never an argument: a rendered plan is tens of kilobytes.
       def request(method, path, body: nil)
         arguments = ["api", "--method", method, path]
         arguments += ["--header", "Accept: application/vnd.github+json"]
@@ -107,9 +104,9 @@ module TestPlan
 
         if body
           arguments += ["--input", "-"]
-          # utf8 before generating: an inline body read out of the environment is tagged
-          # with the locale's encoding, and JSON.generate on UTF-8 bytes tagged BINARY
-          # warns today and raises under json 3.0. Both inline messages contain an em dash.
+          # An inline body out of the environment is tagged with the locale's encoding,
+          # and JSON.generate on UTF-8 bytes tagged BINARY warns today and raises under
+          # json 3.0. Both inline messages contain an em dash.
           input = JSON.generate("body" => CommandOutput.utf8(body))
         end
 

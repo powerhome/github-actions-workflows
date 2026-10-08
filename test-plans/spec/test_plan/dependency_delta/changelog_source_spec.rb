@@ -1,11 +1,13 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
 require "json"
 
 RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
-  # Stands in for the network: keyed by URL, values are file bodies. Anything not
-  # listed 404s, which is how a missing tag or changelog actually presents.
+  # Keyed by URL; anything not listed 404s, which is how a missing tag or changelog
+  # actually presents.
   class FakeChangelogDownloader
     attr_reader :requested
 
@@ -25,25 +27,25 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
   def npm_change(name: "playbook-ui", old_version: "17.0.0", new_version: "17.1.0",
                  locator: nil, integrity: nil, old_integrity: nil)
     TestPlan::DependencyDelta::Change.new(
-      ecosystem: "yarn", name: name, old_version: old_version, new_version: new_version,
+      ecosystem: "yarn", name:, old_version:, new_version:,
       source: "npm",
       old_locator: locator || "https://registry.npmjs.org/#{name}/-/#{name}-#{old_version}.tgz",
       new_locator: locator || "https://registry.npmjs.org/#{name}/-/#{name}-#{new_version}.tgz",
-      old_integrity: old_integrity, new_integrity: integrity,
+      old_integrity:, new_integrity: integrity,
       direct: true, lockfiles: ["yarn.lock"]
     )
   end
 
   def gem_change(name: "rack")
     TestPlan::DependencyDelta::Change.new(
-      ecosystem: "bundler", name: name, old_version: "3.1.7", new_version: "3.1.8",
+      ecosystem: "bundler", name:, old_version: "3.1.7", new_version: "3.1.8",
       source: "rubygems", old_locator: "https://rubygems.org/",
       new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
     )
   end
 
-  # Both versions are looked up: the changelog diff starts at the old version's tag, so
-  # the old side has to be shown to be this package too.
+  # The diff starts at the old version's tag, so that side has to be shown to be this
+  # package too.
   let(:npm_metadata) do
     {
       "https://registry.npmjs.org/playbook-ui/17.1.0" => JSON.generate(
@@ -71,7 +73,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
         .merge(raw("HEAD", "# 17.1.0\nnew notes\n\n# 16.12.0\nolder notes\n"))
     )
 
-    diffs = described_class.new(downloader: downloader).diffs_for(npm_change)
+    diffs = described_class.new(downloader:).diffs_for(npm_change)
 
     expect(diffs.length).to eq(1)
     expect(diffs.first.path).to eq("playbook/CHANGELOG.md")
@@ -87,7 +89,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
         .merge(raw("HEAD", "# 18.0.0\nreleased since\n\n# 17.1.0\nthe upgrade\n\n# 16.12.0\n"))
     )
 
-    diff = described_class.new(downloader: downloader).diffs_for(npm_change).first.diff
+    diff = described_class.new(downloader:).diffs_for(npm_change).first.diff
 
     # Bounded by the upgrade: a release made since is not part of it.
     expect(diff).to include("+the upgrade")
@@ -105,14 +107,13 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
         .merge(raw("HEAD", "# 17.1.0\nthe upgrade\n\n# 17.0.0\n17.0.0 notes\n\n# 16.12.0\n"))
     )
 
-    diff = described_class.new(downloader: downloader).diffs_for(npm_change).first.diff
+    diff = described_class.new(downloader:).diffs_for(npm_change).first.diff
 
     added = diff.lines.select { |line| line.start_with?("+") }.join
 
     expect(added).to include("the upgrade")
-    # The upgraded-to tag holds everything up to but not including its own release, so
-    # it is the baseline; reading from the upgraded-from tag would have added 17.0.0's
-    # notes, which describe behaviour already installed. They remain as diff context.
+    # The upgraded-to tag holds everything up to but not including its own release, so it
+    # is the baseline; the upgraded-from tag would add 17.0.0's already-installed notes.
     expect(added).not_to include("17.0.0 notes")
     # The default branch can carry later releases too, so the notes say so.
     expect(diff).to start_with("[These notes were read from the default branch")
@@ -126,7 +127,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
         .merge(raw("HEAD", "new\n"))
     )
 
-    expect(described_class.new(downloader: downloader).diffs_for(npm_change).length).to eq(1)
+    expect(described_class.new(downloader:).diffs_for(npm_change).length).to eq(1)
   end
 
   it "resolves a gem's repository from its rubygems metadata" do
@@ -140,14 +141,13 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
         .merge(raw("HEAD", "new\n", path: "CHANGELOG.md", repo: "rack/rack"))
     )
 
-    diffs = described_class.new(downloader: downloader).diffs_for(gem_change)
+    diffs = described_class.new(downloader:).diffs_for(gem_change)
 
     expect(diffs.first.path).to eq("CHANGELOG.md")
   end
 
   it "takes both repository and path from a gem's changelog_uri" do
-    # playbook_ui keeps its changelog under playbook/, not at the repository root, so
-    # the URI has to supply the path as well.
+    # playbook_ui keeps its changelog under playbook/, so the URI supplies the path too.
     downloader = FakeChangelogDownloader.new(
       {
         "https://rubygems.org/api/v1/gems/playbook_ui.json" => JSON.generate(
@@ -164,7 +164,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
     )
 
-    diffs = described_class.new(downloader: downloader).diffs_for(change)
+    diffs = described_class.new(downloader:).diffs_for(change)
 
     expect(diffs.first.path).to eq("playbook/CHANGELOG.md")
     expect(downloader.requested).not_to include(
@@ -190,7 +190,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
     )
 
-    diffs = described_class.new(downloader: downloader).diffs_for(change)
+    diffs = described_class.new(downloader:).diffs_for(change)
 
     expect(diffs.first.diff).to include("+# 17.2.0-rc.0", "+rc notes")
     # The tags bracket the upgrade, so the default branch is never read.
@@ -209,13 +209,12 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       integrity: "sha512-public==", old_integrity: "sha512-public-old=="
     )
 
-    expect(described_class.new(downloader: downloader).diffs_for(change).length).to eq(1)
+    expect(described_class.new(downloader:).diffs_for(change).length).to eq(1)
   end
 
   it "refuses when only the new side proves to be the public package" do
-    # Source retrieval rejects the old side, and a changelog survives a refused
-    # download, so the public project's history would stand in for the private old
-    # version's release notes.
+    # A changelog survives a refused download, so the public project's history would
+    # stand in for the private old version's release notes.
     downloader = FakeChangelogDownloader.new(
       npm_metadata.merge(raw("17.0.0", "old\n")).merge(raw("HEAD", "new\n"))
     )
@@ -224,13 +223,12 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       integrity: "sha512-public==", old_integrity: "sha512-was-private=="
     )
 
-    expect(described_class.new(downloader: downloader).diffs_for(change)).to be_empty
+    expect(described_class.new(downloader:).diffs_for(change)).to be_empty
   end
 
   it "refuses the changelog of a private package that only shares a public name" do
-    # Source retrieval rejects this package for the same reason, and a changelog
-    # survives a refused download -- so without this check the provider would be handed
-    # an unrelated project's release notes precisely when it has nothing else.
+    # A changelog survives the refused download, so the provider would be handed an
+    # unrelated project's release notes precisely when it has nothing else.
     downloader = FakeChangelogDownloader.new(
       npm_metadata.merge(raw("17.0.0", "old\n")).merge(raw("HEAD", "new\n"))
     )
@@ -239,7 +237,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       integrity: "sha512-different=="
     )
 
-    expect(described_class.new(downloader: downloader).diffs_for(change)).to be_empty
+    expect(described_class.new(downloader:).diffs_for(change)).to be_empty
   end
 
   it "refuses the changelog of a gem resolved from a private remote" do
@@ -250,7 +248,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       new_locator: "https://gems.powerapp.cloud/", direct: true, lockfiles: ["Gemfile.lock"]
     )
 
-    expect(described_class.new(downloader: downloader).diffs_for(change)).to be_empty
+    expect(described_class.new(downloader:).diffs_for(change)).to be_empty
     expect(downloader.requested).to be_empty
   end
 
@@ -268,9 +266,8 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       direct: true, lockfiles: ["yarn.lock"]
     )
 
-    # The lockfile pins an exact revision, so reading past it describes commits the
-    # dependency does not contain.
-    diff = described_class.new(downloader: downloader).diffs_for(change).first.diff
+    # The lockfile pins a revision, so reading past it describes commits not in use.
+    diff = described_class.new(downloader:).diffs_for(change).first.diff
     expect(diff).to include("+notes through bbbbbbb")
     expect(diff).not_to include("this pin does not include")
   end
@@ -282,13 +279,13 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       )
     )
 
-    expect(described_class.new(downloader: downloader).diffs_for(npm_change)).to be_empty
+    expect(described_class.new(downloader:).diffs_for(npm_change)).to be_empty
   end
 
   it "returns nothing when no changelog exists at the old tag" do
     downloader = FakeChangelogDownloader.new(npm_metadata.merge(raw("HEAD", "new\n")))
 
-    expect(described_class.new(downloader: downloader).diffs_for(npm_change)).to be_empty
+    expect(described_class.new(downloader:).diffs_for(npm_change)).to be_empty
   end
 
   it "returns nothing when the changelog did not change" do
@@ -296,7 +293,7 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
       npm_metadata.merge(raw("17.0.0", "same\n")).merge(raw("HEAD", "same\n"))
     )
 
-    expect(described_class.new(downloader: downloader).diffs_for(npm_change)).to be_empty
+    expect(described_class.new(downloader:).diffs_for(npm_change)).to be_empty
   end
 
   it "caps an oversized diff instead of letting it be dropped whole" do
@@ -306,10 +303,9 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
         .merge(raw("HEAD", Array.new(20_000) { |i| "line #{i}" }.join("\n")))
     )
 
-    source_diff = described_class.new(downloader: downloader).diffs_for(npm_change).first
+    source_diff = described_class.new(downloader:).diffs_for(npm_change).first
 
-    # The provider sees a capped diff; the artifact keeps the whole thing, so the
-    # notice's pointer to the artifact is true.
+    # The artifact keeps the whole diff, so the notice's pointer to it is true.
     expect(source_diff.context_text.bytesize)
       .to be <= described_class::MAX_DIFF_BYTES + described_class::TRUNCATION_NOTICE.bytesize
     expect(source_diff.context_text).to end_with(described_class::TRUNCATION_NOTICE)
@@ -320,6 +316,6 @@ RSpec.describe TestPlan::DependencyDelta::ChangelogSource do
   it "never raises when the registry itself is unreachable" do
     downloader = FakeChangelogDownloader.new({})
 
-    expect { described_class.new(downloader: downloader).diffs_for(npm_change) }.not_to raise_error
+    expect { described_class.new(downloader:).diffs_for(npm_change) }.not_to raise_error
   end
 end

@@ -1,13 +1,12 @@
+# frozen_string_literal: true
+
 require "json"
 
 module TestPlan
   module Playbook
-    # What the action worked out about each changed kit, carried from the step that built
-    # the delta to the step that renders the comment.
-    #
-    # The two ends run in different steps, so this file owns the schema and the wording for
-    # both of them: the evidence the provider reads and the comment a tester reads describe
-    # the same coverage in the same words, and neither can drift from the other.
+    # What the action worked out about each changed kit, carried between two steps. Owns
+    # the wording for both ends, so the evidence the provider reads and the comment a
+    # tester reads describe the same coverage in the same words.
     class KitFacts
       VERSION = 1
       COMPLETE_COVERAGE_MAX = 4
@@ -22,14 +21,13 @@ module TestPlan
       COMPLETE_SENTENCE = "Every use in this repository is listed below."
       REPRESENTATIVE_SENTENCE = "Testing every use is not practical; the pages below are a " \
         "representative sample."
-      UNUSED_SENTENCE = "This upgrade changed this kit, but no use of it was found in this " \
+      UNUSED_SENTENCE = "This version change touched this kit, but no use of it was found in this " \
         "repository."
       UNKNOWN_SENTENCE = "The search for uses of this kit could not be completed, so how widely " \
         "it is used here is unknown. Treat the pages below as a starting point rather than as " \
         "coverage, and see the workflow run for the reason the search failed."
 
-      # A count this action could not complete never reads as exhaustive: an unfinished
-      # search and an empty one are opposite claims.
+      # An unfinished search and an empty one are opposite claims.
       def self.coverage(call_sites:, searchable:)
         return UNKNOWN unless searchable
         return UNUSED if call_sites.zero?
@@ -37,13 +35,9 @@ module TestPlan
         call_sites <= COMPLETE_COVERAGE_MAX ? COMPLETE : REPRESENTATIVE
       end
 
-      # UNKNOWN gets said out loud rather than folded into the representative sentence.
-      # "Testing every use is not practical" is a claim about how widely the kit is used,
-      # and a search that did not finish supports no such claim -- publishing it would both
-      # assert something unknown and bury the fact that evidence collection failed.
-      #
-      # An unrecognised value falls back to the representative sentence, which under-claims
-      # rather than promising coverage a corrupt facts file cannot support.
+      # UNKNOWN is said out loud: "testing every use is not practical" claims the kit is
+      # widely used, which a search that did not finish cannot support. An unrecognised
+      # value falls back to the representative sentence, which under-claims.
       def self.sentence(coverage)
         case coverage
         when COMPLETE then COMPLETE_SENTENCE
@@ -79,9 +73,8 @@ module TestPlan
         new({})
       end
 
-      # Never raises. A plan rendered without facts reads as a representative sample
-      # throughout, which under-claims; refusing to render would throw away a provider
-      # result that has already been paid for.
+      # Never raises: without facts a plan reads as a sample throughout, which under-claims,
+      # where refusing to render throws away a provider result already paid for.
       def self.load_file(path)
         payload = JSON.parse(File.read(path, encoding: Encoding::UTF_8))
         return none unless payload.is_a?(Hash) && payload["kits"].is_a?(Hash)
@@ -95,9 +88,8 @@ module TestPlan
         @kits = kits
       end
 
-      # Joined on the slug the provider copies from the evidence heading, falling back to
-      # the kit's display name. An identifier it can copy is checkable in a way a number it
-      # reports is not.
+      # Joined on the slug the provider copies from the evidence heading: an identifier it
+      # copies is checkable in a way a number it reports is not.
       def for(slug:, name:)
         @kits[normalize(slug)] || @kits[normalize(name)]
       end

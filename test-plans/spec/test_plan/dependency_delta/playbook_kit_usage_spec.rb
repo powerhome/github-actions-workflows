@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
@@ -7,9 +9,8 @@ require "stringio"
 require "tmpdir"
 
 RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
-  # A real git repository, because the search runs through `git grep` and its POSIX ERE
-  # dialect is the thing most likely to break: \s and (?:...) are unsupported there and
-  # match nothing rather than erroring.
+  # A real git repository, because git grep's POSIX ERE dialect is what breaks: \s and
+  # (?:...) are unsupported there and match nothing rather than erroring.
   def workspace(files)
     Dir.mktmpdir do |root|
       files.each do |path, content|
@@ -25,14 +26,14 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
 
   def playbook_change(name: "playbook_ui", ecosystem: "bundler")
     TestPlan::DependencyDelta::Change.new(
-      ecosystem: ecosystem, name: name, old_version: "17.0.0", new_version: "17.1.0",
+      ecosystem:, name:, old_version: "17.0.0", new_version: "17.1.0",
       source: "rubygems", old_locator: "https://rubygems.org/",
       new_locator: "https://rubygems.org/", direct: true, lockfiles: ["Gemfile.lock"]
     )
   end
 
   def diff(path, priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_RUNTIME)
-    TestPlan::DependencyDelta::SourceDiff.new(path: path, diff: "x", priority: priority)
+    TestPlan::DependencyDelta::SourceDiff.new(path:, diff: "x", priority:)
   end
 
   let(:app) do
@@ -108,8 +109,7 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       end
     end
 
-    # The changed side is what a tester has to reopen, so a side nobody here renders has
-    # to be said rather than left as an empty list.
+    # A changed side nobody renders has to be said, not left as an empty list.
     it "says so when a changed side is not rendered in this repository" do
       workspace(app) do |root|
         usage = described_class.new(workspace: root)
@@ -117,23 +117,23 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
 
         report = usage.report
         expect(report).to include("— changed in Rails and React")
-        expect(report).to include("changed the React side of this kit, but nothing in this repository renders it")
+        expect(report).to include("touched the React side of this kit, but nothing in this repository renders it")
       end
     end
   end
 
-  # Playbook ships a kit's docs and tests inside the kit directory, so without this a
-  # release that only refreshed the docs site reported the kit as changed.
+  # Playbook ships docs and tests inside the kit directory, so a release that only
+  # refreshed the docs site reported the kit as changed.
   describe "documentation and tests are not the kit changing" do
     it "does not register a kit whose only change is a doc example" do
       workspace(app) do |root|
         usage = described_class.new(workspace: root)
         usage.observe(playbook_change, [
-          diff("app/pb_kits/playbook/pb_icon/docs/_icon_class.md",
-               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
-          diff("app/pb_kits/playbook/pb_icon/icon.test.js",
-               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_TEST),
-        ])
+                        diff("app/pb_kits/playbook/pb_icon/docs/_icon_class.md",
+                             priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
+                        diff("app/pb_kits/playbook/pb_icon/icon.test.js",
+                             priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_TEST),
+                      ])
 
         expect(usage.kits).to be_empty
         expect(usage.report).to be_nil
@@ -144,10 +144,10 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
       workspace(app) do |root|
         usage = described_class.new(workspace: root)
         usage.observe(playbook_change, [
-          diff("app/pb_kits/playbook/pb_table/docs/_table_docs.md",
-               priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
-          diff("app/pb_kits/playbook/pb_table/_table.rb"),
-        ])
+                        diff("app/pb_kits/playbook/pb_table/docs/_table_docs.md",
+                             priority: TestPlan::DependencyDelta::SourceDiffBuilder::PRIORITY_DOC),
+                        diff("app/pb_kits/playbook/pb_table/_table.rb"),
+                      ])
 
         expect(usage.kits).to eq(["table"])
       end
@@ -179,8 +179,8 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     # The bug stakeholders caught: every Icon example came from one component.
     it "spreads the sample across components rather than taking the first alphabetically" do
       files = card_workspace(component_count: 1, per_component: 20)
-        .transform_keys { |path| path.sub("components/c1", "components/accounting") }
-        .merge(card_workspace(component_count: 9, per_component: 1))
+              .transform_keys { |path| path.sub("components/c1", "components/accounting") }
+              .merge(card_workspace(component_count: 9, per_component: 1))
 
       workspace(files) do |root|
         usage = described_class.new(workspace: root)
@@ -237,9 +237,8 @@ RSpec.describe TestPlan::DependencyDelta::PlaybookKitUsage do
     end
   end
 
-  # "No usage found" is the one conclusion this file exists to support -- it tells a
-  # tester there is nothing to open for a changed kit. Reaching it because the search
-  # never ran is worse than producing no report at all.
+  # "No usage found" tells a tester there is nothing to open, so reaching it because the
+  # search never ran is worse than no report at all.
   describe "when the search cannot run" do
     def annotations
       original = $stdout

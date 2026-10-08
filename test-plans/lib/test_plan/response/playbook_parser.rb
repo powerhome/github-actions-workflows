@@ -1,21 +1,20 @@
+# frozen_string_literal: true
+
 require "json"
 
-require_relative "../agent_payload"
-require_relative "./kit_facts"
+require_relative "validation"
+require_relative "../playbook/kit_facts"
 
 module TestPlan
-  module Playbook
-    # A Playbook raise is a pull request whose every file is a lockfile, so its plan is
-    # organised by the kits the upgrade changed rather than by feature area, and every
-    # case in it is a regression test. Nothing here maps onto the standard schema, so it
-    # is parsed separately rather than bent into one shape that serves neither.
-    class Parser
-      include AgentPayload
+  module Response
+    # Organizes a Playbook change by changed kit rather than feature area.
+    class PlaybookParser
+      include Validation
 
       DEFAULT_KIT_CODE = "KIT"
       KIT_CODE_PATTERN = /\A[A-Z][A-Z0-9]{1,5}\z/
 
-      attr_reader :kits, :other_dependencies, :discarded
+      attr_reader :kits, :other_dependencies, :regression_tests, :application_checks, :discarded
 
       def self.parse_file(path)
         new(File.read(path, encoding: Encoding::UTF_8))
@@ -27,6 +26,8 @@ module TestPlan
         validate_root!
         @kits = build_kits
         @other_dependencies = build_other_dependencies
+        @regression_tests = check_list(@payload["regression_tests"] || [], "regression test")
+        @application_checks = check_list(@payload["application_checks"] || [], "application check")
       end
 
     private
@@ -55,9 +56,8 @@ module TestPlan
 
         {
           "name" => name,
-          # The join key into the facts the action computed. An identifier the provider
-          # copies from the evidence heading is checkable in a way a number it reports is
-          # not, which is why the coverage count no longer travels through here at all.
+          # The join key into the facts the action computed: an identifier the provider
+          # copies is checkable in a way a number it reports is not.
           "slug" => normalize_text(entry["slug"]).downcase,
           "what_changed" => normalize_text(entry["what_changed"]),
           "code" => kit_code(entry["code"], name),
@@ -99,11 +99,10 @@ module TestPlan
         end
       end
 
-      # Which half of the kit the case exercises. Left empty rather than guessed when the
-      # provider did not say, so the plan does not label a React page as Rails.
+      # Empty rather than guessed, so the plan does not label a React page as Rails.
       def system(value)
         candidate = normalize_text(value).downcase
-        KitFacts::SYSTEMS.include?(candidate) ? candidate : ""
+        Playbook::KitFacts::SYSTEMS.include?(candidate) ? candidate : ""
       end
 
       def kit_code(value, name)
