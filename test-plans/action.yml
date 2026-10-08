@@ -29,9 +29,10 @@ inputs:
     description: >-
       Which gem changes to analyze. "umbrella" (the default) counts changes that reach the
       root Gemfile.lock, recording component-only gem changes as skipped; "all" analyzes
-      those too. It does not govern Yarn: every changed yarn.lock is analyzed under both
-      values, because a component's UI code is served by the deployed application. A
-      Playbook change is always analyzed, wherever its lockfile lives.
+      those too. It does not govern Yarn or npm: every changed yarn.lock and
+      package-lock.json is analyzed under both values, because a component's UI code is
+      served by the deployed application. A Playbook change is always analyzed, wherever
+      its lockfile lives. Lockfiles under vendor/ or node_modules/ are never analyzed.
     required: false
     default: umbrella
 

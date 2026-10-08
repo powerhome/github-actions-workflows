@@ -137,6 +137,69 @@ RSpec.describe TestPlan::DependencyDelta::ChangeDetector do
     end
   end
 
+  def package_lock(version, name: "swiper")
+    JSON.generate(
+      "lockfileVersion" => 3,
+      "packages" => { "node_modules/#{name}" => { "version" => version } }
+    )
+  end
+
+  it "keeps a changed package-lock.json in scope wherever it lives" do
+    path = "wordpress/wp-content/themes/site/package-lock.json"
+    snapshot = FakeSnapshot.new(
+      "merge_base" => { path => package_lock("14.0.7") },
+      "head" => { path => package_lock("14.1.0") }
+    )
+    allow(snapshot).to receive(:changed_dependency_files).and_return([path])
+
+    detector = described_class.new(snapshot)
+    changes = detector.detect
+
+    expect(changes.map { |change| [change.ecosystem, change.name, change.lockfiles] })
+      .to eq([["npm", "swiper", [path]]])
+    expect(detector.out_of_scope).to be_empty
+  end
+
+  # A WordPress plugin commits its own vendor tree, lockfiles and all; those describe
+  # how the plugin was built, not what this application depends on.
+  it "ignores lockfiles inside vendored and installed code" do
+    paths = [
+      "wordpress/wp-content/plugins/maps/vendor/freemius/sdk/package-lock.json",
+      "wordpress/wp-content/plugins/maps/vendor/saltus/Gemfile.lock",
+      "node_modules/widget/yarn.lock",
+    ]
+    snapshot = FakeSnapshot.new(
+      "merge_base" => paths.to_h { |path| [path, package_lock("1.0.0")] },
+      "head" => paths.to_h { |path| [path, package_lock("2.0.0")] }
+    )
+    allow(snapshot).to receive(:changed_dependency_files).and_return(paths)
+
+    detector = described_class.new(snapshot, scope: "all")
+
+    expect(detector.detect).to be_empty
+    expect(detector.problems).to be_empty
+  end
+
+  it "records a package-lock.json it cannot read and keeps analyzing the others" do
+    snapshot = FakeSnapshot.new(
+      "merge_base" => {
+        "legacy/package-lock.json" => JSON.generate("lockfileVersion" => 1, "dependencies" => {}),
+        "package-lock.json" => package_lock("1.0.0"),
+      },
+      "head" => {
+        "legacy/package-lock.json" => JSON.generate("lockfileVersion" => 1, "dependencies" => {}),
+        "package-lock.json" => package_lock("2.0.0"),
+      }
+    )
+    allow(snapshot).to receive(:changed_dependency_files)
+      .and_return(["legacy/package-lock.json", "package-lock.json"])
+
+    detector = described_class.new(snapshot)
+
+    expect(detector.detect.map(&:name)).to eq(["swiper"])
+    expect(detector.problems.map(&:path)).to eq(["legacy/package-lock.json"])
+  end
+
   it "excludes Yarn workspaces and file/link dependencies" do
     old_lock = <<~LOCK
       external@^1.0.0:

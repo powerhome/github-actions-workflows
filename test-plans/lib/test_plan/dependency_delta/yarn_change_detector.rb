@@ -5,12 +5,19 @@ require_relative "./yarn_lock_parser"
 
 module TestPlan
   module DependencyDelta
+    # A package-lock.json is the same registry packages once parsed, so npm shares this
+    # detector under its own ecosystem name.
     class YarnChangeDetector
+      def initialize(ecosystem: "yarn", parser: YarnLockParser)
+        @ecosystem = ecosystem
+        @parser = parser
+      end
+
       def detect(path:, old_content:, new_content:, direct_names:, workspace_names:)
         return [] unless old_content && new_content
 
-        old_by_name = YarnLockParser.new(old_content).records.group_by(&:name)
-        new_by_name = YarnLockParser.new(new_content).records.group_by(&:name)
+        old_by_name = @parser.new(old_content).records.group_by(&:name)
+        new_by_name = @parser.new(new_content).records.group_by(&:name)
 
         new_by_name.flat_map do |name, new_records|
           # Grouped by the installed package, whose evidence is fetched; a manifest lists
@@ -45,7 +52,7 @@ module TestPlan
           next if git_locator?(old_record&.resolved) || git_locator?(new_record&.resolved)
 
           Change.new(
-            ecosystem: "yarn",
+            ecosystem: @ecosystem,
             name:,
             old_version:,
             new_version:,
@@ -70,7 +77,7 @@ module TestPlan
           next if old_record.resolved == new_record.resolved
 
           Change.new(
-            ecosystem: "yarn",
+            ecosystem: @ecosystem,
             name:,
             old_version: git_revision(old_record.resolved),
             new_version: git_revision(new_record.resolved),
@@ -128,7 +135,7 @@ module TestPlan
         new_record = new_records.last
         [
           Change.new(
-            ecosystem: "yarn",
+            ecosystem: @ecosystem,
             name:,
             old_version: old_git ? git_revision(old_record.resolved) : old_record.version,
             new_version: new_git ? git_revision(new_record.resolved) : new_record.version,

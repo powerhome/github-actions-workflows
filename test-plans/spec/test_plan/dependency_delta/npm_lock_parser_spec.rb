@@ -1,0 +1,66 @@
+# frozen_string_literal: true
+
+require_relative "../../spec_helper"
+require "test_plan/dependency_delta/npm_lock_parser"
+
+require "json"
+
+RSpec.describe TestPlan::DependencyDelta::NpmLockParser do
+  def records(packages)
+    described_class.new(JSON.generate("lockfileVersion" => 3, "packages" => packages)).records
+  end
+
+  it "names each installed package from its path, including scoped and nested installs" do
+    packages = {
+      "" => { "name" => "site", "dependencies" => { "alpinejs" => "3.9.6" } },
+      "node_modules/alpinejs" => {
+        "version" => "3.9.6",
+        "resolved" => "https://registry.npmjs.org/alpinejs/-/alpinejs-3.9.6.tgz",
+        "integrity" => "sha512-abc",
+      },
+      "node_modules/@alpinejs/focus" => { "version" => "3.12.3" },
+      "node_modules/postcss/node_modules/nanoid" => { "version" => "3.3.7" },
+    }
+    parsed = records(packages)
+
+    expect(parsed.map { |record| [record.name, record.version] }).to contain_exactly(
+      ["alpinejs", "3.9.6"], ["@alpinejs/focus", "3.12.3"], ["nanoid", "3.3.7"]
+    )
+    alpine = parsed.find { |record| record.name == "alpinejs" }
+    expect(alpine.resolved).to eq("https://registry.npmjs.org/alpinejs/-/alpinejs-3.9.6.tgz")
+    expect(alpine.integrity).to eq("sha512-abc")
+  end
+
+  # An alias installs under the name the manifest asked for; evidence belongs to the
+  # package actually installed.
+  it "fetches an alias by the package it installed" do
+    parsed = records("node_modules/legacy-widget" => { "name" => "widget", "version" => "2.0.0" })
+
+    expect(parsed.first.name).to eq("widget")
+    expect(parsed.first.alias).to eq("legacy-widget")
+  end
+
+  it "skips workspace members and the links that point to them" do
+    packages = {
+      "packages/theme" => { "name" => "theme", "version" => "1.0.0" },
+      "node_modules/theme" => { "resolved" => "packages/theme", "link" => true },
+      "packages/theme/node_modules/swiper" => { "version" => "14.0.7" },
+    }
+
+    expect(records(packages).map(&:name)).to eq(["swiper"])
+  end
+
+  it "keeps a Git resolution so the detector can read its revision" do
+    resolved = "git+ssh://git@github.com/example/forked.git#abc1234"
+    parsed = records("node_modules/forked" => { "version" => "1.0.0", "resolved" => resolved })
+
+    expect(parsed.first.resolved).to eq(resolved)
+  end
+
+  it "refuses a lockfileVersion 1 file rather than reading it as empty" do
+    content = JSON.generate("lockfileVersion" => 1, "dependencies" => { "a" => { "version" => "1.0.0" } })
+
+    expect { described_class.new(content).records }
+      .to raise_error(/lockfileVersion 1 has no packages map/)
+  end
+end

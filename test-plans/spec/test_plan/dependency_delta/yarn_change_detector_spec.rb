@@ -3,6 +3,7 @@
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
+require "json"
 require "set"
 
 RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
@@ -50,6 +51,39 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     expect(changes.map(&:name)).to contain_exactly("direct-package", "transitive-package")
     expect(changes.find { |change| change.name == "direct-package" }.direct).to be(true)
     expect(changes.find { |change| change.name == "transitive-package" }.direct).to be(false)
+  end
+
+  it "reads a package-lock.json under the npm ecosystem" do
+    lock = lambda do |version|
+      JSON.generate(
+        "lockfileVersion" => 3,
+        "packages" => {
+          "node_modules/swiper" => {
+            "version" => version,
+            "resolved" => "https://registry.npmjs.org/swiper/-/swiper-#{version}.tgz",
+            "integrity" => "sha512-#{version}",
+          },
+        }
+      )
+    end
+
+    changes = described_class.new(
+      ecosystem: "npm", parser: TestPlan::DependencyDelta::NpmLockParser
+    ).detect(
+      path: "package-lock.json",
+      old_content: lock.call("14.0.7"),
+      new_content: lock.call("14.1.0"),
+      direct_names: Set["swiper"],
+      workspace_names: Set[]
+    )
+
+    expect(changes.map(&:to_h)).to contain_exactly(
+      a_hash_including(
+        "ecosystem" => "npm", "name" => "swiper", "source" => "npm",
+        "old_version" => "14.0.7", "new_version" => "14.1.0", "direct" => true
+      )
+    )
+    expect(changes.first.new_integrity).to eq("sha512-14.1.0")
   end
 
   it "reports a dependency that moved from a Git locator to npm" do
