@@ -3,8 +3,8 @@ set -euo pipefail
 echo "::error::The nip provider is disabled: NIP is not approved for use yet." >&2; exit 1
 
 : "${GITHUB_WORKSPACE:?}"
-: "${REVIEW_JSON_PATH:?}"
-: "${REVIEW_PROMPT_PATH:?}"
+: "${AGENT_PROMPT_PATH:?}"
+: "${AGENT_OUTPUT_PATH:?}"
 
 # The Nitro Intelligence Platform has no agent CLI of its own, so this provider drives the
 # Claude Code CLI against the NIP inference gateway's Anthropic-format /v1/messages route.
@@ -12,12 +12,17 @@ echo "::error::The nip provider is disabled: NIP is not approved for use yet." >
 NIP_BASE_URL="${NIP_BASE_URL:-https://inference.powerhome.ai}"
 NIP_DEFAULT_MODEL="zai-org/GLM-5.3"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SHARED_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SETTINGS_PATH="${SHARED_ROOT}/config/claude-settings.json"
+
+# shellcheck source=lib/agent.sh
+source "${SCRIPT_DIR}/lib/agent.sh"
+
 export PATH="${HOME}/.local/bin:${PATH}"
 
 if ! command -v claude >/dev/null 2>&1; then
-  # Anthropic documents this native installer as the supported CLI install path. Like the
-  # cursor provider, we take the latest version rather than pinning one.
-  curl -fsSL https://claude.ai/install.sh | bash
+  run_installer Claude claude https://claude.ai/install.sh
   export PATH="${HOME}/.local/bin:${PATH}"
 fi
 
@@ -31,8 +36,8 @@ if [[ -z "${PROVIDER_API_KEY:-}" ]]; then
   exit 1
 fi
 
-if [[ ! -f "${REVIEW_PROMPT_PATH}" ]]; then
-  echo "Review prompt not found: ${REVIEW_PROMPT_PATH}" >&2
+if [[ ! -f "${AGENT_PROMPT_PATH}" ]]; then
+  echo "Agent prompt not found: ${AGENT_PROMPT_PATH}" >&2
   exit 1
 fi
 
@@ -81,18 +86,11 @@ spend_metadata="$(jq -cn \
   '{source: "agentic-pr-review", repository: $repository, pull_request: $pull_request, run_id: $run_id, run_attempt: $run_attempt}')"
 export ANTHROPIC_CUSTOM_HEADERS="x-litellm-spend-logs-metadata: ${spend_metadata}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ACTION_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-SETTINGS_PATH="${ACTION_ROOT}/config/claude-settings.json"
-
 cd "${GITHUB_WORKSPACE}"
 
-PROMPT="$(cat "${REVIEW_PROMPT_PATH}")"
-if [[ -n "${REVIEW_ADDITIONAL_INSTRUCTIONS:-}" ]]; then
-  PROMPT+=$'\n\n## Additional instructions from the PR comment\n\n'"${REVIEW_ADDITIONAL_INSTRUCTIONS}"
-fi
+PROMPT="$(cat "${AGENT_PROMPT_PATH}")"
 
-# The caller's workflow can replace the bundled settings, which deny Bash outright: a deny
+# A caller's workflow can replace the bundled settings, which deny Bash outright: a deny
 # rule wins over any --allowed-tools, so loosening the tools means supplying settings too.
 if [[ -n "${CLAUDE_SETTINGS:-}" ]]; then
   SETTINGS_PATH="${CLAUDE_SETTINGS}"
@@ -108,6 +106,10 @@ if [[ -n "${CLAUDE_ARGS:-}" ]]; then
   done <<<"${extra_args_lines}"
 fi
 
+echo "[agent] provider: nip" >&2
+
+clear_agent_output
+
 # Read-only permissions come from config/claude-settings.json, passed with --settings rather
 # than copied into the workspace, and dontAsk denies every tool it does not allow instead of
 # prompting. The working directory is the PR's own checkout, so nothing in it may configure
@@ -116,11 +118,13 @@ fi
 # gateway URL at another host, and the settings file disables hooks again in case a future
 # CLI loads them from elsewhere. --strict-mcp-config with no --mcp-config keeps the
 # repository's MCP servers from loading. claude-settings does not touch those two flags.
-# stdin is /dev/null because --print otherwise waits for piped input before it starts.
+# stdin is /dev/null because --print otherwise waits for piped input before it starts. The
+# empty-array expansion is spelled out because bash before 4.4 treats "${ARRAY[@]}" on an
+# empty array as unbound under set -u.
 #
 # The whole run is kept as a stream-json transcript rather than printed as text, so a run
-# that ends without review text says why. The review is the final result event's text.
-TRANSCRIPT_PATH="${NIP_TRANSCRIPT_PATH:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/nip-review-transcript.jsonl}"
+# that ends without response text says why. The response is the final result event's text.
+TRANSCRIPT_PATH="${NIP_TRANSCRIPT_PATH:-${RUNNER_TEMP:-${TMPDIR:-/tmp}}/nip-agent-transcript.jsonl}"
 claude_status=0
 claude --print --output-format stream-json --verbose \
   --setting-sources user \
@@ -128,16 +132,16 @@ claude --print --output-format stream-json --verbose \
   --permission-mode dontAsk \
   --strict-mcp-config \
   --model "${model}" \
-  "${EXTRA_ARGS[@]}" \
+  ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
   "${PROMPT}" </dev/null >"${TRANSCRIPT_PATH}" || claude_status=$?
 
 result_event="$(jq -c 'select(.type == "result")' "${TRANSCRIPT_PATH}" | tail -n 1)"
 [[ -n "${result_event}" ]] || result_event="{}"
-review="$(jq -r '.result // empty' <<<"${result_event}")"
+response="$(jq -r '.result // empty' <<<"${result_event}")"
 
-if [[ "${claude_status}" -ne 0 || -z "${review//[[:space:]]/}" ]]; then
+if [[ "${claude_status}" -ne 0 || -z "${response//[[:space:]]/}" ]]; then
   {
-    echo "nip provider: no review text (claude exit ${claude_status}). Transcript: ${TRANSCRIPT_PATH}"
+    echo "nip provider: no response text (claude exit ${claude_status}). Transcript: ${TRANSCRIPT_PATH}"
     echo "Result event:"
     jq '{subtype, is_error, num_turns, duration_ms, stop_reason, usage}' <<<"${result_event}"
     echo "Assistant messages (stop reason, then each content block's type and size):"
@@ -148,4 +152,6 @@ if [[ "${claude_status}" -ne 0 || -z "${review//[[:space:]]/}" ]]; then
   exit 1
 fi
 
-printf '%s\n' "${review}" >"${REVIEW_JSON_PATH}"
+printf '%s\n' "${response}" >"${AGENT_OUTPUT_PATH}"
+
+check_agent_output nip 0

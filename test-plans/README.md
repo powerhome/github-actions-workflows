@@ -6,7 +6,7 @@ Generates structured, non-technical manual QA plans from pull-request merge-base
 
 | Profile | Model | Intended use |
 | --- | --- | --- |
-| `cobra-test-plan` | Cursor default | Standard CoBRA/Consent test plan. |
+| `cobra-test-plan` | Provider default | Standard CoBRA/Consent test plan. |
 
 Each scenario names the audience it belongs to when an application serves more than one from different hostnames — where the umbrella routes mount two engines at the same prefix behind subdomain constraints, a relative path alone does not identify the page. Applications with no such constraint produce plans with no audience line.
 
@@ -17,12 +17,12 @@ Each scenario names the audience it belongs to when an application serves more t
 | `profile` | yes | `cobra-test-plan`. |
 | `app-id` | yes | GitHub App ID used to create an installation token. |
 | `private-key` | yes | GitHub App private key. |
-| `provider-api-key` | yes | Provider credential; Cursor maps it to `CURSOR_API_KEY`. |
+| `provider-api-key` | yes | Provider credential; Cursor maps it to `CURSOR_API_KEY`, Claude to `ANTHROPIC_API_KEY`. |
 | `pull-request-number` | yes | Pull request to analyze. |
-| `provider` | no | Provider script name; default `cursor`. |
+| `provider` | no | `cursor` or `claude`, resolved to [`shared/providers/<provider>.sh`](../shared/providers); default `cursor`. |
 | `deepen-length` | no | Merge-base fetch increment; default `30`. |
 
-Cursor selects its default model. The action deliberately has no model or additional-prompt input.
+The provider selects its default model. The action deliberately has no model or additional-prompt input.
 
 ## Mergeability Gate
 
@@ -118,14 +118,14 @@ Until one is chosen, private dependencies warn and generation continues.
 
 The pull-request head is untrusted: anyone who can open a pull request controls its contents. The action treats it that way.
 
-- Agent-instruction paths are reset to the merge base before any provider runs: `.cursor/` directories at any depth, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `AGENTS.md`. Harness that made it through review still applies; a version the pull request edited is reverted, and one it introduced is removed. Without this a pull request could rewrite its own test plan, or edit `.cursorignore` to hide the code it changed from the reviewer.
+- Agent-instruction paths are reset to the merge base before any provider runs: `.cursor/` and `.claude/` directories at any depth, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, `AGENTS.md`, `CLAUDE.md`, and `CLAUDE.local.md`. Harness that made it through review still applies; a version the pull request edited is reverted, and one it introduced is removed. Without this a pull request could rewrite its own test plan, or edit `.cursorignore` to hide the code it changed from the reviewer.
 - The workspace holds no credential while the provider runs. `actions/checkout` persists the installation token in `.git/config`, so it is removed once the last fetch is done — every later Git operation is local — rather than left where an agent with `Read(**)` could find it.
 - The unbounded full delta is written outside the workspace and uploaded from there. Inside it, an agent could read it and bypass both the context budget and the generated-file exclusions.
-- The Cursor CLI installer is downloaded before it is run, rather than piped into a shell, and the run logs its size and SHA-256. Piping starts executing while the transfer is still in flight, so an interrupted download leaves the first half already run with no record of what that was. The installer is still unpinned — Cursor documents no version-pinned CI install — so this bounds the failure mode rather than removing it.
-- The provider runs read-only and offline. `ai/config/cli-config.json` allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. Everything a plan says has to come from evidence this action assembled.
+- The provider CLI's installer is downloaded before it is run, rather than piped into a shell, and the run logs its size and SHA-256. Piping starts executing while the transfer is still in flight, so an interrupted download leaves the first half already run with no record of what that was. The installer is still unpinned — neither Cursor nor Anthropic documents a version-pinned CI install — so this bounds the failure mode rather than removing it.
+- The provider runs read-only and offline. For Cursor, [`shared/config/cursor-cli-config.json`](../shared/config/cursor-cli-config.json) allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. For Claude, [`shared/config/claude-settings.json`](../shared/config/claude-settings.json) allows `Read`, `Glob`, and `Grep`, denies shell, edits, and the web, and disables hooks; it is passed with `--settings`, alongside `--setting-sources user` and `--strict-mcp-config`, so the checkout cannot configure the CLI. Everything a plan says has to come from evidence this action assembled.
 - A part of the response the schema cannot use — a scenario with no steps, a feature area with no test path — is dropped rather than failing the run, since one unusable scenario should not cost an otherwise sound plan. The rendered plan says how many parts were dropped and why, so a partial plan is never mistaken for a complete one.
 - Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published. Every provider-derived field, and the pull-request title, is escaped before rendering: mentions cannot notify anyone, and links, images, and inline HTML cannot be injected into a comment the bot signs. Inline code is the single exception, so a plan can set a route or an identifier apart from the prose around it. A complete code span passes through as written — GitHub renders its contents literally, resolving no mention, autolinking no URL, and interpreting no tag — while a backtick that closes nothing, or one standing behind a backslash that Markdown may read as escaping it, is neutralised like any other markup. A response can neither open a code block that swallows the plan below it nor slip a mention past the escaping by making plain text merely look like code.
-- Cursor selects its default model. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
+- The provider selects its default model. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
 - Comments are authored with the calling workflow's `GITHUB_TOKEN` so action-authored comments do not retrigger workflows.
 - Comments are posted, updated, and deleted through `gh` rather than a third-party action. Each is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "<tag>" -->`), so one profile keeps one authoritative comment. A comment written by the action this replaced is still recognised and adopted on its next update.
 
@@ -177,8 +177,10 @@ test-plans/
   lib/test_plan/      library code, namespaced under TestPlan
   spec/               specs, mirroring lib/
   profiles/           allowlisted profile definitions
-  ai/                 prompts, provider adapters, and CLI permissions
+  ai/                 prompts
 ```
+
+Provider adapters, their CLI permissions, the agent-instruction reset, and the pull-request comment client are in [`shared/`](../shared), which agentic-pr-review uses too. The action reaches them through `../shared`, so it has to be referenced from this repository rather than copied.
 
 ## Local Tests
 

@@ -60,8 +60,13 @@ RSpec.describe "test-plans/action.yml" do
     expect(reset_index).to be < names.index("Run test-plan provider")
   end
 
-  it "leaves model selection to the provider" do
+  # Pinned empty rather than omitted: a composite step inherits the caller's job env.
+  it "leaves model selection to the provider, whatever the caller's job env sets" do
     provider_step = steps.find { |step| step.fetch("name") == "Run test-plan provider" }
-    expect(provider_step.fetch("env")).not_to have_key("MODEL")
+    env = provider_step.fetch("env")
+
+    %w[MODEL CLAUDE_SETTINGS CLAUDE_ARGS].each do |name|
+      expect(env.fetch(name)).to eq("")
+    end
   end
 end

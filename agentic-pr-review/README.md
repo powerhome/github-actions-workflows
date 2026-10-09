@@ -6,11 +6,18 @@ Runs a headless review agent against the **merge-base diff** for a pull request,
 
 1. Creates an installation token for a **GitHub App** (needs repository scopes contents:read and pull_requests:read_write).
 2. Loads PR metadata via the GitHub API to resolve the PR base/head refs.
-3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, and writes `pr.diff` (`base...head` three-dot diff).
-4. Invokes the configured **provider** via `scripts/providers/<provider>.sh` with `prompts/review.md` plus any **additional prompt** text.
+3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, removes the checkout's credential from `.git/config`, and writes `pr.diff` (`base...head` three-dot diff).
+   Agent-instruction files — `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `.cursor/` and `.claude/` directories at any depth — are then reset to the merge base, so a PR cannot instruct its own reviewer. Their changes are still in `pr.diff` and reviewed like any other.
+4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md` plus any **additional prompt** text.
 5. Parses the agent's JSON output and posts a review on the PR head commit.
 
 Artifacts: uploads `review-agent.json` from the workspace when present (for debugging).
+
+The provider adapters and comment client live in [`shared/`](../shared), beside this action, so reference the action from this repository rather than copying its directory into yours — a copy has no `../shared` to run:
+
+```yaml
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
+```
 
 ## Inputs
 
@@ -20,10 +27,10 @@ Artifacts: uploads `review-agent.json` from the workspace when present (for debu
 | `private-key` | yes | GitHub App private key (PEM). |
 | `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; Claude: becomes `ANTHROPIC_API_KEY`; NIP: an inference gateway key). |
 | `pull-request-number` | yes | PR number to review. |
-| `provider` | no | Review backend: `cursor`, `claude`, or `nip`. The action resolves it via `scripts/providers/<provider>.sh` (default: `cursor`). |
+| `provider` | no | Review backend: `cursor`, `claude`, or `nip`. The action resolves it via `shared/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
 | `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default; for NIP, `zai-org/GLM-5.3`. |
-| `claude-settings` | no | Claude and NIP only. Settings that replace the bundled read-only [`config/claude-settings.json`](config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
+| `claude-settings` | no | Claude and NIP only. Settings that replace the bundled read-only [`shared/config/claude-settings.json`](../shared/config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
 | `claude-args` | no | Claude and NIP only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 
@@ -39,7 +46,7 @@ Artifacts: uploads `review-agent.json` from the workspace when present (for debu
 Use this when your workflow already runs in response to a PR event and you want the action to review that PR.
 
 ```yaml
-- uses: ./.github/actions/agentic-pr-review
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
   with:
     app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
     private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
@@ -52,7 +59,7 @@ Use this when your workflow already runs in response to a PR event and you want 
 Use `additional-prompt` when you want to append user-supplied context, such as a workflow input or comment body, to the base review prompt.
 
 ```yaml
-- uses: ./.github/actions/agentic-pr-review
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
   with:
     app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
     private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
@@ -66,7 +73,7 @@ Use `additional-prompt` when you want to append user-supplied context, such as a
 Set `provider: claude` and pass an Anthropic API key. `model` is optional; leave it out to use Claude Code's default.
 
 ```yaml
-- uses: ./.github/actions/agentic-pr-review
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
   with:
     app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
     private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
@@ -92,7 +99,7 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
     echo "skip=true" >> "${GITHUB_OUTPUT}"
     echo "Skipping agentic review because the PR is not open or is draft"
 
-- uses: ./.github/actions/agentic-pr-review
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
   if: steps.skip_gate.outputs.skip != 'true'
   with:
     app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
@@ -111,7 +118,7 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
 - **Data handling.** The gateway keeps prompts in its spend logs, and can fail over to third-party providers under load, so the PR diff and any files the agent reads may be served outside Power's datacenters.
 
 ```yaml
-- uses: ./.github/actions/agentic-pr-review
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
   with:
     app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
     private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
@@ -122,14 +129,15 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
 
 ## Status comments
 
-The in-progress and failure comments are posted through `gh` by [`scripts/post_comment.rb`](scripts/post_comment.rb) rather than a third-party action. The in-progress comment is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "agentic-pr-review-status" -->`) and cleared by an `always()` step at the end of the run; a comment left by the action this replaced is recognised and adopted. The failure comment carries no marker, so a second failure adds a second comment.
+The in-progress and failure comments are posted through `gh` by [`shared/bin/comment.rb`](../shared/bin/comment.rb) rather than a third-party action. The in-progress comment is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "agentic-pr-review-status" -->`) and cleared by an `always()` step at the end of the run; a comment left by the action this replaced is recognised and adopted. The failure comment carries no marker, so a second failure adds a second comment.
 
-`scripts/github_comment_poster.rb` is a deliberate copy of the same client in `test-plans/`. The two actions are versioned and consumed independently, so a fix belongs in both.
+The client is shared with `test-plans/`: both actions are fetched from this repository whole, at the ref a caller pins, so each always runs the copy of `shared/` from its own commit.
 
 ## Prompt and output
 
 - Base instructions: `prompts/review.md` (JSON-only response with `summary` and optional inline `comments`).
-- If `additional-prompt` is non-empty, it is appended under a short "Additional instructions from the PR comment" section before calling the agent.
+- If `additional-prompt` is non-empty, it is appended under a short "Additional instructions from the PR comment" section before calling the agent. The combined prompt is written to the runner's temp directory, outside the checkout.
+- The provider fails the step, with the first 2 KiB of the agent's output in the log, when the agent exits non-zero, writes nothing, or writes no JSON object.
 
 ## Local Tests
 
@@ -142,7 +150,13 @@ ruby agentic-pr-review/spec/run_all.rb
 A single file works the same way, since each spec loads the shared helper:
 
 ```bash
-ruby agentic-pr-review/spec/github_comment_poster_spec.rb
+ruby agentic-pr-review/spec/agent_review_parser_spec.rb
+```
+
+The provider adapters and comment client have their own suite:
+
+```bash
+ruby shared/spec/run_all.rb
 ```
 
 The specs run on whatever Ruby is on PATH, as CI does -- the action itself runs on the
@@ -151,18 +165,15 @@ shorthand, so 3.1 is the floor.
 
 ## CLI permissions
 
+Neither CLI documents a version-pinned installer for CI, so each run installs the latest. The installer is downloaded before it is run, rather than piped into a shell, and the run logs its size and SHA-256; an empty download fails the step instead of running as an empty script.
+
 ### Cursor (read-only)
 
-[`config/cli-config.json`](config/cli-config.json) is copied to **`.cursor/cli-config.json`** (the [project-local CLI config](https://cursor.com/docs/cli/reference/permissions) path). It **allows** only `Read(**)` and **denies** `Shell(*)`, `Write(**)`, and `Mcp(*:*)`. Adjust if you need `WebFetch` or specific MCP tools (not included here).
-
-```bash
-mkdir -p .cursor
-cp path/to/agentic-pr-review/config/cli-config.json .cursor/cli-config.json
-```
+[`shared/config/cursor-cli-config.json`](../shared/config/cursor-cli-config.json) is copied to **`.cursor/cli-config.json`** (the [project-local CLI config](https://cursor.com/docs/cli/reference/permissions) path). It **allows** only `Read(**)` and **denies** `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, matching the Claude settings below. A `.cursor` symlink in the checkout is replaced rather than written through.
 
 ### Claude (read-only)
 
-[`config/claude-settings.json`](config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, and `WebSearch`. The CLI also runs with:
+[`shared/config/claude-settings.json`](../shared/config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, and `WebSearch`. The CLI also runs with:
 
 - `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt.
 - `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
@@ -174,7 +185,7 @@ The CLI runs in the PR's own checkout, so the reviewed repository must not be ab
 These apply to the `claude` and `nip` providers. A caller can widen what the agent may do, for example to let it read PR context with `gh`:
 
 ```yaml
-- uses: ./.github/actions/agentic-pr-review
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
   with:
     # ...
     provider: claude
@@ -192,6 +203,7 @@ These apply to the `claude` and `nip` providers. A caller can widen what the age
 - `claude-settings` **replaces** the bundled settings rather than adding to them, and the bundled file denies `Bash` outright. A deny rule wins over any allow, so `--allowed-tools "Bash(...)"` in `claude-args` has no effect unless `claude-settings` also drops that deny.
 - `--setting-sources user` and `--strict-mcp-config` are passed regardless, so the reviewed repository still cannot configure the CLI. `claude-args` comes after them, though, so a caller that passes its own `--setting-sources` changes that.
 - Whatever the settings allow runs with the API key in the environment, against a prompt built from the PR, so allow only what the review needs.
+- The checkout's credential is removed from `.git/config` before the agent runs, so allowed Git commands that need authentication, such as `git fetch`, fail. Local ones — `git log`, `git diff`, `git show` — still work.
 
 ### NIP (read-only)
 
