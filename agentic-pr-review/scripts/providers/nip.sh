@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+echo "::error::The nip provider is disabled: NIP is not approved for use yet." >&2; exit 1
 
 : "${GITHUB_WORKSPACE:?}"
 : "${REVIEW_JSON_PATH:?}"
