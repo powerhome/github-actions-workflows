@@ -10,7 +10,8 @@ module TestPlan
   module DependencyDelta
     # Leads, not routes: the provider still has to read the file and trace it.
     class DependencyUsage
-      SEARCHED_EXTENSIONS = %w[*.rb *.erb *.haml *.js *.jsx *.ts *.tsx].freeze
+      # PHP for WordPress, whose templates enqueue a package's built script by name.
+      SEARCHED_EXTENSIONS = %w[*.rb *.erb *.haml *.js *.jsx *.ts *.tsx *.php].freeze
       MAX_FILES_PER_PACKAGE = 8
       # Nothing a tester opens. Build output included: a committed bundle inlines its
       # dependencies, matching every package name searched for.
