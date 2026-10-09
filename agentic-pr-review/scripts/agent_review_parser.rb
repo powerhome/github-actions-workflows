@@ -6,20 +6,40 @@ require "json"
 class AgentReviewParser
   MAX_INLINE_COMMENTS = 50
   # Bump when changing review posting behavior or summary format.
-  REVIEW_POSTER_VERSION = "1.0.0"
+  REVIEW_POSTER_VERSION = "1.1.0"
+  # Matches every version's marker. head= arrived in 1.1.0, so an older one has no SHA.
+  MARKER_PATTERN = /<!-- agentic-pr-review (\S+?)(?: head=([0-9a-f]{40}))? -->/
 
-  def self.parse_file(path)
-    new(File.read(path))
+  def self.marker(head_sha)
+    head = head_sha.to_s.empty? ? "" : " head=#{head_sha}"
+    "<!-- agentic-pr-review #{REVIEW_POSTER_VERSION}#{head} -->"
   end
 
-  def initialize(json_string)
+  def self.marker?(body)
+    MARKER_PATTERN.match?(body.to_s)
+  end
+
+  # The head SHA a review summary records, or nil when it has none.
+  def self.reviewed_sha(body)
+    MARKER_PATTERN.match(body.to_s)&.[](2)
+  end
+
+  def self.parse_file(path, head_sha: nil)
+    new(File.read(path), head_sha:)
+  end
+
+  def initialize(json_string, head_sha: nil)
+    @head_sha = head_sha
     @payload = JSON.parse(extract_json(json_string))
     validate_root!
     @summary_body = build_summary_body
     @inline_comments = build_inline_comments
+    @resolved_findings = build_resolved_findings
   end
 
-  attr_reader :summary_body, :inline_comments
+  # An inline comment may carry "regression_of", the key of an earlier finding. ReviewTriage
+  # turns it into a link and strips it before the comment is posted.
+  attr_reader :summary_body, :inline_comments, :resolved_findings
 
 private
 
@@ -61,7 +81,7 @@ private
 
   def build_summary_body
     summary = @payload["summary"].to_s.strip
-    "<!-- agentic-pr-review #{REVIEW_POSTER_VERSION} -->\n\n#{summary}"
+    "#{self.class.marker(@head_sha)}\n\n#{summary}"
   end
 
   def build_inline_comments
@@ -90,12 +110,22 @@ private
     line_i = Integer(line, exception: false)
     return nil if line_i.nil? || line_i < 1
 
-    {
+    comment = {
       "path" => path,
       "body" => format_comment_body(entry["severity"], body),
       "line" => line_i,
       "side" => "RIGHT",
     }
+    regression_of = entry["regression_of"].to_s.strip
+    comment["regression_of"] = regression_of unless regression_of.empty?
+    comment
+  end
+
+  def build_resolved_findings
+    raw = @payload["resolved_findings"]
+    return [] unless raw.is_a?(Array)
+
+    raw.map { |key| key.to_s.strip }.reject(&:empty?).uniq
   end
 
   def limit_inline_comments(comments)

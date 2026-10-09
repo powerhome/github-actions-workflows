@@ -87,6 +87,48 @@ RSpec.describe GitHubReviewPoster do
     end
   end
 
+  describe "#resolve_thread" do
+    let(:http) { instance_double(Net::HTTP) }
+    let(:requests) { [] }
+
+    before do
+      allow(Net::HTTP).to receive(:start).with("api.github.com", 443, use_ssl: true).and_yield(http)
+    end
+
+    def respond_with(*responses)
+      allow(http).to receive(:request) do |request|
+        requests << request
+        responses.shift
+      end
+    end
+
+    it "replies under the thread's first comment, then resolves it" do
+      respond_with(
+        build_response(Net::HTTPCreated, code: 201, message: "Created", body: { id: 3 }.to_json),
+        build_response(Net::HTTPOK, code: 200, message: "OK",
+                                    body: { data: { resolveReviewThread: { thread: { id: "T1" } } } }.to_json)
+      )
+
+      expect(poster.resolve_thread(thread_id: "T1", comment_id: 99, body: "Fixed")).to eq(true)
+
+      expect(requests.map(&:path)).to eq(["/repos/acme/widgets/pulls/42/comments/99/replies", "/graphql"])
+      expect(JSON.parse(requests.first.body)).to eq("body" => "Fixed")
+      expect(JSON.parse(requests.last.body)).to include("variables" => { "threadId" => "T1" })
+    end
+
+    it "returns false and logs a GraphQL error" do
+      respond_with(
+        build_response(Net::HTTPCreated, code: 201, message: "Created", body: { id: 3 }.to_json),
+        build_response(Net::HTTPOK, code: 200, message: "OK",
+                                    body: { errors: [{ message: "Resource not accessible" }] }.to_json)
+      )
+
+      expect do
+        expect(poster.resolve_thread(thread_id: "T1", comment_id: 99, body: "Fixed")).to eq(false)
+      end.to output(/Resolving thread T1 failed: GraphQL: Resource not accessible/).to_stderr
+    end
+  end
+
   describe "#post_single_comment" do
     it "defaults side to RIGHT and posts to the comments endpoint" do
       response = build_response(
