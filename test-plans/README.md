@@ -6,8 +6,8 @@ Generates structured, non-technical manual QA plans from pull-request merge-base
 
 | Profile | Model | Intended use |
 | --- | --- | --- |
-| `cobra-test-plan` | Provider default | Standard CoBRA/Consent test plan. |
-| `test-plan` | Provider default | General test plan for any other application. |
+| `cobra-test-plan` | Claude Sonnet 5.5, high effort (Cursor); Claude CLI default (Claude) | Standard CoBRA/Consent test plan. |
+| `test-plan` | Claude Sonnet 5.5, high effort (Cursor); Claude CLI default (Claude) | General test plan for any other application. |
 
 The two profiles share the dependency and Playbook evidence and plan shapes. They differ in what the standard plan assumes about the application. `cobra-test-plan` resolves Consent permissions to the Subject and Action labels the UI shows and composes component routes with their umbrella mounts. `test-plan` assumes neither: it has no Permissions / Roles section, and each scenario instead names the account to **sign in as** — a public visitor, or a role the application defines — or says it could not be identified. A profile chooses this with `access` (`consent`, the default, or `sign_in`).
 
@@ -25,7 +25,7 @@ Each scenario names the audience it belongs to when an application serves more t
 | `provider` | no | `cursor` or `claude`, resolved to [`shared/providers/<provider>.sh`](../shared/providers); default `cursor`. |
 | `deepen-length` | no | Merge-base fetch increment; default `30`. |
 
-The provider selects its default model. The action deliberately has no model or additional-prompt input.
+The Cursor provider is pinned to `claude-sonnet-5-5-high`; `provider: claude` uses the Claude CLI's default. The action deliberately has no model or additional-prompt input.
 
 ## Mergeability Gate
 
@@ -128,7 +128,7 @@ The pull-request head is untrusted: anyone who can open a pull request controls 
 - The provider runs read-only and offline. For Cursor, [`shared/config/cursor-cli-config.json`](../shared/config/cursor-cli-config.json) allows `Read(**)` and denies `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, and is copied into the workspace after the quarantine so a pull-request copy cannot replace it. For Claude, [`shared/config/claude-settings.json`](../shared/config/claude-settings.json) allows `Read`, `Glob`, and `Grep`, denies shell, edits, and the web, and disables hooks; it is passed with `--settings`, alongside `--setting-sources user` and `--strict-mcp-config`, so the checkout cannot configure the CLI. Everything a plan says has to come from evidence this action assembled.
 - A part of the response the schema cannot use — a scenario with no steps, a feature area with no test path — is dropped rather than failing the run, since one unusable scenario should not cost an otherwise sound plan. The rendered plan says how many parts were dropped and why, so a partial plan is never mistaken for a complete one.
 - Provider output is never trusted as Markdown. It is parsed against a fixed JSON schema and re-rendered by a deterministic formatter, so anything outside the schema is discarded rather than published. Every provider-derived field, and the pull-request title, is escaped before rendering: mentions cannot notify anyone, and links, images, and inline HTML cannot be injected into a comment the bot signs. Inline code is the single exception, so a plan can set a route or an identifier apart from the prose around it. A complete code span passes through as written — GitHub renders its contents literally, resolving no mention, autolinking no URL, and interpreting no tag — while a backtick that closes nothing, or one standing behind a backslash that Markdown may read as escaping it, is neutralised like any other markup. A response can neither open a code block that swallows the plan below it nor slip a mention past the escaping by making plain text merely look like code.
-- The provider selects its default model. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
+- The model is pinned by the action: `claude-sonnet-5-5-high` for Cursor, the CLI's default for Claude. There is no caller-supplied prompt or model input, and no `issue_comment` trigger, so comment text never reaches the provider.
 - Comments are authored with the calling workflow's `GITHUB_TOKEN` so action-authored comments do not retrigger workflows.
 - Comments are posted, updated, and deleted through `gh` rather than a third-party action. Each is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "<tag>" -->`), so one profile keeps one authoritative comment. A comment written by the action this replaced is still recognised and adopted on its next update.
 

@@ -2,7 +2,7 @@
 
 The `test-plans` composite action generates structured, non-technical manual QA plans from pull-request merge-base diffs.
 
-It provides two profiles, both using the provider's default model (Cursor unless `provider: claude` is set):
+It provides two profiles, both using Claude Sonnet 5.5 at high effort on Cursor (the default provider), or the Claude CLI's default model when `provider: claude` is set:
 
 - `cobra-test-plan` for CoBRA applications, naming the Consent permissions each scenario needs.
 - `test-plan` for any other application, naming the account each scenario signs in as.
