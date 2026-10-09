@@ -20,6 +20,49 @@ RSpec.describe TestPlan::Profile do
     expect(profile.prompt_path).to end_with("prompts/cobra_test_plan.md")
   end
 
+  it "loads the generic profile, which names an account rather than Consent permissions" do
+    profile = described_class.load(action_root:, profile_id: "test-plan")
+
+    expect(profile.display_name).to eq("Test Plan")
+    expect(profile.comment_tag).to eq("test-plan")
+    expect(profile.access).to eq("sign_in")
+    expect(profile.prompt_path).to end_with("prompts/test_plan.md")
+    expect(profile.dependency_prompt_path).to end_with("prompts/dependency_test_plan.md")
+    expect(profile.playbook_prompt_path).to end_with("prompts/playbook_test_plan.md")
+  end
+
+  it "reads Consent permissions when a profile declares no access" do
+    profile = described_class.load(action_root:, profile_id: "cobra-test-plan")
+
+    expect(profile.access).to eq("consent")
+    expect(profile.to_h.fetch("access")).to eq("consent")
+  end
+
+  it "rejects an access it does not know" do
+    Dir.mktmpdir do |directory|
+      Dir.mkdir(File.join(directory, "profiles"))
+      Dir.mkdir(File.join(directory, "prompts"))
+      File.write(File.join(directory, "prompts", "plan.md"), "prompt")
+      File.write(
+        File.join(directory, "profiles", "odd-plan.json"),
+        JSON.generate(
+          "id" => "odd-plan",
+          "display_name" => "Odd",
+          "access" => "roles",
+          "prompt" => "prompts/plan.md",
+          "comment_tag" => "odd",
+          "status_comment_tag" => "odd-status",
+          "failure_comment_tag" => "odd-failure",
+          "artifact_name" => "odd-artifact"
+        )
+      )
+
+      expect do
+        described_class.load(action_root: directory, profile_id: "odd-plan")
+      end.to raise_error(RuntimeError, /access must be one of consent, sign_in/)
+    end
+  end
+
   it "rejects unknown and path-traversal profile values" do
     expect do
       described_class.load(action_root:, profile_id: "missing")

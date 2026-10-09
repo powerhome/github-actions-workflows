@@ -260,7 +260,9 @@ module TestPlan
           end
           .each_with_object({}) do |(key, group), related|
             next if key.first.nil?
-            next if group.map(&:ecosystem).uniq.length < 2
+            # By gem and package rather than ecosystem: a yarn.lock and a package-lock.json
+            # resolving the same package are one half, not a linked pair.
+            next if group.map { |change| change.ecosystem == "bundler" }.uniq.length < 2
 
             group.each do |change|
               related[change.key] = (group - [change])

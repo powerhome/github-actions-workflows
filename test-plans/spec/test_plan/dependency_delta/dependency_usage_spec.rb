@@ -28,6 +28,19 @@ RSpec.describe TestPlan::DependencyDelta::DependencyUsage do
     end
   end
 
+  it "finds a package a PHP template enqueues" do
+    files = {
+      "wordpress/wp-content/themes/site/functions.php" =>
+        "wp_enqueue_script('swiper', get_template_directory_uri() . '/build/swiper.js');\n",
+    }
+
+    workspace(files) do |directory|
+      report = described_class.new(workspace: directory).report([change("swiper")])
+
+      expect(report).to include("- wordpress/wp-content/themes/site/functions.php")
+    end
+  end
+
   it "finds name variants in application files and excludes specs" do
     files = {
       "components/pulse-ui/app/menu.rb" => "require 'example_widget'\n",

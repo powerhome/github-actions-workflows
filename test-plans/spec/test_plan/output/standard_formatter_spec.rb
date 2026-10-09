@@ -44,6 +44,42 @@ RSpec.describe TestPlan::Output::StandardFormatter do
     ).render
   end
 
+  describe "a sign-in plan" do
+    def render_sign_in(sign_in_as)
+      sign_in_payload = payload.except("permissions")
+      scenario = sign_in_payload.dig("feature_areas", 0, "scenarios", 0)
+      scenario.delete("permissions")
+      scenario["sign_in_as"] = sign_in_as
+
+      described_class.new(
+        parsed: TestPlan::Response::StandardParser.new(sign_in_payload.to_json, access: "sign_in"),
+        pull_request_title: "Quote form",
+        profile_name: "Test Plan",
+        access: "sign_in"
+      ).render
+    end
+
+    it "names the account to sign in as instead of Consent permissions" do
+      output = render_sign_in("WordPress Administrator")
+
+      expect(output).to include("**Sign in as:** WordPress Administrator")
+      expect(output).not_to include("## Permissions / Roles")
+      expect(output).not_to include("**Permissions:**")
+      expect(output).to include("#### RCH-1 — Default results")
+    end
+
+    it "says when the account could not be identified" do
+      expect(render_sign_in("")).to include("**Sign in as:** Not identified from this change.")
+    end
+
+    it "escapes the account like every other provider field" do
+      output = render_sign_in("@powerhome/admins [admin](https://example.com)")
+
+      expect(output).not_to include("[admin](https://example.com)")
+      expect(output).not_to include(" @powerhome")
+    end
+  end
+
   it "renders the profile-specific hierarchy and deterministic case identifiers" do
     output = render
     expect(output).to start_with("## ✅ Cobra Test Plan: Reminder Calls migration")

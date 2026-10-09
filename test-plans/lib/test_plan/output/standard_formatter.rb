@@ -17,8 +17,9 @@ module TestPlan::Output
       "not_identified" => "Not identified",
     }.freeze
 
-    def initialize(parsed:, pull_request_title:, profile_name:, generation_warning: "")
+    def initialize(parsed:, pull_request_title:, profile_name:, generation_warning: "", access: "consent")
       @parsed = parsed
+      @consent = access == "consent"
       @pull_request_title = normalize_text(pull_request_title)
       @profile_name = normalize_text(profile_name)
       @generation_warning = normalize_text(generation_warning)
@@ -27,10 +28,9 @@ module TestPlan::Output
 
     def render
       sections = preamble
+      sections.concat(["---", permissions_section]) if @consent
       sections.concat(
         [
-          "---",
-          permissions_section,
           "---",
           features_section,
           "---",
@@ -106,7 +106,11 @@ module TestPlan::Output
           # a single-audience application would otherwise carry a "not identified" line
           # on every case.
           lines << "**Audience:** #{audience}  " unless audience.empty?
-          lines << "**Permissions:** #{scenario_permissions(scenario)}"
+          lines << if @consent
+                     "**Permissions:** #{scenario_permissions(scenario)}"
+                   else
+                     "**Sign in as:** #{format_sign_in_as(scenario.fetch("sign_in_as"))}"
+                   end
           lines << ""
           scenario.fetch("steps").each { |step| lines << "- #{sanitize(step)}" }
         end
@@ -178,6 +182,11 @@ module TestPlan::Output
       subject = sanitize(permission.fetch("subject"))
       action = sanitize(permission.fetch("action"))
       "#{subject} — #{action}"
+    end
+
+    def format_sign_in_as(value)
+      sign_in_as = sanitize(value)
+      sign_in_as.empty? ? "Not identified from this change." : sign_in_as
     end
 
     def format_landing_page(value)
