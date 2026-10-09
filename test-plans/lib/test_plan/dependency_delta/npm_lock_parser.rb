@@ -10,7 +10,10 @@ module TestPlan
     # `dependencies` tree instead and npm 7 rewrites it on the next install, so it is
     # reported as unreadable rather than parsed a second way.
     class NpmLockParser
-      INSTALL_PREFIX = "node_modules/"
+      # The package installed in the last node_modules segment of a key, so a nested
+      # install of b under a reads as b. Anchored to whole segments: a workspace member
+      # at packages/custom_node_modules/widget is local code, not an install.
+      INSTALL_PATH = %r{(?:\A|/)node_modules/((?:@[^/]+/)?[^/]+)\z}
       SUPPORTED_VERSIONS = [2, 3].freeze
 
       def initialize(content)
@@ -30,14 +33,15 @@ module TestPlan
         end
 
         packages.filter_map do |key, entry|
-          # A key outside node_modules/ is the root or a workspace member, and a link is
+          # A key outside node_modules is the root or a workspace member, and a link is
           # the installed pointer to one -- local code, not a dependency to fetch.
-          next unless key.include?(INSTALL_PREFIX) && entry.is_a?(Hash)
+          install = INSTALL_PATH.match(key)
+          next unless install && entry.is_a?(Hash)
           next if entry["link"] == true || !entry["version"].is_a?(String)
 
-          # The last segment, so a nested install of b under a reads as b. An npm alias
-          # installs under the requested name and records the real one in `name`.
-          requested = key.split(INSTALL_PREFIX).last
+          # An npm alias installs under the requested name and records the real one in
+          # `name`.
+          requested = install[1]
           PackageRecord.new(
             name: entry["name"].is_a?(String) ? entry["name"] : requested,
             alias: requested,

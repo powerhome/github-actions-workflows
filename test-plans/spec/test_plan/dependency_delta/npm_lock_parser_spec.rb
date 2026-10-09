@@ -45,6 +45,17 @@ RSpec.describe TestPlan::DependencyDelta::NpmLockParser do
       "packages/theme" => { "name" => "theme", "version" => "1.0.0" },
       "node_modules/theme" => { "resolved" => "packages/theme", "link" => true },
       "packages/theme/node_modules/swiper" => { "version" => "14.0.7" },
+      "packages/theme/node_modules/@alpinejs/focus" => { "version" => "3.12.3" },
+    }
+
+    expect(records(packages).map(&:name)).to contain_exactly("swiper", "@alpinejs/focus")
+  end
+
+  it "does not read a workspace member as an install because node_modules is in its name" do
+    packages = {
+      "packages/custom_node_modules/widget" => { "name" => "widget", "version" => "1.0.0" },
+      "node_modules/widget" => { "resolved" => "packages/custom_node_modules/widget", "link" => true },
+      "packages/custom_node_modules/widget/node_modules/swiper" => { "version" => "14.0.7" },
     }
 
     expect(records(packages).map(&:name)).to eq(["swiper"])
