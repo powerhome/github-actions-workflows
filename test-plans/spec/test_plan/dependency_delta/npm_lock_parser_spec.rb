@@ -10,6 +10,27 @@ RSpec.describe TestPlan::DependencyDelta::NpmLockParser do
     described_class.new(JSON.generate("lockfileVersion" => 3, "packages" => packages)).records
   end
 
+  # Version 2 also carries the v1 dependencies tree, for older npm; only packages is read.
+  it "reads a lockfileVersion 2 file through its packages map" do
+    content = JSON.generate(
+      "lockfileVersion" => 2,
+      "packages" => { "node_modules/swiper" => { "version" => "14.0.7" } },
+      "dependencies" => { "swiper" => { "version" => "10.0.4" } }
+    )
+
+    expect(described_class.new(content).records.map { |record| [record.name, record.version, record.path] })
+      .to eq([["swiper", "14.0.7", "node_modules/swiper"]])
+  end
+
+  it "says a supported version is missing its packages map rather than calling it unsupported" do
+    [2, 3].each do |version|
+      content = JSON.generate("lockfileVersion" => version, "dependencies" => {})
+
+      expect { described_class.new(content).records }
+        .to raise_error('package-lock.json must include a "packages" object')
+    end
+  end
+
   it "names each installed package from its path, including scoped and nested installs" do
     packages = {
       "" => { "name" => "site", "dependencies" => { "alpinejs" => "3.9.6" } },
