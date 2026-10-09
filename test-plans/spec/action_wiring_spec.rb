@@ -79,7 +79,7 @@ module_function
 
   # Only the reads a script cannot run without. A variable it also reads as ${X:-...} is an
   # optional setting, guarded wherever it is used bare -- MODEL, for one, which this
-  # action deliberately leaves unset.
+  # action sets only for Cursor.
   def required_shell_env_reads(path)
     body = read(path)
     assigned = body.scan(/^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)=/).flatten

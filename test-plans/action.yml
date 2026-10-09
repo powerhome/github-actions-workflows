@@ -252,10 +252,11 @@ runs:
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
         AGENT_OUTPUT_PATH: ${{ github.workspace }}/test-plan-agent.json
         AGENT_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
-        # Pinned empty: a composite step inherits the caller's job env, and the shared
-        # providers honour these, so a job-level MODEL would otherwise pick the model this
-        # action deliberately leaves to the provider.
-        MODEL: ""
+        # Pinned rather than left to the provider's default, which timed out on the
+        # cobra-test-plan profile. Set here, not inherited: a composite step takes the
+        # caller's job env, so a job-level MODEL would otherwise pick the model. The slug is
+        # Cursor's, so Claude keeps its own default.
+        MODEL: ${{ inputs.provider == 'cursor' && 'claude-sonnet-5-5-high' || '' }}
         CLAUDE_SETTINGS: ""
         CLAUDE_ARGS: ""
       run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
