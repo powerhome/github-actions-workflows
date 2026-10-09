@@ -67,6 +67,8 @@ Required shape (keys and types):
   - `line` (integer) — 1-based line on PR head for a changed line
   - `body` (string) — comment text (markdown allowed inside the string)
   - `severity` (string) — exactly one of: `low`, `medium`, `high`, `critical`
+  - `regression_of` (string) — optional; only when an "Earlier findings" section below says to set it
+- `resolved_findings` (array of strings) — optional; the keys of earlier findings that are now fixed, only when an "Earlier findings" section below lists them
 
 Example object (structure only; your output must be raw JSON, not wrapped in backticks):
 

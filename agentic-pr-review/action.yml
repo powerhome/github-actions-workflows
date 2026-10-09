@@ -38,6 +38,10 @@ inputs:
     description: Extra instructions appended to the review prompt (e.g. full text of an @nitro-pr-review PR comment)
     required: false
     default: ""
+  review-scope:
+    description: auto reviews only the commits pushed since the bot's last review, and the whole PR on its first review, after a rebase or force-push, or when triggered by issue_comment or workflow_dispatch; full always reviews the whole PR
+    required: false
+    default: auto
 
 runs:
   using: composite
@@ -104,6 +108,21 @@ runs:
         head_ref: ${{ steps.pr_gate.outputs.head_sha }}
         deepen_length: ${{ inputs.deepen-length }}
 
+    # Before the credential goes: a last-reviewed commit outside the fetched history is
+    # fetched by SHA to tell a merge from the base branch apart from a rewritten branch.
+    - name: Plan review scope
+      id: scope
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+        PULL_NUMBER: ${{ inputs.pull-request-number }}
+        HEAD_SHA: ${{ steps.pr_gate.outputs.head_sha }}
+        APP_SLUG: ${{ steps.app_token.outputs.app-slug }}
+        REVIEW_SCOPE: ${{ inputs.review-scope }}
+        EVENT_NAME: ${{ github.event_name }}
+        REVIEW_CONTEXT_PATH: ${{ runner.temp }}/agentic-pr-review-context.json
+      run: ruby "${{ github.action_path }}/scripts/plan_review.rb"
+
     - name: Remove Git credentials from the workspace
       shell: bash
       # actions/checkout persists the installation token in .git/config, and the provider
@@ -122,22 +141,30 @@ runs:
         fi
 
     - name: Compute PR diff
+      if: steps.scope.outputs.mode != 'skip'
       shell: bash
       env:
         BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
         HEAD_SHA: ${{ steps.pr_gate.outputs.head_sha }}
+        REVIEW_MODE: ${{ steps.scope.outputs.mode }}
+        LAST_REVIEWED_SHA: ${{ steps.scope.outputs.last_reviewed_sha }}
         PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        PR_INCREMENTAL_DIFF_PATH: ${{ github.workspace }}/pr-incremental.diff
       # The workspace is the pull-request head, so it may already hold a symlink named
-      # pr.diff, and a redirect follows one. rm -rf unlinks it instead.
+      # pr.diff or pr-incremental.diff, and a redirect follows one. rm -rf unlinks it instead.
       run: |
         set -euo pipefail
-        rm -rf -- "${PR_DIFF_PATH}"
+        rm -rf -- "${PR_DIFF_PATH}" "${PR_INCREMENTAL_DIFF_PATH}"
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${PR_DIFF_PATH}"
+        if [[ "${REVIEW_MODE}" == "incremental" ]]; then
+          git diff "${LAST_REVIEWED_SHA}" "${HEAD_SHA}" > "${PR_INCREMENTAL_DIFF_PATH}"
+        fi
 
     # AGENTS.md, CLAUDE.md, .cursor/ and .claude/ are read by the CLI as instructions, so a
     # pull request editing them could tell its own reviewer what to say. The edits are still
     # in pr.diff, where they get reviewed like any other change.
     - name: Reset agent instructions to the merge base
+      if: steps.scope.outputs.mode != 'skip'
       shell: bash
       env:
         BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
@@ -146,21 +173,17 @@ runs:
 
     # Written outside the workspace, which the pull request controls and the provider reads.
     - name: Compose review prompt
+      if: steps.scope.outputs.mode != 'skip'
       shell: bash
       env:
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
         REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
+        REVIEW_CONTEXT_PATH: ${{ runner.temp }}/agentic-pr-review-context.json
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
-      run: |
-        set -euo pipefail
-
-        prompt="$(cat "${REVIEW_PROMPT_PATH}")"
-        if [[ -n "${REVIEW_ADDITIONAL_INSTRUCTIONS}" ]]; then
-          prompt+=$'\n\n## Additional instructions from the PR comment\n\n'"${REVIEW_ADDITIONAL_INSTRUCTIONS}"
-        fi
-        printf '%s' "${prompt}" > "${AGENT_PROMPT_PATH}"
+      run: ruby "${{ github.action_path }}/scripts/compose_prompt.rb"
 
     - name: Run review provider
+      if: steps.scope.outputs.mode != 'skip'
       shell: bash
       env:
         PROVIDER: ${{ inputs.provider }}
@@ -173,6 +196,7 @@ runs:
       run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
 
     - name: Upload agent review JSON
+      if: steps.scope.outputs.mode != 'skip'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: agentic-pr-review-json
@@ -180,12 +204,16 @@ runs:
         if-no-files-found: warn
 
     - name: Post review to GitHub
+      if: steps.scope.outputs.mode != 'skip'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
         PULL_NUMBER: ${{ inputs.pull-request-number }}
         COMMIT_SHA: ${{ steps.pr_gate.outputs.head_sha }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
+        REVIEW_CONTEXT_PATH: ${{ runner.temp }}/agentic-pr-review-context.json
+        PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        PR_INCREMENTAL_DIFF_PATH: ${{ github.workspace }}/pr-incremental.diff
       run: ruby "${{ github.action_path }}/scripts/post_review.rb"
 
     # create, not upsert: this comment carries no tag, so a second failure adds a second

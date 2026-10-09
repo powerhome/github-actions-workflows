@@ -88,6 +88,48 @@ RSpec.describe "agentic-pr-review action.yml wiring" do
     expect(missing).to be_empty
   end
 
+  it "gives every one of the action's own Ruby scripts the variables it requires" do
+    entries = ReviewActionWiring.steps.filter_map do |step|
+      entry = step.fetch("run", "")[%r{action_path \}\}/(scripts/\w+\.rb)}, 1]
+      [step, entry] if entry
+    end
+    expect(entries.map(&:last)).to include("scripts/plan_review.rb", "scripts/compose_prompt.rb")
+
+    missing = entries.each_with_object({}) do |(step, entry), index|
+      required = ReviewActionWiring.ruby_required_env_reads(File.join(ReviewActionWiring::ACTION_ROOT, entry))
+      absent = required - ReviewActionWiring.provided(step)
+      index[step.fetch("name")] = absent if absent.any?
+    end
+
+    expect(missing).to be_empty
+  end
+
+  it "hands the prompt and posting steps the context the plan step writes" do
+    written = ReviewActionWiring.step_named("Plan review scope").dig("env", "REVIEW_CONTEXT_PATH")
+
+    expect(written).to include("runner.temp")
+    expect(ReviewActionWiring.step_named("Compose review prompt").dig("env", "REVIEW_CONTEXT_PATH")).to eq(written)
+    expect(ReviewActionWiring.step_named("Post review to GitHub").dig("env", "REVIEW_CONTEXT_PATH")).to eq(written)
+  end
+
+  it "posts against the diffs the diff step writes" do
+    diff = ReviewActionWiring.step_named("Compute PR diff").fetch("env")
+    post = ReviewActionWiring.step_named("Post review to GitHub").fetch("env")
+
+    expect(post.slice("PR_DIFF_PATH", "PR_INCREMENTAL_DIFF_PATH")).to eq(
+      diff.slice("PR_DIFF_PATH", "PR_INCREMENTAL_DIFF_PATH")
+    )
+  end
+
+  # It fetches the last-reviewed commit, which needs the credential the later step removes.
+  it "plans the review scope before the credential is removed" do
+    names = ReviewActionWiring.steps.map { |step| step.fetch("name") }
+
+    expect(names.index("Plan review scope")).to be_between(
+      names.index("Fetch through merge-base"), names.index("Remove Git credentials from the workspace")
+    )
+  end
+
   it "gives every provider script the variables it requires" do
     step = ReviewActionWiring.step_named("Run review provider")
     scripts = [File.join(ReviewActionWiring::SHARED_ROOT, "bin", "run_provider.sh")] +

@@ -6,10 +6,10 @@ Runs a headless review agent against the **merge-base diff** for a pull request,
 
 1. Creates an installation token for a **GitHub App** (needs repository scopes contents:read and pull_requests:read_write).
 2. Loads PR metadata via the GitHub API to resolve the PR base/head refs.
-3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, removes the checkout's credential from `.git/config`, and writes `pr.diff` (`base...head` three-dot diff).
+3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, decides the [review scope](#follow-up-reviews), removes the checkout's credential from `.git/config`, and writes `pr.diff` (`base...head` three-dot diff), plus `pr-incremental.diff` (`last-reviewed..head`) on a follow-up review.
    Agent-instruction files — `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `.cursor/` and `.claude/` directories at any depth — are then reset to the merge base, so a PR cannot instruct its own reviewer. Their changes are still in `pr.diff` and reviewed like any other.
-4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md` plus any **additional prompt** text.
-5. Parses the agent's JSON output and posts a review on the PR head commit.
+4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md`, the bot's earlier findings, and any **additional prompt** text.
+5. Parses the agent's JSON output, drops comments that repeat an open finding (or, on a follow-up review, fall outside the new changes), posts a review on the PR head commit, and resolves earlier threads the agent reports as fixed.
 
 Artifacts: uploads `review-agent.json` from the workspace when present (for debugging).
 
@@ -33,6 +33,7 @@ The provider adapters and comment client live in [`shared/`](../shared), beside 
 | `claude-settings` | no | Claude only. Settings that replace the bundled read-only [`shared/config/claude-settings.json`](../shared/config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
 | `claude-args` | no | Claude only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
+| `review-scope` | no | `auto` (default) reviews only the commits pushed since the bot's last review, falling back to a full review as described in [Follow-up reviews](#follow-up-reviews). `full` always reviews the whole PR. |
 
 ## Secrets and permissions
 
@@ -107,6 +108,32 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
     provider-api-key: ${{ secrets.AGENTIC_REVIEW_PROVIDER_API_KEY }}
     pull-request-number: ${{ github.event.pull_request.number }}
 ```
+
+## Follow-up reviews
+
+The bot does not re-review what it has already reviewed. Its state lives on the pull request itself, in the marker at the top of each review summary, which records the head it covered:
+
+```html
+<!-- agentic-pr-review 1.1.0 head=<40-character SHA> -->
+```
+
+Only reviews posted by the GitHub App the action authenticates as count, so a marker pasted by anyone else is ignored.
+
+| Situation | Review |
+| --- | --- |
+| No earlier review by the bot, or its latest summary has no `head=` (posted before 1.1.0) | Full |
+| `review-scope: full`, or the run was triggered by `issue_comment` or `workflow_dispatch` (a manual request) | Full |
+| The last-reviewed SHA is no longer in the branch's history (rebase or force-push) | Full |
+| The last-reviewed SHA is an ancestor of the new head | Incremental: `last-reviewed..head` |
+| The head was already reviewed (e.g. a re-run) | Skipped: no agent run, nothing posted |
+
+On an incremental review the agent gets both diffs. It reviews `pr-incremental.diff` but can read `pr.diff` and the rest of the code as context, so it can still catch a new change that breaks older code. Inline comments are only posted on lines that the incremental diff adds **and** the pull request itself changes; anything else is dropped and logged. That second condition keeps out changes merged in from the base branch.
+
+On every review, full or incremental, the agent also gets the bot's earlier inline threads (the most recent 100):
+
+- **No duplicates.** It is told not to re-raise a finding a thread already covers. As a backstop, a new comment on the same line as one of the bot's open threads is dropped.
+- **Fixed findings are resolved.** The agent lists the open threads whose issue is fixed. The bot replies to each one ("looks addressed as of `<sha>`") and resolves it.
+- **Regressions are re-raised.** If an issue the bot resolved has come back, the agent raises it again, and the new comment links the original thread. A thread someone else resolved counts as dismissed and is never re-raised.
 
 ## Status comments
 
