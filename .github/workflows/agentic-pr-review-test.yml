@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'agentic-pr-review/**'
+      - 'shared/**'
       - '.github/workflows/agentic-pr-review-test.yml'
 
 jobs:
