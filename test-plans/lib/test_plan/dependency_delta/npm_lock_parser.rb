@@ -50,7 +50,8 @@ module TestPlan
             alias: requested,
             version: entry["version"],
             resolved: entry["resolved"],
-            integrity: entry["integrity"]
+            integrity: entry["integrity"],
+            path: key
           )
         end
       end
