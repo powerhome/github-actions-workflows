@@ -1,11 +1,10 @@
-name: test-plans
+name: shared
 
 on:
   push:
     paths:
-      - 'test-plans/**'
       - 'shared/**'
-      - '.github/workflows/test-plans-test.yml'
+      - '.github/workflows/shared-test.yml'
 
 jobs:
   specs:
@@ -13,14 +12,14 @@ jobs:
     name: Ruby specs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Run test-plan specs
+      - name: Run shared specs
         shell: bash
         env:
           # The specs install rspec through bundler/inline, which writes to Gem.dir.
           # On the runner that is the root-owned system gem home, so point it at a
           # writable path instead. GEM_PATH is left unset so preinstalled system gems
           # stay visible.
-          GEM_HOME: ${{ runner.temp }}/test-plan-gems
+          GEM_HOME: ${{ runner.temp }}/shared-gems
         # No setup-ruby: the action itself runs on the runner's preinstalled Ruby,
         # so the specs should exercise that same interpreter.
         run: |
@@ -29,4 +28,4 @@ jobs:
           ruby --version
           export PATH="${GEM_HOME}/bin:${PATH}"
 
-          ruby test-plans/spec/run_all.rb
+          ruby shared/spec/run_all.rb

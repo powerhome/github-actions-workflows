@@ -2,7 +2,7 @@
 
 The `test-plans` composite action generates structured, non-technical manual QA plans from pull-request merge-base diffs.
 
-It provides two profiles, both using Cursor's default model:
+It provides two profiles, both using the provider's default model (Cursor unless `provider: claude` is set):
 
 - `cobra-test-plan` for CoBRA applications, naming the Consent permissions each scenario needs.
 - `test-plan` for any other application, naming the account each scenario signs in as.
