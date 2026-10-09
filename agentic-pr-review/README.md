@@ -1,6 +1,6 @@
 # Agentic PR Review
 
-Runs a headless review agent against the **merge-base diff** for a pull request, then posts the result as a **GitHub PR review** (summary plus optional inline comments). The default provider is **Cursor** (`agent` CLI with `CURSOR_API_KEY`); **Claude** (`claude` CLI with `ANTHROPIC_API_KEY`) is also supported.
+Runs a headless review agent against the **merge-base diff** for a pull request, then posts the result as a **GitHub PR review** (summary plus optional inline comments). The default provider is **Cursor** (`agent` CLI with `CURSOR_API_KEY`). **Claude** (`claude` CLI with `ANTHROPIC_API_KEY`) is also supported, and the **NIP** provider runs the same Claude Code CLI against a model on the [Nitro Intelligence Platform](https://github.com/powerhome/nitro-intelligence) inference gateway.
 
 ## What it does
 
@@ -25,13 +25,13 @@ The provider adapters and comment client live in [`shared/`](../shared), beside 
 | --- | --- | --- |
 | `app-id` | yes | GitHub App ID used with `actions/create-github-app-token`. |
 | `private-key` | yes | GitHub App private key (PEM). |
-| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; Claude: becomes `ANTHROPIC_API_KEY`). |
+| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; Claude: becomes `ANTHROPIC_API_KEY`; NIP: an inference gateway key). |
 | `pull-request-number` | yes | PR number to review. |
-| `provider` | no | Review backend: `cursor` or `claude`. The action resolves it via `shared/providers/<provider>.sh` (default: `cursor`). |
+| `provider` | no | Review backend: `cursor`, `claude`, or `nip`. The action resolves it via `shared/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
-| `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default. |
-| `claude-settings` | no | Claude only. Settings that replace the bundled read-only [`shared/config/claude-settings.json`](../shared/config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
-| `claude-args` | no | Claude only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
+| `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default; for NIP, `zai-org/GLM-5.3`. |
+| `claude-settings` | no | Claude and NIP only. Settings that replace the bundled read-only [`shared/config/claude-settings.json`](../shared/config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
+| `claude-args` | no | Claude and NIP only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 
 ## Secrets and permissions
@@ -108,6 +108,25 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
     pull-request-number: ${{ github.event.pull_request.number }}
 ```
 
+## NIP provider
+
+`provider: nip` runs the Claude Code CLI against the NIP inference gateway (`https://inference.powerhome.ai`), using its Anthropic-format `/v1/messages` route. Every model slot Claude Code uses is pointed at `model`, which defaults to `zai-org/GLM-5.3`.
+
+- **Runner.** The gateway is only reachable from Power's internal network, so the job must run on a self-hosted runner. The runner also needs what the rest of the action uses: `ruby`, `gh`, `jq`, `git`, and `curl`.
+- **Key.** `provider-api-key` is a gateway key issued to an application's `ai-project` team (see [`powerhome/software`](https://github.com/powerhome/software) `modules/ai-project`), not a personal key.
+- **Spend logs.** Each request carries an `x-litellm-spend-logs-metadata` header with the repository, PR number and workflow run, so gateway spend can be traced back to a run. It sends no trace ID or tags, since the action records nothing in Cerebro; see the NIP [Client Observability Policy](https://github.com/powerhome/nitro-intelligence/blob/main/docs/client-observability-policy.md).
+- **Data handling.** The gateway keeps prompts in its spend logs, and can fail over to third-party providers under load, so the PR diff and any files the agent reads may be served outside Power's datacenters.
+
+```yaml
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
+  with:
+    app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
+    private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
+    provider: nip
+    provider-api-key: ${{ secrets.AGENTIC_REVIEW_NIP_API_KEY }}
+    pull-request-number: ${{ github.event.pull_request.number }}
+```
+
 ## Status comments
 
 The in-progress and failure comments are posted through `gh` by [`shared/bin/comment.rb`](../shared/bin/comment.rb) rather than a third-party action. The in-progress comment is identified across runs by a marker in its own body (`<!-- powerhome/github-actions-workflows "agentic-pr-review-status" -->`) and cleared by an `always()` step at the end of the run; a comment left by the action this replaced is recognised and adopted. The failure comment carries no marker, so a second failure adds a second comment.
@@ -163,7 +182,7 @@ The CLI runs in the PR's own checkout, so the reviewed repository must not be ab
 
 ### Overriding the Claude defaults
 
-A caller can widen what the agent may do, for example to let it read PR context with `gh`:
+These apply to the `claude` and `nip` providers. A caller can widen what the agent may do, for example to let it read PR context with `gh`:
 
 ```yaml
 - uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
@@ -185,3 +204,7 @@ A caller can widen what the agent may do, for example to let it read PR context 
 - `--setting-sources user` and `--strict-mcp-config` are passed regardless, so the reviewed repository still cannot configure the CLI. `claude-args` comes after them, though, so a caller that passes its own `--setting-sources` changes that.
 - Whatever the settings allow runs with the API key in the environment, against a prompt built from the PR, so allow only what the review needs.
 - The checkout's credential is removed from `.git/config` before the agent runs, so allowed Git commands that need authentication, such as `git fetch`, fail. Local ones — `git log`, `git diff`, `git show` — still work.
+
+### NIP (read-only)
+
+The NIP provider runs the same `claude` CLI, with the same settings and flags, as [Claude](#claude-read-only) above, so the same protections hold, with the gateway key in the environment in place of the Anthropic API key. `claude-settings` and `claude-args` apply to it too.

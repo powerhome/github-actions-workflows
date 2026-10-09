@@ -27,7 +27,7 @@ RSpec.describe "bin/run_provider.sh" do
   end
 
   it "has a script for every provider the actions document" do
-    %w[cursor claude].each do |provider|
+    %w[cursor claude nip].each do |provider|
       expect(File).to exist(File.join(SHARED_ROOT, "providers", "#{provider}.sh"))
     end
   end

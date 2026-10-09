@@ -12,7 +12,7 @@ shared/
   bin/comment.rb        upserts, creates, or deletes one pull-request comment
   bin/trusted_agent_instructions.rb
                         resets AGENTS.md, CLAUDE.md, .cursor/, .claude/ and the like to the merge base
-  providers/            cursor.sh and claude.sh, plus lib/agent.sh for what they share
+  providers/            cursor.sh, claude.sh and nip.sh, plus lib/agent.sh for what they share
   config/               read-only CLI permissions for each provider
   lib/                  the comment client and the instruction reset
   spec/
@@ -24,13 +24,14 @@ shared/
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `PROVIDER` | no | `cursor` (default) or `claude`. |
-| `PROVIDER_API_KEY` | yes | Exported as `CURSOR_API_KEY` or `ANTHROPIC_API_KEY`. |
+| `PROVIDER` | no | `cursor` (default), `claude`, or `nip`. |
+| `PROVIDER_API_KEY` | yes | Exported as `CURSOR_API_KEY` or `ANTHROPIC_API_KEY`; for `nip`, as `ANTHROPIC_AUTH_TOKEN`, the gateway bearer token. |
 | `AGENT_PROMPT_PATH` | yes | The complete prompt. Keep it outside the workspace, which is the pull request's head. |
 | `AGENT_OUTPUT_PATH` | yes | Where the agent's response is written. Anything already there, including a symlink, is removed first. |
-| `MODEL` | no | Passed as `--model`; empty leaves the choice to the CLI. |
-| `CLAUDE_SETTINGS` | no | Claude only: replaces `config/claude-settings.json`. |
-| `CLAUDE_ARGS` | no | Claude only: extra arguments, split with shell quoting. |
+| `MODEL` | no | Passed as `--model`; empty leaves the choice to the CLI, or for `nip` picks `zai-org/GLM-5.3`. |
+| `CLAUDE_SETTINGS` | no | Claude and NIP only: replaces `config/claude-settings.json`. |
+| `CLAUDE_ARGS` | no | Claude and NIP only: extra arguments, split with shell quoting. |
+| `PR_NUMBER` | no | NIP only: recorded in the gateway spend-log metadata. |
 
 Each provider installs its CLI when it is missing, downloading the installer before running it and logging its size and SHA-256. It runs the agent read-only in `GITHUB_WORKSPACE` and fails the step, with the start of the agent's output in the log, if the agent exits non-zero, writes nothing, or writes no JSON object. Parsing the response is left to the calling action.
 

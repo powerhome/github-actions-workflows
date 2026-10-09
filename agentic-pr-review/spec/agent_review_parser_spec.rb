@@ -76,6 +76,19 @@ RSpec.describe AgentReviewParser do
         expect(parsed.summary_body).to include("From file")
       end
     end
+
+    it "reads UTF-8 when the locale's encoding is US-ASCII" do
+      original = Encoding.default_external
+      Encoding.default_external = Encoding::US_ASCII
+      Tempfile.create(["review", ".json"], encoding: "UTF-8") do |f|
+        f.write({ "summary" => "Looks sound — no blockers" }.to_json)
+        f.flush
+        parsed = described_class.parse_file(f.path)
+        expect(parsed.summary_body).to end_with("Looks sound — no blockers")
+      end
+    ensure
+      Encoding.default_external = original
+    end
   end
 
   describe "JSON extraction" do
