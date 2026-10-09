@@ -27,9 +27,12 @@ module TestPlan
         packages = lockfile["packages"]
         # The version as well as the map: a schema npm has not written yet may keep the
         # name and change what the entries mean.
-        unless SUPPORTED_VERSIONS.include?(version) && packages.is_a?(Hash)
+        unless SUPPORTED_VERSIONS.include?(version)
           raise "package-lock.json lockfileVersion #{version.inspect} is not supported; " \
                 "only lockfileVersion 2 and 3 are"
+        end
+        unless packages.is_a?(Hash)
+          raise 'package-lock.json must include a "packages" object'
         end
 
         packages.filter_map do |key, entry|
