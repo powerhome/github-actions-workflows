@@ -27,7 +27,7 @@ inputs:
     required: false
     default: ""
   claude-settings:
-    description: Claude Code settings that replace the bundled read-only config/claude-settings.json, as a file path relative to the workspace or a JSON string (claude provider only)
+    description: Claude Code settings that replace the bundled read-only shared/config/claude-settings.json, as a file path relative to the workspace or a JSON string (claude provider only)
     required: false
     default: ""
   claude-args:
@@ -62,7 +62,7 @@ runs:
           :hourglass_flowing_sand: **Agentic PR Review** — in progress
 
           [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }})
-      run: ruby "${{ github.action_path }}/scripts/post_comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
 
     - name: Fetch PR metadata
       id: pr_gate
@@ -104,14 +104,61 @@ runs:
         head_ref: ${{ steps.pr_gate.outputs.head_sha }}
         deepen_length: ${{ inputs.deepen-length }}
 
+    - name: Remove Git credentials from the workspace
+      shell: bash
+      # actions/checkout persists the installation token in .git/config, and the provider
+      # then reads this workspace while that token is still valid -- so prompt-influenced
+      # output could read it and post it in the review. Every remaining Git operation is
+      # local, so the credential is dropped here rather than left for the provider to find.
+      run: |
+        set -euo pipefail
+
+        git -C "${GITHUB_WORKSPACE}" config --local --unset-all \
+          "http.https://github.com/.extraheader" || true
+
+        if git -C "${GITHUB_WORKSPACE}" config --local --get-regexp "^http\..*\.extraheader$" >/dev/null 2>&1; then
+          echo "An authorization header is still present in .git/config" >&2
+          exit 1
+        fi
+
     - name: Compute PR diff
       shell: bash
       env:
         BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
         HEAD_SHA: ${{ steps.pr_gate.outputs.head_sha }}
+        PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+      # The workspace is the pull-request head, so it may already hold a symlink named
+      # pr.diff, and a redirect follows one. rm -rf unlinks it instead.
       run: |
         set -euo pipefail
-        git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
+        rm -rf -- "${PR_DIFF_PATH}"
+        git diff "${BASE_SHA}...${HEAD_SHA}" > "${PR_DIFF_PATH}"
+
+    # AGENTS.md, CLAUDE.md, .cursor/ and .claude/ are read by the CLI as instructions, so a
+    # pull request editing them could tell its own reviewer what to say. The edits are still
+    # in pr.diff, where they get reviewed like any other change.
+    - name: Reset agent instructions to the merge base
+      shell: bash
+      env:
+        BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.pr_gate.outputs.head_sha }}
+      run: ruby "${{ github.action_path }}/../shared/bin/trusted_agent_instructions.rb"
+
+    # Written outside the workspace, which the pull request controls and the provider reads.
+    - name: Compose review prompt
+      shell: bash
+      env:
+        REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
+        REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
+        AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
+      run: |
+        set -euo pipefail
+
+        prompt="$(cat "${REVIEW_PROMPT_PATH}")"
+        if [[ -n "${REVIEW_ADDITIONAL_INSTRUCTIONS}" ]]; then
+          prompt+=$'\n\n## Additional instructions from the PR comment\n\n'"${REVIEW_ADDITIONAL_INSTRUCTIONS}"
+        fi
+        printf '%s' "${prompt}" > "${AGENT_PROMPT_PATH}"
 
     - name: Run review provider
       shell: bash
@@ -121,21 +168,9 @@ runs:
         MODEL: ${{ inputs.model }}
         CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}
-        REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
-        REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
-        REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
-      run: |
-        set -euo pipefail
-
-        provider="${PROVIDER:-cursor}"
-        provider_script="${{ github.action_path }}/scripts/providers/${provider}.sh"
-
-        if [[ ! -f "${provider_script}" ]]; then
-          echo "Unknown provider: ${provider} (expected script at ${provider_script})" >&2
-          exit 1
-        fi
-
-        exec bash "${provider_script}"
+        AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
+        AGENT_OUTPUT_PATH: ${{ github.workspace }}/review-agent.json
+      run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
 
     - name: Upload agent review JSON
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -166,7 +201,7 @@ runs:
           :x: **Agentic PR Review** — failed
 
           [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}) for details. If this looks like a transient error, re-run the job. For persistent failures, reach out in [Nitro Dev Discuss](https://nitro.powerhrg.com/connect/#rooms/138).
-      run: ruby "${{ github.action_path }}/scripts/post_comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
 
     # thollander's delete-on-completion ran in a post step, which a composite action does
     # not have. always() covers a failed or cancelled job, but a runner that dies outright
@@ -180,4 +215,4 @@ runs:
         PR_NUMBER: ${{ inputs.pull-request-number }}
         COMMENT_MODE: delete
         COMMENT_TAG: agentic-pr-review-status
-      run: ruby "${{ github.action_path }}/scripts/post_comment.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"

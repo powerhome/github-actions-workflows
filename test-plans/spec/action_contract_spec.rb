@@ -60,8 +60,14 @@ RSpec.describe "test-plans/action.yml" do
     expect(reset_index).to be < names.index("Run test-plan provider")
   end
 
-  it "takes no caller-supplied model" do
+  # A composite step inherits the caller's job env, so these are set rather than omitted.
+  it "pins the Cursor model and leaves Claude's settings to the provider" do
     provider_step = steps.find { |step| step.fetch("name") == "Run test-plan provider" }
-    expect(provider_step.fetch("env")).not_to have_key("MODEL")
+    env = provider_step.fetch("env")
+
+    expect(env.fetch("MODEL")).to include("inputs.provider == 'cursor'", "claude-sonnet-5-5-high")
+    %w[CLAUDE_SETTINGS CLAUDE_ARGS].each do |name|
+      expect(env.fetch(name)).to eq("")
+    end
   end
 end

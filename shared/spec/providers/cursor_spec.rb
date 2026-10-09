@@ -6,13 +6,8 @@ require "fileutils"
 require "open3"
 require "tmpdir"
 
-RSpec.describe "ai/providers/cursor.sh" do
-  # System directories only. Inheriting the caller's PATH meant a real Cursor CLI on this
-  # machine was found by `command -v agent`, skipping the install branch and running the
-  # actual agent against a scratch workspace.
-  SYSTEM_PATH = "/usr/bin:/bin:/usr/sbin:/sbin".freeze
-
-  let(:script) { File.join(ACTION_ROOT, "ai", "providers", "cursor.sh") }
+RSpec.describe "providers/cursor.sh" do
+  let(:script) { File.join(SHARED_ROOT, "providers", "cursor.sh") }
 
   def agent_script(args_path)
     <<~AGENT
@@ -29,7 +24,7 @@ RSpec.describe "ai/providers/cursor.sh" do
 
   # HOME is redirected at a scratch directory so the script's own
   # `export PATH="${HOME}/.local/bin:${PATH}"` cannot find a real Cursor CLI.
-  def run_provider(mode:)
+  def run_provider(mode:, env: {}, before: nil)
     Dir.mktmpdir do |root|
       workspace = File.join(root, "workspace")
       bin = File.join(root, "bin")
@@ -42,17 +37,18 @@ RSpec.describe "ai/providers/cursor.sh" do
 
       prompt = File.join(root, "prompt.md")
       File.write(prompt, "Generate a plan.")
-      json_path = File.join(root, "test-plan-agent.json")
+      json_path = File.join(root, "agent.json")
+      before&.call(workspace:, root:, json_path:)
 
-      env = {
+      env = env.merge(
         "PATH" => "#{bin}:#{SYSTEM_PATH}",
         "HOME" => home,
         "AGENT_MODE" => mode,
         "GITHUB_WORKSPACE" => workspace,
-        "TEST_PLAN_JSON_PATH" => json_path,
-        "TEST_PLAN_PROMPT_PATH" => prompt,
-        "PROVIDER_API_KEY" => "crsr_test",
-      }
+        "AGENT_OUTPUT_PATH" => json_path,
+        "AGENT_PROMPT_PATH" => prompt,
+        "PROVIDER_API_KEY" => "crsr_test"
+      )
       stdout, stderr, status = Open3.capture3(env, "bash", script, unsetenv_others: false)
 
       yield(
@@ -66,11 +62,11 @@ RSpec.describe "ai/providers/cursor.sh" do
     end
   end
 
-  it "writes the agent's response from a pinned model" do
+  it "writes the agent's response without pinning a model" do
     run_provider(mode: "ok") do |result|
       expect(result[:status]).to be_success
       expect(result[:output]).to include('"permissions"')
-      expect(result[:agent_args]).to include("--model", "claude-sonnet-5-5-high")
+      expect(result[:agent_args]).not_to include("--model")
       expect(result[:stderr]).to include("provider: cursor")
     end
   end
@@ -78,9 +74,47 @@ RSpec.describe "ai/providers/cursor.sh" do
   it "installs the read-only CLI permissions into the workspace" do
     run_provider(mode: "ok") do |result|
       config = File.join(result[:workspace], ".cursor", "cli-config.json")
-      # The web denials matter as much as the shell one: everything the plan says comes
-      # from evidence this action assembled.
+      # The web denials matter as much as the shell one: everything the agent says has to
+      # come from evidence the calling action assembled.
       expect(File.read(config)).to include("Read(**)", "Shell(*)", "WebFetch(*)", "WebSearch(*)")
+    end
+  end
+
+  it "passes a caller-chosen model through" do
+    run_provider(mode: "ok", env: { "MODEL" => "gpt-5" }) do |result|
+      expect(result[:status]).to be_success
+      expect(result[:agent_args].each_cons(2)).to include(["--model", "gpt-5"])
+    end
+  end
+
+  # The workspace is the pull request's head, so it can plant a symlink where the config
+  # is copied, which would otherwise carry the write outside the workspace.
+  it "replaces a symlinked .cursor rather than writing through it" do
+    outside = nil
+    plant = lambda do |workspace:, root:, **|
+      outside = File.join(root, "outside")
+      FileUtils.mkdir_p(outside)
+      File.symlink(outside, File.join(workspace, ".cursor"))
+    end
+
+    run_provider(mode: "ok", before: plant) do |result|
+      expect(result[:status]).to be_success
+      expect(File.symlink?(File.join(result[:workspace], ".cursor"))).to be(false)
+      expect(Dir.children(outside)).to be_empty
+    end
+  end
+
+  it "replaces a symlink at the output path rather than writing through it" do
+    target = nil
+    plant = lambda do |root:, json_path:, **|
+      target = File.join(root, "target")
+      File.write(target, "untouched")
+      File.symlink(target, json_path)
+    end
+
+    run_provider(mode: "ok", before: plant) do |result|
+      expect(result[:output]).to include("\"permissions\"")
+      expect(File.read(target)).to eq("untouched")
     end
   end
 
@@ -137,7 +171,7 @@ RSpec.describe "ai/providers/cursor.sh" do
 
       prompt = File.join(root, "prompt.md")
       File.write(prompt, "Generate a plan.")
-      json_path = File.join(root, "test-plan-agent.json")
+      json_path = File.join(root, "agent.json")
 
       env = {
         # No `agent` on PATH, so the script has to install one.
@@ -146,8 +180,8 @@ RSpec.describe "ai/providers/cursor.sh" do
         "TMPDIR" => temp,
         "AGENT_MODE" => "ok",
         "GITHUB_WORKSPACE" => workspace,
-        "TEST_PLAN_JSON_PATH" => json_path,
-        "TEST_PLAN_PROMPT_PATH" => prompt,
+        "AGENT_OUTPUT_PATH" => json_path,
+        "AGENT_PROMPT_PATH" => prompt,
         "PROVIDER_API_KEY" => "crsr_test",
       }
       _stdout, stderr, status = Open3.capture3(env, "bash", script, unsetenv_others: false)

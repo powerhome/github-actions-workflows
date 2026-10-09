@@ -3,6 +3,7 @@
 require_relative "spec_helper"
 require "test_plan/profile"
 
+require "pathname"
 require "yaml"
 
 # action.yml and its scripts spell the same names in two places -- environment variables,
@@ -33,8 +34,15 @@ module_function
     File.read(File.join(ACTION_ROOT, path), encoding: Encoding::UTF_8)
   end
 
+  # The action's own entry points, then the shared ones it reaches through ../shared.
   def entry_points
-    Dir[File.join(ACTION_ROOT, "bin", "*.rb")].sort.map { |path| "bin/#{File.basename(path)}" }
+    own = Dir[File.join(ACTION_ROOT, "bin", "*.rb")].sort.map { |path| "bin/#{File.basename(path)}" }
+    own + Dir[File.join(SHARED_ROOT, "bin", "*.rb")].sort.map { |path| relative(path) }
+  end
+
+  # Spelled from ACTION_ROOT, as action.yml reaches it: ../shared/bin/comment.rb.
+  def relative(path)
+    Pathname(File.expand_path(path)).relative_path_from(Pathname(ACTION_ROOT)).to_s
   end
 
   # Follows require_relative from an entry point, so each step is checked against what its
@@ -47,7 +55,8 @@ module_function
     seen << entry
     directory = File.dirname(File.join(ACTION_ROOT, entry))
     read(entry).scan(/require_relative "([^"]+)"/).flatten.each do |target|
-      resolved = File.expand_path(target, directory).delete_prefix("#{ACTION_ROOT}/")
+      # Relative rather than prefix-stripped, so code under ../shared resolves too.
+      resolved = relative(File.expand_path(target, directory))
       resolved = "#{resolved}.rb" unless resolved.end_with?(".rb")
       sources(resolved, seen) if File.exist?(File.join(ACTION_ROOT, resolved))
     end
@@ -68,8 +77,18 @@ module_function
     end.uniq
   end
 
-  def shell_env_reads(path)
-    script_env_reads(read(path))
+  # Only the reads a script cannot run without. A variable it also reads as ${X:-...} is an
+  # optional setting, guarded wherever it is used bare -- MODEL, for one, which this
+  # action sets only for Cursor.
+  def required_shell_env_reads(path)
+    body = read(path)
+    assigned = body.scan(/^\s*(?:export\s+)?([A-Z_][A-Z0-9_]*)=/).flatten
+    optional = body.scan(/\$\{([A-Z_][A-Z0-9_]*):-/).flatten
+    body.scan(/\$\{([A-Z_][A-Z0-9_]*)(?:\}|:\?)/).flatten.uniq - assigned - optional
+  end
+
+  def provider_scripts
+    Dir[File.join(SHARED_ROOT, "providers", "**", "*.sh")].sort.map { |path| relative(path) }
   end
 
   def script_env_reads(body)
@@ -94,7 +113,7 @@ module_function
   end
 
   def outputs_written_by(step)
-    entry = step.fetch("run", "")[%r{bin/\w+\.rb}]
+    entry = step.fetch("run", "")[%r{(?:\.\./shared/)?bin/\w+\.rb}]
     return [] unless entry
 
     sources(entry).flat_map do |source|
@@ -170,11 +189,17 @@ RSpec.describe "action.yml wiring" do
       expect(undeclared).to be_empty
     end
 
-    it "cursor.sh only reads variables the provider step provides" do
-      step = ActionWiring.step_running("ai/providers/${provider}.sh")
-      provided = step.fetch("env", {}).keys + ActionWiring::AMBIENT
+    it "gives every provider script the variables it requires" do
+      provided = ActionWiring.provider_step.fetch("env", {}).keys + ActionWiring::AMBIENT
+      scripts = ["../shared/bin/run_provider.sh"] + ActionWiring.provider_scripts
+      expect(scripts.length).to be > 2
 
-      expect(ActionWiring.shell_env_reads("ai/providers/cursor.sh") - provided).to be_empty
+      missing = scripts.each_with_object({}) do |script, index|
+        absent = ActionWiring.required_shell_env_reads(script) - provided
+        index[script] = absent if absent.any?
+      end
+
+      expect(missing).to be_empty
     end
   end
 
