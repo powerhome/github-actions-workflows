@@ -3,6 +3,7 @@
 require "json"
 require "set"
 require_relative "./bundler_change_detector"
+require_relative "./npm_lock_parser"
 require_relative "../playbook/packages"
 require_relative "./playbook_kit_usage"
 require_relative "./yarn_change_detector"
@@ -25,10 +26,18 @@ module TestPlan
         /^[ \t]*(?:[A-Za-z_]\w*\.)?add_(?:runtime_)?dependency\s*\(?\s*["']([^"'\n]+)["']/
 
       # Component Gemfile.lock files can resolve gems used only by that component's test
-      # suite, where a component yarn.lock resolves code the application serves -- so
-      # every changed yarn.lock is in scope, and a Playbook change always is.
+      # suite, where a component yarn.lock or package-lock.json resolves code the
+      # application serves -- so every changed package lockfile is in scope, and a
+      # Playbook change always is.
       ROOT_GEM_LOCKFILE = "Gemfile.lock"
       SCOPES = %w[umbrella all].freeze
+      # A lockfile shipped inside third-party code -- a vendored WordPress plugin, an
+      # installed package -- describes that code's own build, not this application.
+      VENDORED_SEGMENTS = %w[vendor node_modules].freeze
+      PACKAGE_LOCKFILES = {
+        %r{(?:\A|/)yarn\.lock\z} => YarnChangeDetector.new,
+        %r{(?:\A|/)package-lock\.json\z} => YarnChangeDetector.new(ecosystem: "npm", parser: NpmLockParser),
+      }.freeze
 
       attr_reader :problems, :out_of_scope
 
@@ -44,7 +53,7 @@ module TestPlan
       end
 
       def detect
-        changed = @snapshot.changed_dependency_files
+        changed = @snapshot.changed_dependency_files.reject { |path| vendored?(path) }
         direct_names, workspace_names = package_names
         ruby_direct_names = ruby_dependency_names
         changes = []
@@ -62,18 +71,20 @@ module TestPlan
           )
         end
 
-        changed.grep(%r{(?:\A|/)yarn\.lock\z}).each do |path|
-          changes.concat(
-            detecting(path) do
-              YarnChangeDetector.new.detect(
-                path:,
-                old_content: @snapshot.read(@snapshot.merge_base_sha, path),
-                new_content: @snapshot.read(@snapshot.head_sha, path),
-                direct_names:,
-                workspace_names:
-              )
-            end
-          )
+        PACKAGE_LOCKFILES.each do |pattern, detector|
+          changed.grep(pattern).each do |path|
+            changes.concat(
+              detecting(path) do
+                detector.detect(
+                  path:,
+                  old_content: @snapshot.read(@snapshot.merge_base_sha, path),
+                  new_content: @snapshot.read(@snapshot.head_sha, path),
+                  direct_names:,
+                  workspace_names:
+                )
+              end
+            )
+          end
         end
 
         scoped(deduplicate(changes))
@@ -87,11 +98,15 @@ module TestPlan
         return changes if @scope == "all"
 
         in_scope, out = changes.partition do |change|
-          change.ecosystem == "yarn" || change.lockfiles.include?(ROOT_GEM_LOCKFILE) ||
+          change.ecosystem != "bundler" || change.lockfiles.include?(ROOT_GEM_LOCKFILE) ||
             Playbook::PACKAGE_NAMES.include?(change.name)
         end
         @out_of_scope = out
         in_scope
+      end
+
+      def vendored?(path)
+        path.split("/")[0..-2].any? { |segment| VENDORED_SEGMENTS.include?(segment) }
       end
 
       # An unreadable lockfile costs evidence for that file only.
@@ -107,7 +122,9 @@ module TestPlan
         local = Set.new
         packages = []
 
-        @snapshot.paths_at(@snapshot.head_sha, "package.json").each do |path|
+        # A vendored package's manifest names its own dependencies, which would otherwise
+        # mark the application's as direct or, through a file: requirement, as local.
+        @snapshot.paths_at(@snapshot.head_sha, "package.json").reject { |path| vendored?(path) }.each do |path|
           content = @snapshot.read(@snapshot.head_sha, path)
           next unless content
 

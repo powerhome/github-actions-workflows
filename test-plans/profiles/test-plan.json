@@ -1,0 +1,12 @@
+{
+  "id": "test-plan",
+  "display_name": "Test Plan",
+  "access": "sign_in",
+  "prompt": "ai/prompts/test_plan.md",
+  "playbook_prompt": "ai/prompts/playbook_test_plan.md",
+  "dependency_prompt": "ai/prompts/dependency_test_plan.md",
+  "comment_tag": "test-plan",
+  "status_comment_tag": "test-plan-status",
+  "failure_comment_tag": "test-plan-failure",
+  "artifact_name": "test-plan-artifacts"
+}

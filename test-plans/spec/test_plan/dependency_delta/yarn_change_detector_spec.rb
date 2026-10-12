@@ -3,6 +3,7 @@
 require_relative "../../spec_helper"
 require "test_plan/dependency_delta"
 
+require "json"
 require "set"
 
 RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
@@ -50,6 +51,90 @@ RSpec.describe TestPlan::DependencyDelta::YarnChangeDetector do
     expect(changes.map(&:name)).to contain_exactly("direct-package", "transitive-package")
     expect(changes.find { |change| change.name == "direct-package" }.direct).to be(true)
     expect(changes.find { |change| change.name == "transitive-package" }.direct).to be(false)
+  end
+
+  describe "npm copies installed at more than one path" do
+    def npm_lock(installs)
+      JSON.generate(
+        "lockfileVersion" => 3,
+        "packages" => installs.transform_values { |version| { "version" => version } }
+      )
+    end
+
+    def npm_changes(old_installs, new_installs, direct_names: Set["widget"])
+      described_class.new(
+        ecosystem: "npm", parser: TestPlan::DependencyDelta::NpmLockParser
+      ).detect(
+        path: "package-lock.json",
+        old_content: npm_lock(old_installs),
+        new_content: npm_lock(new_installs),
+        direct_names:,
+        workspace_names: Set[]
+      ).map { |change| [change.name, change.old_version, change.new_version] }
+    end
+
+    # The new version was already installed, so the version sets alone show nothing new.
+    it "reports a direct upgrade to a version a nested copy already had" do
+      old_installs = { "node_modules/widget" => "1.0.0", "node_modules/gadget/node_modules/widget" => "2.0.0" }
+
+      expect(npm_changes(old_installs, { "node_modules/widget" => "2.0.0" }))
+        .to eq([["widget", "1.0.0", "2.0.0"]])
+      expect(npm_changes(old_installs, old_installs.merge("node_modules/widget" => "2.0.0")))
+        .to eq([["widget", "1.0.0", "2.0.0"]])
+    end
+
+    it "reports a transitive copy upgraded to a version installed elsewhere" do
+      old_installs = { "node_modules/a/node_modules/x" => "1.0.0", "node_modules/b/node_modules/x" => "2.0.0" }
+      new_installs = { "node_modules/a/node_modules/x" => "2.0.0", "node_modules/b/node_modules/x" => "2.0.0" }
+
+      expect(npm_changes(old_installs, new_installs, direct_names: Set[])).to eq([["x", "1.0.0", "2.0.0"]])
+    end
+
+    it "reports one change when the version sets and the install path agree" do
+      expect(npm_changes({ "node_modules/widget" => "1.0.0" }, { "node_modules/widget" => "1.1.0" }))
+        .to eq([["widget", "1.0.0", "1.1.0"]])
+    end
+
+    # Hoisting moved versions between paths; every version installed before still is.
+    it "ignores copies that only swapped places" do
+      old_installs = { "node_modules/x" => "2.0.0", "node_modules/a/node_modules/x" => "1.0.0" }
+      new_installs = { "node_modules/x" => "1.0.0", "node_modules/b/node_modules/x" => "2.0.0" }
+
+      expect(npm_changes(old_installs, new_installs, direct_names: Set[])).to be_empty
+    end
+  end
+
+  it "reads a package-lock.json under the npm ecosystem" do
+    lock = lambda do |version|
+      JSON.generate(
+        "lockfileVersion" => 3,
+        "packages" => {
+          "node_modules/swiper" => {
+            "version" => version,
+            "resolved" => "https://registry.npmjs.org/swiper/-/swiper-#{version}.tgz",
+            "integrity" => "sha512-#{version}",
+          },
+        }
+      )
+    end
+
+    changes = described_class.new(
+      ecosystem: "npm", parser: TestPlan::DependencyDelta::NpmLockParser
+    ).detect(
+      path: "package-lock.json",
+      old_content: lock.call("14.0.7"),
+      new_content: lock.call("14.1.0"),
+      direct_names: Set["swiper"],
+      workspace_names: Set[]
+    )
+
+    expect(changes.map(&:to_h)).to contain_exactly(
+      a_hash_including(
+        "ecosystem" => "npm", "name" => "swiper", "source" => "npm",
+        "old_version" => "14.0.7", "new_version" => "14.1.0", "direct" => true
+      )
+    )
+    expect(changes.first.new_integrity).to eq("sha512-14.1.0")
   end
 
   it "reports a dependency that moved from a Git locator to npm" do
