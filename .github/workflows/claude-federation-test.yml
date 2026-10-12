@@ -1,0 +1,42 @@
+name: claude-federation
+
+# Runs the shared Claude provider end to end with Anthropic workload identity federation,
+# so a federation rule can be checked without a real review or test plan. The IDs come from
+# repository variables, and the rule's subject has to accept this repository and the ref
+# the run is dispatched on.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  provider:
+    runs-on: ubuntu-latest
+    name: Claude provider with federation
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Write prompt
+        shell: bash
+        env:
+          AGENT_PROMPT_PATH: ${{ runner.temp }}/claude-federation-prompt.md
+        run: |
+          echo 'Reply with exactly this JSON and nothing else: {"ok": true}' > "${AGENT_PROMPT_PATH}"
+
+      - name: Run Claude provider
+        shell: bash
+        env:
+          PROVIDER: claude
+          PROVIDER_API_KEY: ""
+          ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+          ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+          ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+          ANTHROPIC_WORKSPACE_ID: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
+          AGENT_PROMPT_PATH: ${{ runner.temp }}/claude-federation-prompt.md
+          AGENT_OUTPUT_PATH: ${{ runner.temp }}/claude-federation-output.json
+        run: |
+          set -euo pipefail
+          bash shared/bin/run_provider.sh
+          cat "${AGENT_OUTPUT_PATH}"

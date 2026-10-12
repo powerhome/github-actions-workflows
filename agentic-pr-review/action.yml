@@ -13,8 +13,25 @@ inputs:
     required: false
     default: cursor
   provider-api-key:
-    description: API credential for the selected provider (Cursor maps this to CURSOR_API_KEY, Claude to ANTHROPIC_API_KEY)
-    required: true
+    description: API credential for the selected provider (Cursor maps this to CURSOR_API_KEY, Claude to ANTHROPIC_API_KEY); the claude provider can use the anthropic-* federation inputs instead
+    required: false
+    default: ""
+  anthropic-federation-rule-id:
+    description: Anthropic workload identity federation rule ID (fdrl_...). With anthropic-organization-id and anthropic-service-account-id, and in place of provider-api-key, the claude provider authenticates with the job's GitHub OIDC token, which needs the id-token write permission (claude provider only)
+    required: false
+    default: ""
+  anthropic-organization-id:
+    description: Anthropic organization ID for workload identity federation (claude provider only)
+    required: false
+    default: ""
+  anthropic-service-account-id:
+    description: Anthropic service account ID (svac_...) for workload identity federation (claude provider only)
+    required: false
+    default: ""
+  anthropic-workspace-id:
+    description: Anthropic workspace ID (wrkspc_...); required only when the federation rule spans more than one workspace (claude provider only)
+    required: false
+    default: ""
   pull-request-number:
     description: Pull request number to review
     required: true
@@ -165,6 +182,10 @@ runs:
       env:
         PROVIDER: ${{ inputs.provider }}
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
+        ANTHROPIC_FEDERATION_RULE_ID: ${{ inputs.anthropic-federation-rule-id }}
+        ANTHROPIC_ORGANIZATION_ID: ${{ inputs.anthropic-organization-id }}
+        ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ inputs.anthropic-service-account-id }}
+        ANTHROPIC_WORKSPACE_ID: ${{ inputs.anthropic-workspace-id }}
         MODEL: ${{ inputs.model }}
         CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}

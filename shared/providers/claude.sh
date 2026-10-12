@@ -24,12 +24,102 @@ if ! command -v claude >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -z "${PROVIDER_API_KEY:-}" ]]; then
-  echo "PROVIDER_API_KEY is required for the claude provider" >&2
+FEDERATION_VARS=(
+  ANTHROPIC_FEDERATION_RULE_ID
+  ANTHROPIC_ORGANIZATION_ID
+  ANTHROPIC_SERVICE_ACCOUNT_ID
+  ANTHROPIC_WORKSPACE_ID
+)
+
+# A composite step sets every variable its env names, so an input the caller left out
+# arrives empty. An empty credential variable still takes its place in the CLI's
+# precedence, so these are removed rather than passed on.
+for name in "${FEDERATION_VARS[@]}"; do
+  if [[ -z "${!name:-}" ]]; then
+    unset "${name}"
+  fi
+done
+
+if [[ -n "${PROVIDER_API_KEY:-}" && -n "${ANTHROPIC_FEDERATION_RULE_ID:-}" ]]; then
+  echo "The claude provider takes either PROVIDER_API_KEY or ANTHROPIC_FEDERATION_RULE_ID, not both" >&2
   exit 1
 fi
 
-export ANTHROPIC_API_KEY="${PROVIDER_API_KEY}"
+# GitHub's OIDC tokens last about five minutes and carry a jti, which Anthropic accepts
+# only once, while the access token minted from one lasts at most twice the JWT's
+# remaining life. The CLI exchanges again shortly before its token expires, reading
+# ANTHROPIC_IDENTITY_TOKEN_FILE each time, so the file has to hold a JWT that is both
+# unexpired and unused whenever it looks: one minted at most a minute ago is.
+IDENTITY_TOKEN_AUDIENCE="https%3A%2F%2Fapi.anthropic.com"
+IDENTITY_TOKEN_REFRESH_SECONDS=60
+
+# The request token is sent with --config on stdin rather than as an argument, so it is
+# not in this curl's command line for another process to read. The JWT is written beside
+# the file and renamed over it, so the CLI never reads a partial one.
+fetch_identity_token() {
+  local path="$1"
+
+  # shellcheck disable=SC2016 # the Ruby is in single quotes on purpose
+  printf 'header = "Authorization: bearer %s"\n' "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" |
+    curl -fsS --retry 3 --config - "${ACTIONS_ID_TOKEN_REQUEST_URL:-}&audience=${IDENTITY_TOKEN_AUDIENCE}" |
+    ruby -rjson -e 'print JSON.parse($stdin.read).fetch("value")' >"${path}.next" || return 1
+
+  [[ -s "${path}.next" ]] || return 1
+  mv -f "${path}.next" "${path}"
+}
+
+# sleep writes to /dev/null so an orphaned sleep, left behind when this loop is killed,
+# holds no pipe of the step's open.
+refresh_identity_token() {
+  local path="$1"
+
+  while sleep "${IDENTITY_TOKEN_REFRESH_SECONDS}" >/dev/null 2>&1; do
+    if ! fetch_identity_token "${path}"; then
+      echo "[agent] Could not refresh the GitHub OIDC token; the previous one stays in place" >&2
+    fi
+  done
+}
+
+if [[ -n "${PROVIDER_API_KEY:-}" ]]; then
+  unset "${FEDERATION_VARS[@]}" ANTHROPIC_IDENTITY_TOKEN ANTHROPIC_IDENTITY_TOKEN_FILE
+  export ANTHROPIC_API_KEY="${PROVIDER_API_KEY}"
+elif [[ -n "${ANTHROPIC_FEDERATION_RULE_ID:-}" ]]; then
+  for name in ANTHROPIC_ORGANIZATION_ID ANTHROPIC_SERVICE_ACCOUNT_ID; do
+    if [[ -z "${!name:-}" ]]; then
+      echo "${name} is required alongside ANTHROPIC_FEDERATION_RULE_ID" >&2
+      exit 1
+    fi
+  done
+
+  if [[ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" || -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]]; then
+    echo "Anthropic federation needs a GitHub OIDC token: give the calling job 'permissions: id-token: write'" >&2
+    exit 1
+  fi
+
+  # Each of these outranks federation in the CLI, and a caller's job env reaches this step.
+  unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_PROFILE ANTHROPIC_IDENTITY_TOKEN
+
+  identity_dir="$(mktemp -d "${TMPDIR:-/tmp}/claude-identity.XXXXXX")"
+  export ANTHROPIC_IDENTITY_TOKEN_FILE="${identity_dir}/github-oidc.jwt"
+
+  if ! fetch_identity_token "${ANTHROPIC_IDENTITY_TOKEN_FILE}"; then
+    rm -rf -- "${identity_dir}"
+    echo "Could not fetch a GitHub OIDC token for Anthropic federation" >&2
+    exit 1
+  fi
+
+  refresh_identity_token "${ANTHROPIC_IDENTITY_TOKEN_FILE}" &
+  identity_refresher=$!
+  # Out of the job table, so bash does not report it as Terminated when the trap kills it.
+  disown "${identity_refresher}"
+  # shellcheck disable=SC2064 # expanded now, while both are in scope
+  trap "kill '${identity_refresher}' 2>/dev/null || true; rm -rf -- '${identity_dir}'" EXIT
+
+  echo "[agent] claude auth: Anthropic workload identity federation" >&2
+else
+  echo "The claude provider needs PROVIDER_API_KEY or ANTHROPIC_FEDERATION_RULE_ID" >&2
+  exit 1
+fi
 
 if [[ ! -f "${AGENT_PROMPT_PATH}" ]]; then
   echo "Agent prompt not found: ${AGENT_PROMPT_PATH}" >&2
@@ -75,15 +165,17 @@ clear_agent_output
 # servers from loading. claude-settings does not touch those two flags. stdin is /dev/null
 # because --print otherwise waits for piped input before it starts. The empty-array
 # expansions are spelled out because bash before 4.4 treats "${ARRAY[@]}" on an empty array
-# as unbound under set -u.
+# as unbound under set -u. The CLI gets no ACTIONS_ID_TOKEN_REQUEST_* variables, which
+# would let it mint GitHub OIDC tokens for any audience; the refresher above keeps them.
 status=0
-claude --print --output-format text \
-  --setting-sources user \
-  --settings "${SETTINGS_PATH}" \
-  --permission-mode dontAsk \
-  --strict-mcp-config \
-  ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} \
-  ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
-  "${PROMPT}" </dev/null >"${AGENT_OUTPUT_PATH}" || status=$?
+env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+  claude --print --output-format text \
+    --setting-sources user \
+    --settings "${SETTINGS_PATH}" \
+    --permission-mode dontAsk \
+    --strict-mcp-config \
+    ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} \
+    ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
+    "${PROMPT}" </dev/null >"${AGENT_OUTPUT_PATH}" || status=$?
 
 check_agent_output claude "${status}"
