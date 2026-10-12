@@ -35,6 +35,10 @@ inputs:
     description: Anthropic workspace ID (wrkspc_...); required only when the federation rule spans more than one workspace (claude provider only)
     required: false
     default: ""
+  model:
+    description: Model passed to the provider CLI's --model flag, e.g. sonnet for Claude. Empty pins claude-sonnet-5-5-high on Cursor and uses the Claude CLI's default on Claude
+    required: false
+    default: ""
   pull-request-number:
     description: Pull request number to analyze
     required: true
@@ -274,11 +278,11 @@ runs:
         ANTHROPIC_WORKSPACE_ID: ${{ inputs.anthropic-workspace-id }}
         AGENT_OUTPUT_PATH: ${{ github.workspace }}/test-plan-agent.json
         AGENT_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
-        # Pinned rather than left to the provider's default, which timed out on the
-        # cobra-test-plan profile. Set here, not inherited: a composite step takes the
-        # caller's job env, so a job-level MODEL would otherwise pick the model. The slug is
-        # Cursor's, so Claude keeps its own default.
-        MODEL: ${{ inputs.provider == 'cursor' && 'claude-sonnet-5-5-high' || '' }}
+        # The caller's model, or else Cursor is pinned rather than left to its default,
+        # which timed out on the cobra-test-plan profile. Set here, not inherited: a
+        # composite step takes the caller's job env, so a job-level MODEL would otherwise
+        # pick the model. The pinned slug is Cursor's, so Claude keeps its own default.
+        MODEL: ${{ inputs.model || (inputs.provider == 'cursor' && 'claude-sonnet-5-5-high' || '') }}
         CLAUDE_SETTINGS: ""
         CLAUDE_ARGS: ""
       run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
