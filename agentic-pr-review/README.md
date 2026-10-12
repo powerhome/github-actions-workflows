@@ -183,7 +183,7 @@ Neither CLI documents a version-pinned installer for CI, so each run installs th
 
 ### Claude (read-only)
 
-[`shared/config/claude-settings.json`](../shared/config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, `WebSearch`, and reading `/proc` (`Read(//proc/**)`), where the process environment and its credentials are. The CLI also runs with:
+[`shared/config/claude-settings.json`](../shared/config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, `WebSearch`, and reading `/proc` (`Read(//proc/**)`), where the process environment and its credentials are. The `/proc` deny, and with federation a deny on the directory holding the OIDC token, are also passed with `--disallowed-tools`, so they hold under replacement settings too. The CLI also runs with:
 
 - `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt.
 - `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
@@ -212,5 +212,5 @@ A caller can widen what the agent may do, for example to let it read PR context 
 
 - `claude-settings` **replaces** the bundled settings rather than adding to them, and the bundled file denies `Bash` outright. A deny rule wins over any allow, so `--allowed-tools "Bash(...)"` in `claude-args` has no effect unless `claude-settings` also drops that deny.
 - `--setting-sources user` and `--strict-mcp-config` are passed regardless, so the reviewed repository still cannot configure the CLI. `claude-args` comes after them, though, so a caller that passes its own `--setting-sources` changes that.
-- Whatever the settings allow runs with the API key, or with federation the GitHub OIDC request token, in the environment, against a prompt built from the PR, so allow only what the review needs. Keep the bundled `Read(//proc/**)` deny in replacement settings.
+- Whatever the settings allow runs with the API key, or with federation the GitHub OIDC request token, in the environment, against a prompt built from the PR, so allow only what the review needs.
 - The checkout's credential is removed from `.git/config` before the agent runs, so allowed Git commands that need authentication, such as `git fetch`, fail. Local ones — `git log`, `git diff`, `git show` — still work.

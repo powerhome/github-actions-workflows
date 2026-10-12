@@ -80,6 +80,12 @@ refresh_identity_token() {
   done
 }
 
+# Read, Glob and Grep are allowed everywhere else, so a prompt-injected agent could find a
+# credential on disk and put it in its output. These denies go on the command line rather
+# than in config/claude-settings.json, which a caller's claude-settings replaces. /proc
+# holds this script's environment, with the API key or the OIDC request token.
+DENIED_READS=("Read(//proc/**)")
+
 if [[ -n "${PROVIDER_API_KEY:-}" ]]; then
   unset "${FEDERATION_VARS[@]}" ANTHROPIC_IDENTITY_TOKEN ANTHROPIC_IDENTITY_TOKEN_FILE
   export ANTHROPIC_API_KEY="${PROVIDER_API_KEY}"
@@ -100,7 +106,14 @@ elif [[ -n "${ANTHROPIC_FEDERATION_RULE_ID:-}" ]]; then
   unset ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_PROFILE ANTHROPIC_IDENTITY_TOKEN
 
   identity_dir="$(mktemp -d "${TMPDIR:-/tmp}/claude-identity.XXXXXX")"
+  # Canonical, so the deny below names the path the CLI resolves a read to: TMPDIR can
+  # end in a slash or run through a symlink.
+  identity_dir="$(cd "${identity_dir}" && pwd -P)"
   export ANTHROPIC_IDENTITY_TOKEN_FILE="${identity_dir}/github-oidc.jwt"
+  # The file always holds a JWT that has not been exchanged yet, good for anyone who
+  # reads it for the next few minutes. identity_dir starts with /, so one more makes the
+  # rule's // absolute-path prefix.
+  DENIED_READS+=("Read(/${identity_dir}/**)")
 
   if ! fetch_identity_token "${ANTHROPIC_IDENTITY_TOKEN_FILE}"; then
     rm -rf -- "${identity_dir}"
@@ -165,11 +178,13 @@ clear_agent_output
 # servers from loading. claude-settings does not touch those two flags. stdin is /dev/null
 # because --print otherwise waits for piped input before it starts. The empty-array
 # expansions are spelled out because bash before 4.4 treats "${ARRAY[@]}" on an empty array
-# as unbound under set -u. The CLI gets no ACTIONS_ID_TOKEN_REQUEST_* variables, which
+# as unbound under set -u. --disallowed-tools takes every argument up to the next flag,
+# so it is followed by one. The CLI gets no ACTIONS_ID_TOKEN_REQUEST_* variables, which
 # would let it mint GitHub OIDC tokens for any audience; the refresher above keeps them.
 status=0
 env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
   claude --print --output-format text \
+    --disallowed-tools "${DENIED_READS[@]}" \
     --setting-sources user \
     --settings "${SETTINGS_PATH}" \
     --permission-mode dontAsk \

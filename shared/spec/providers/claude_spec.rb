@@ -121,6 +121,8 @@ RSpec.describe "providers/claude.sh" do
         ["--permission-mode", "dontAsk"]
       )
       expect(args).to include("--strict-mcp-config")
+      # On the command line, so a caller's claude-settings cannot drop it.
+      expect(args.each_cons(2)).to include(["--disallowed-tools", "Read(//proc/**)"])
       expect(args).not_to include("--model")
       expect(args.last).to eq("Review this.")
     end
@@ -218,6 +220,12 @@ RSpec.describe "providers/claude.sh" do
           "ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_TOKEN"
         )
         expect(result[:jwt]).to eq("github-jwt")
+
+        # The agent can read anywhere else, and the file always holds an unused JWT.
+        identity_dir = File.dirname(env.fetch("ANTHROPIC_IDENTITY_TOKEN_FILE"))
+        after_flag = result[:args].drop(result[:args].index("--disallowed-tools") + 1)
+        denied = after_flag.take_while { |arg| !arg.start_with?("--") }
+        expect(denied).to contain_exactly("Read(//proc/**)", "Read(/#{identity_dir}/**)")
         # The token's directory goes with the run.
         expect(File.exist?(env.fetch("ANTHROPIC_IDENTITY_TOKEN_FILE"))).to be(false)
       end
