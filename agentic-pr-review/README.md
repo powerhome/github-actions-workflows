@@ -25,18 +25,23 @@ The provider adapters and comment client live in [`shared/`](../shared), beside 
 | --- | --- | --- |
 | `app-id` | yes | GitHub App ID used with `actions/create-github-app-token`. |
 | `private-key` | yes | GitHub App private key (PEM). |
-| `provider-api-key` | yes | Provider API key (Cursor: becomes `CURSOR_API_KEY`; Claude: becomes `ANTHROPIC_API_KEY`). |
+| `provider-api-key` | yes, except for Claude with federation | Provider API key (Cursor: becomes `CURSOR_API_KEY`; Claude: becomes `ANTHROPIC_API_KEY`). |
 | `pull-request-number` | yes | PR number to review. |
 | `provider` | no | Review backend: `cursor` or `claude`. The action resolves it via `shared/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
 | `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default. |
 | `claude-settings` | no | Claude only. Settings that replace the bundled read-only [`shared/config/claude-settings.json`](../shared/config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
+| `anthropic-federation-rule-id` | no | Claude only. Authenticate with [workload identity federation](#review-a-pr-with-claude-using-workload-identity-federation) instead of `provider-api-key`. |
+| `anthropic-organization-id` | with a rule | Claude only. Anthropic organization ID. |
+| `anthropic-service-account-id` | with a rule | Claude only. The service account the rule authenticates as (`svac_...`). |
+| `anthropic-workspace-id` | no | Claude only. Needed when the rule spans more than one workspace (`wrkspc_...`). |
 | `claude-args` | no | Claude only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 
 ## Secrets and permissions
 
-- Store **`app-id`**, **`private-key`**, and **`provider-api-key`** as repository (or org) secrets; do not commit them.
+- Store **`app-id`**, **`private-key`**, and **`provider-api-key`** as repository (or org) secrets; do not commit them. The federation IDs are not secrets, so repository or org variables are fine.
+- With federation, the calling job also needs **`id-token: write`**.
 - The calling workflow needs permission to **read** contents and **write** pull requests (for posting the review). The GitHub App installation must be allowed to clone the repo and create reviews on the target repository.
 
 ## Example Usage
@@ -80,6 +85,30 @@ Set `provider: claude` and pass an Anthropic API key. `model` is optional; leave
     provider: claude
     provider-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
     model: claude-opus-5-5
+    pull-request-number: ${{ github.event.pull_request.number }}
+```
+
+### Review a PR with Claude using workload identity federation
+
+Pass the federation inputs instead of `provider-api-key`, and grant the job `id-token: write`. The action authenticates with the job's GitHub OIDC token, so no Anthropic API key is stored in GitHub. The federation rule must trust issuer `https://token.actions.githubusercontent.com` with audience `https://api.anthropic.com`, and its subject must match this workflow's repository and event. See [the shared provider notes](../shared/README.md#claude-workload-identity-federation).
+
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+# ...
+
+- uses: powerhome/github-actions-workflows/agentic-pr-review@<pinned-commit-sha>
+  with:
+    app-id: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_ID }}
+    private-key: ${{ secrets.AGENTIC_REVIEW_GITHUB_APP_PRIVATE_KEY }}
+    provider: claude
+    anthropic-federation-rule-id: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+    anthropic-organization-id: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+    anthropic-service-account-id: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+    anthropic-workspace-id: ${{ vars.ANTHROPIC_WORKSPACE_ID }}
     pull-request-number: ${{ github.event.pull_request.number }}
 ```
 
@@ -154,7 +183,7 @@ Neither CLI documents a version-pinned installer for CI, so each run installs th
 
 ### Claude (read-only)
 
-[`shared/config/claude-settings.json`](../shared/config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, and `WebSearch`. The CLI also runs with:
+[`shared/config/claude-settings.json`](../shared/config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, `WebSearch`, and reading `/proc` (`Read(//proc/**)`), where the process environment and its credentials are. The `/proc` deny, and with federation a deny on the directory holding the OIDC token, are also passed with `--disallowed-tools`, so they hold under replacement settings too. The CLI also runs with:
 
 - `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt.
 - `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
@@ -183,5 +212,5 @@ A caller can widen what the agent may do, for example to let it read PR context 
 
 - `claude-settings` **replaces** the bundled settings rather than adding to them, and the bundled file denies `Bash` outright. A deny rule wins over any allow, so `--allowed-tools "Bash(...)"` in `claude-args` has no effect unless `claude-settings` also drops that deny.
 - `--setting-sources user` and `--strict-mcp-config` are passed regardless, so the reviewed repository still cannot configure the CLI. `claude-args` comes after them, though, so a caller that passes its own `--setting-sources` changes that.
-- Whatever the settings allow runs with the API key in the environment, against a prompt built from the PR, so allow only what the review needs.
+- Whatever the settings allow runs with the API key, or with federation the GitHub OIDC request token, in the environment, against a prompt built from the PR, so allow only what the review needs.
 - The checkout's credential is removed from `.git/config` before the agent runs, so allowed Git commands that need authentication, such as `git fetch`, fail. Local ones — `git log`, `git diff`, `git show` — still work.
