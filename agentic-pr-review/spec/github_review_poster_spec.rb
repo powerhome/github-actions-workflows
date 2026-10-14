@@ -87,6 +87,29 @@ RSpec.describe GitHubReviewPoster do
     end
   end
 
+  describe "#reply_to_thread" do
+    it "replies under the thread's first comment" do
+      response = build_response(Net::HTTPCreated, code: 201, message: "Created", body: { id: 3 }.to_json)
+      request_for = stub_post(response)
+
+      expect(poster.reply_to_thread(comment_id: 99, body: "Fixed")).to eq(true)
+
+      request = request_for.call
+      expect(request.path).to eq("/repos/acme/widgets/pulls/42/comments/99/replies")
+      expect(JSON.parse(request.body)).to eq("body" => "Fixed")
+    end
+
+    it "returns false and logs the API error" do
+      response = build_response(Net::HTTPNotFound, code: 404, message: "Not Found",
+                                                   body: { message: "Not Found" }.to_json)
+      stub_post(response)
+
+      expect do
+        expect(poster.reply_to_thread(comment_id: 99, body: "Fixed")).to eq(false)
+      end.to output(/Reply to comment 99 failed: HTTP 404: Not Found/).to_stderr
+    end
+  end
+
   describe "#post_single_comment" do
     it "defaults side to RIGHT and posts to the comments endpoint" do
       response = build_response(

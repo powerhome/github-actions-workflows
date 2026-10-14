@@ -6,20 +6,53 @@ require "json"
 class AgentReviewParser
   MAX_INLINE_COMMENTS = 50
   # Bump when changing review posting behavior or summary format.
-  REVIEW_POSTER_VERSION = "1.0.0"
+  REVIEW_POSTER_VERSION = "1.1.0"
+  # Matches every version's marker. head= and seen= arrived in 1.1.0, so an older one has
+  # neither. seen= is when the run read the pull request's comments, which comes before the
+  # review is posted: a comment left while the agent ran is still new to the next review.
+  MARKER_PATTERN = /<!-- agentic-pr-review (\S+?)(?: head=([0-9a-f]{40}))?(?: seen=(\d{4}-\d\d-\d\dT[\d:]{8}Z))? -->/
 
-  def self.parse_file(path)
-    new(File.read(path))
+  # Hidden in the bot's "Addressed in <sha>" reply, so later reviews know the finding was fixed.
+  # Hyphenated, so MARKER_PATTERN never takes it for a review summary.
+  FIXED_NOTE_MARKER = "<!-- agentic-pr-review-fixed -->"
+
+  def self.marker(head_sha, seen_at = nil)
+    head = head_sha.to_s.empty? ? "" : " head=#{head_sha}"
+    seen = seen_at.to_s.empty? ? "" : " seen=#{seen_at}"
+    "<!-- agentic-pr-review #{REVIEW_POSTER_VERSION}#{head}#{seen} -->"
   end
 
-  def initialize(json_string)
+  def self.marker?(body)
+    MARKER_PATTERN.match?(body.to_s)
+  end
+
+  # The head SHA a review summary records, or nil when it has none.
+  def self.reviewed_sha(body)
+    MARKER_PATTERN.match(body.to_s)&.[](2)
+  end
+
+  # When the run that posted a review summary read the pull request, or nil when it has none.
+  def self.seen_at(body)
+    MARKER_PATTERN.match(body.to_s)&.[](3)
+  end
+
+  def self.parse_file(path, head_sha: nil, seen_at: nil)
+    new(File.read(path), head_sha:, seen_at:)
+  end
+
+  def initialize(json_string, head_sha: nil, seen_at: nil)
+    @head_sha = head_sha
+    @seen_at = seen_at
     @payload = JSON.parse(extract_json(json_string))
     validate_root!
     @summary_body = build_summary_body
     @inline_comments = build_inline_comments
+    @fixed_findings = build_fixed_findings
   end
 
-  attr_reader :summary_body, :inline_comments
+  # An inline comment may carry "regression_of", the key of an earlier finding. ReviewTriage
+  # turns it into a link and strips it before the comment is posted.
+  attr_reader :summary_body, :inline_comments, :fixed_findings
 
 private
 
@@ -61,7 +94,7 @@ private
 
   def build_summary_body
     summary = @payload["summary"].to_s.strip
-    "<!-- agentic-pr-review #{REVIEW_POSTER_VERSION} -->\n\n#{summary}"
+    "#{self.class.marker(@head_sha, @seen_at)}\n\n#{summary}"
   end
 
   def build_inline_comments
@@ -90,12 +123,22 @@ private
     line_i = Integer(line, exception: false)
     return nil if line_i.nil? || line_i < 1
 
-    {
+    comment = {
       "path" => path,
       "body" => format_comment_body(entry["severity"], body),
       "line" => line_i,
       "side" => "RIGHT",
     }
+    regression_of = entry["regression_of"].to_s.strip
+    comment["regression_of"] = regression_of unless regression_of.empty?
+    comment
+  end
+
+  def build_fixed_findings
+    raw = @payload["fixed_findings"]
+    return [] unless raw.is_a?(Array)
+
+    raw.map { |key| key.to_s.strip }.reject(&:empty?).uniq
   end
 
   def limit_inline_comments(comments)
