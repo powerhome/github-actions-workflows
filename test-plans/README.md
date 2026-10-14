@@ -6,8 +6,8 @@ Generates structured, non-technical manual QA plans from pull-request merge-base
 
 | Profile | Model | Intended use |
 | --- | --- | --- |
-| `cobra-test-plan` | `model` input, else Claude Sonnet 5.5, high effort (Cursor); Claude CLI default model, `xhigh` effort (Claude) | Standard CoBRA/Consent test plan. |
-| `test-plan` | `model` input, else Claude Sonnet 5.5, high effort (Cursor); Claude CLI default model, `xhigh` effort (Claude) | General test plan for any other application. |
+| `cobra-test-plan` | `model` input, else Claude Sonnet 5.5, high effort (Cursor); Claude CLI default model, `max` effort (Claude) | Standard CoBRA/Consent test plan. |
+| `test-plan` | `model` input, else Claude Sonnet 5.5, high effort (Cursor); Claude CLI default model, `max` effort (Claude) | General test plan for any other application. |
 
 The two profiles share the dependency and Playbook evidence and plan shapes. They differ in what the standard plan assumes about the application. `cobra-test-plan` resolves Consent permissions to the Subject and Action labels the UI shows and composes component routes with their umbrella mounts. `test-plan` assumes neither: it has no Permissions / Roles section, and each scenario instead names the account to **sign in as** — a public visitor, or a role the application defines — or says it could not be identified. A profile chooses this with `access` (`consent`, the default, or `sign_in`).
 
@@ -28,13 +28,13 @@ Each scenario names the audience it belongs to when an application serves more t
 | `pull-request-number` | yes | Pull request to analyze. |
 | `provider` | no | `cursor` or `claude`, resolved to [`shared/providers/<provider>.sh`](../shared/providers); default `cursor`. |
 | `model` | no | Model passed to the provider CLI's `--model` flag, e.g. `sonnet` for Claude. Empty uses the defaults below. |
-| `effort` | no | Claude only. Effort level passed as `--effort`: `low`, `medium`, `high`, `xhigh`, or `max`. Defaults to `xhigh`; empty uses the CLI's default. |
+| `effort` | no | Claude only. Effort level passed as `--effort`: `low`, `medium`, `high`, `xhigh`, or `max`. Defaults to `max`; empty uses the CLI's default. |
 | `claude-args` | no | Claude only. Extra arguments for the `claude` CLI, split with shell quoting, e.g. `--max-turns 30`, as with `agentic-pr-review`. Empty adds none. |
 | `deepen-length` | no | Merge-base fetch increment; default `30`. |
 
 Without `model`, the Cursor provider is pinned to `claude-sonnet-5-5-high` and `provider: claude` uses the Claude CLI's default. A `model` slug is the provider CLI's own, so it has to match `provider`. The action deliberately has no additional-prompt input.
 
-With `provider: claude`, `effort` defaults to `xhigh`, matching `agentic-pr-review`. Set `effort` to another level or to an empty string to use the CLI's default. Cursor uses the effort encoded in its model slug.
+With `provider: claude`, `effort` defaults to `max`, above the `xhigh` default of `agentic-pr-review`. Set `effort` to another level or to an empty string to use the CLI's default. Cursor uses the effort encoded in its model slug.
 
 ## Mergeability Gate
 
