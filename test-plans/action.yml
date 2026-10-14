@@ -42,7 +42,7 @@ inputs:
   effort:
     description: Claude effort level (low, medium, high, xhigh, max), passed to the claude CLI as --effort. Empty uses the CLI's default (claude provider only)
     required: false
-    default: xhigh
+    default: max
   claude-args:
     description: Extra arguments for the claude CLI, parsed with shell quoting, e.g. --max-turns 30 (claude provider only)
     required: false

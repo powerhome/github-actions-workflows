@@ -2,7 +2,7 @@
 
 The `test-plans` composite action generates structured, non-technical manual QA plans from pull-request merge-base diffs.
 
-It provides two profiles. Both use the caller's `model` input when it is set, and otherwise Claude Sonnet 5.5 at high effort on Cursor (the default provider), or the Claude CLI's default model when `provider: claude` is set. Claude effort defaults to `xhigh`, matching `agentic-pr-review`, and can be changed with the `effort` input:
+It provides two profiles. Both use the caller's `model` input when it is set, and otherwise Claude Sonnet 5.5 at high effort on Cursor (the default provider), or the Claude CLI's default model when `provider: claude` is set. Claude effort defaults to `max`, above the `xhigh` default of `agentic-pr-review`, and can be changed with the `effort` input:
 
 - `cobra-test-plan` for CoBRA applications, naming the Consent permissions each scenario needs.
 - `test-plan` for any other application, naming the account each scenario signs in as.
