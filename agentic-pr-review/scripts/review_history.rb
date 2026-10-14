@@ -69,7 +69,7 @@ class ReviewHistory
   end
 
   # The threads the bot opened, oldest first, each as:
-  #   "status"  -- "fixed" once the bot has replied that it looks addressed, whether or not
+  #   "status"  -- "fixed" once the bot has replied that it was addressed, whether or not
   #                someone then resolved it; otherwise "open", or "dismissed" when someone
   #                resolved it without a fix, which may mean "won't fix"
   #   "line"    -- the thread's line on the current head, or nil once that code has changed

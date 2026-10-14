@@ -12,7 +12,7 @@ class AgentReviewParser
   # review is posted: a comment left while the agent ran is still new to the next review.
   MARKER_PATTERN = /<!-- agentic-pr-review (\S+?)(?: head=([0-9a-f]{40}))?(?: seen=(\d{4}-\d\d-\d\dT[\d:]{8}Z))? -->/
 
-  # Hidden in the bot's "looks addressed" reply, so later reviews know the finding was fixed.
+  # Hidden in the bot's "Addressed in <sha>" reply, so later reviews know the finding was fixed.
   # Hyphenated, so MARKER_PATTERN never takes it for a review summary.
   FIXED_NOTE_MARKER = "<!-- agentic-pr-review-fixed -->"
 

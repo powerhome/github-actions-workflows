@@ -42,7 +42,7 @@ def scope_note(context, fixed_count)
   if context["mode"] == "incremental"
     notes << "Reviewed the commits since `#{context['last_reviewed_sha'][0, 7]}`."
   end
-  notes << "#{fixed_count} earlier finding(s) look fixed." if fixed_count.positive?
+  notes << "#{fixed_count} earlier finding(s) addressed." if fixed_count.positive?
   notes.empty? ? "" : "\n\n---\n\n_#{notes.join(' ')}_"
 end
 
@@ -113,7 +113,7 @@ exit 1 unless post_review(poster, summary_body, triage.comments)
 triage.newly_fixed.each do |finding|
   replied = poster.reply_to_thread(
     comment_id: finding["comment_id"],
-    body: "#{AgentReviewParser::FIXED_NOTE_MARKER}\nThis looks addressed as of #{commit_sha}."
+    body: "#{AgentReviewParser::FIXED_NOTE_MARKER}\nAddressed in #{commit_sha}."
   )
   warn "[process_review] Marked #{finding['key']} fixed (#{finding['path']})" if replied
 end

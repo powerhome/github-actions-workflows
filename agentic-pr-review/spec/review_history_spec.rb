@@ -93,7 +93,7 @@ RSpec.describe ReviewHistory do
 
     let(:gql_bot) { { "__typename" => "Bot", "login" => "nitro-review" } }
     let(:gql_human) { { "__typename" => "User", "login" => "octocat" } }
-    let(:fixed_note) { "#{AgentReviewParser::FIXED_NOTE_MARKER}\nThis looks addressed as of abc." }
+    let(:fixed_note) { "#{AgentReviewParser::FIXED_NOTE_MARKER}\nAddressed in abc." }
 
     it "does not take a person's reply quoting the fixed note for the bot's" do
       allow(api).to receive(:graphql).and_return(page([thread("T1", author: gql_bot,
@@ -131,7 +131,7 @@ RSpec.describe ReviewHistory do
 
     it "keeps people's replies to the bot's threads, but not the bot's own" do
       stub_threads(
-        thread("T1", author: gql_bot, replies: [[gql_human, "Intentional"], [gql_bot, "Looks addressed"], [nil, "Old"]])
+        thread("T1", author: gql_bot, replies: [[gql_human, "Intentional"], [gql_bot, "Addressed in abc"], [nil, "Old"]])
       )
 
       expect(history.bot_threads.first["replies"]).to eq(
