@@ -8,8 +8,8 @@ require_relative "diff_lines"
 require_relative "github_review_poster"
 require_relative "review_triage"
 
-def load_review(path, head_sha)
-  AgentReviewParser.parse_file(path, head_sha:)
+def load_review(path, head_sha, seen_at)
+  AgentReviewParser.parse_file(path, head_sha:, seen_at:)
 rescue JSON::ParserError => e
   warn "Failed to parse review JSON: #{e.message}"
   exit 1
@@ -87,8 +87,8 @@ env_var_errors << "COMMIT_SHA" if commit_sha.empty?
 
 raise "Missing required env vars: #{env_var_errors.join(', ')}" unless env_var_errors.empty?
 
-parsed = load_review(review_path, commit_sha)
 context = JSON.parse(File.read(ENV.fetch("REVIEW_CONTEXT_PATH"), encoding: Encoding::UTF_8))
+parsed = load_review(review_path, commit_sha, context["seen_at"])
 
 triage = ReviewTriage.new(
   comments: parsed.inline_comments,

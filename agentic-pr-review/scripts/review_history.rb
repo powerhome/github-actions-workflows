@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require "time"
+
 require_relative "agent_review_parser"
 require_relative "github_api"
 
@@ -21,7 +23,7 @@ class ReviewHistory
               line
               resolvedBy { __typename login }
               comments(first: 50) {
-                nodes { databaseId url body author { __typename login } }
+                nodes { databaseId url body createdAt author { __typename login } }
               }
             }
           }
@@ -51,8 +53,15 @@ class ReviewHistory
   # if an older one recorded a SHA. Reviews with an empty body are the fallback path's
   # standalone inline comments, and carry no marker.
   def last_reviewed_sha
-    latest = bot_reviews.select { |review| AgentReviewParser.marker?(review["body"]) }.last
-    latest && AgentReviewParser.reviewed_sha(latest["body"])
+    last_review && AgentReviewParser.reviewed_sha(last_review["body"])
+  end
+
+  # When the run behind the latest summary read the pull request. A summary without seen=
+  # falls back to when it was posted, which misses comments left while that run's agent ran.
+  def last_seen_at
+    return nil unless last_review
+
+    AgentReviewParser.seen_at(last_review["body"]) || last_review["submitted_at"]
   end
 
   # The threads the bot opened, oldest first, each as:
@@ -79,11 +88,13 @@ class ReviewHistory
   end
 
   # Inline threads a person started, oldest first, with what people said in each. Other
-  # bots' threads are left out: they are tooling output, not review discussion.
-  def people_threads
+  # bots' threads are left out: they are tooling output, not review discussion. With since,
+  # only threads someone has commented in after that time, each still in full.
+  def people_threads(since: nil)
     review_threads.filter_map do |thread|
       root, = thread_comments(thread)
       next unless root && person?(root["author"])
+      next unless people_comments_raw(thread_comments(thread)).any? { |c| after?(c["createdAt"], since) }
 
       {
         "status" => thread["isResolved"] ? "resolved" : "open",
@@ -95,10 +106,12 @@ class ReviewHistory
   end
 
   # General comments on the pull request from people, oldest first. The bot's status and
-  # failure comments, and other bots' comments, are left out.
-  def people_comments_on_pull_request
+  # failure comments, and other bots' comments, are left out. With since, only those left
+  # after that time.
+  def people_comments_on_pull_request(since: nil)
     people_comments(
       @api.get_all("/repos/#{@owner}/#{@repo}/issues/#{@pr_number}/comments")
+          .select { |comment| after?(comment["created_at"], since) }
           .map { |comment| { "author" => comment["user"], "body" => comment["body"] } }
     )
   end
@@ -109,8 +122,12 @@ private
     Array(thread.dig("comments", "nodes"))
   end
 
+  def people_comments_raw(comments)
+    comments.select { |comment| person?(comment["author"]) }
+  end
+
   def people_comments(comments)
-    comments.select { |comment| person?(comment["author"]) }.map do |comment|
+    people_comments_raw(comments).map do |comment|
       { "author" => comment.dig("author", "login") || "ghost", "body" => excerpt(comment["body"]) }
     end
   end
@@ -118,6 +135,19 @@ private
   def excerpt(body)
     body = body.to_s
     body.length > MAX_BODY ? "#{body[0, MAX_BODY]}…" : body
+  end
+
+  # A timestamp that will not parse counts as new, so the comment is kept.
+  def after?(timestamp, since)
+    return true if since.nil?
+
+    Time.iso8601(timestamp.to_s) > Time.iso8601(since.to_s)
+  rescue ArgumentError
+    true
+  end
+
+  def last_review
+    @last_review ||= bot_reviews.select { |review| AgentReviewParser.marker?(review["body"]) }.last
   end
 
   def bot_reviews

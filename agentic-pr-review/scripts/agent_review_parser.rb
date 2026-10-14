@@ -7,12 +7,15 @@ class AgentReviewParser
   MAX_INLINE_COMMENTS = 50
   # Bump when changing review posting behavior or summary format.
   REVIEW_POSTER_VERSION = "1.1.0"
-  # Matches every version's marker. head= arrived in 1.1.0, so an older one has no SHA.
-  MARKER_PATTERN = /<!-- agentic-pr-review (\S+?)(?: head=([0-9a-f]{40}))? -->/
+  # Matches every version's marker. head= and seen= arrived in 1.1.0, so an older one has
+  # neither. seen= is when the run read the pull request's comments, which comes before the
+  # review is posted: a comment left while the agent ran is still new to the next review.
+  MARKER_PATTERN = /<!-- agentic-pr-review (\S+?)(?: head=([0-9a-f]{40}))?(?: seen=(\d{4}-\d\d-\d\dT[\d:]{8}Z))? -->/
 
-  def self.marker(head_sha)
+  def self.marker(head_sha, seen_at = nil)
     head = head_sha.to_s.empty? ? "" : " head=#{head_sha}"
-    "<!-- agentic-pr-review #{REVIEW_POSTER_VERSION}#{head} -->"
+    seen = seen_at.to_s.empty? ? "" : " seen=#{seen_at}"
+    "<!-- agentic-pr-review #{REVIEW_POSTER_VERSION}#{head}#{seen} -->"
   end
 
   def self.marker?(body)
@@ -24,12 +27,18 @@ class AgentReviewParser
     MARKER_PATTERN.match(body.to_s)&.[](2)
   end
 
-  def self.parse_file(path, head_sha: nil)
-    new(File.read(path), head_sha:)
+  # When the run that posted a review summary read the pull request, or nil when it has none.
+  def self.seen_at(body)
+    MARKER_PATTERN.match(body.to_s)&.[](3)
   end
 
-  def initialize(json_string, head_sha: nil)
+  def self.parse_file(path, head_sha: nil, seen_at: nil)
+    new(File.read(path), head_sha:, seen_at:)
+  end
+
+  def initialize(json_string, head_sha: nil, seen_at: nil)
     @head_sha = head_sha
+    @seen_at = seen_at
     @payload = JSON.parse(extract_json(json_string))
     validate_root!
     @summary_body = build_summary_body
@@ -81,7 +90,7 @@ private
 
   def build_summary_body
     summary = @payload["summary"].to_s.strip
-    "#{self.class.marker(@head_sha)}\n\n#{summary}"
+    "#{self.class.marker(@head_sha, @seen_at)}\n\n#{summary}"
   end
 
   def build_inline_comments

@@ -62,7 +62,7 @@ RSpec.describe ReviewHistory do
   end
 
   describe "review threads" do
-    def thread(id, author:, resolved: false, resolved_by: nil, line: 5, replies: [])
+    def thread(id, author:, resolved: false, resolved_by: nil, line: 5, replies: [], at: "2026-10-01T00:00:00Z")
       {
         "id" => id,
         "isResolved" => resolved,
@@ -71,8 +71,10 @@ RSpec.describe ReviewHistory do
         "resolvedBy" => resolved_by,
         "comments" => {
           "nodes" => [{ "databaseId" => 100, "url" => "https://github.test/#{id}", "body" => "Body #{id}",
-                        "author" => author, }] +
-            replies.map { |who, body| { "databaseId" => 101, "body" => body, "author" => who } },
+                        "author" => author, "createdAt" => at, }] +
+            replies.map do |who, body, reply_at = at|
+              { "databaseId" => 101, "body" => body, "author" => who, "createdAt" => reply_at }
+            end,
         },
       }
     end
@@ -153,6 +155,65 @@ RSpec.describe ReviewHistory do
     end
   end
 
+  describe "#people_threads with since" do
+    before do
+      allow(api).to receive(:graphql).and_return(
+        "repository" => { "pullRequest" => { "reviewThreads" => {
+          "pageInfo" => { "hasNextPage" => false },
+          "nodes" => [
+            thread_node("Quiet", [["octocat", "2026-10-01T00:00:00Z"]]),
+            thread_node("Replied", [["octocat", "2026-10-01T00:00:00Z"], ["hubot", "2026-10-05T00:00:00Z"]]),
+            thread_node("Bot only since", [["octocat", "2026-10-01T00:00:00Z"]],
+                        bot_reply_at: "2026-10-06T00:00:00Z"),
+          ],
+        }, }, }
+      )
+    end
+
+    def thread_node(body, comments, bot_reply_at: nil)
+      nodes = comments.map do |login, at|
+        { "body" => body, "createdAt" => at, "author" => { "__typename" => "User", "login" => login } }
+      end
+      if bot_reply_at
+        nodes << { "body" => "bot", "createdAt" => bot_reply_at,
+                   "author" => { "__typename" => "Bot", "login" => "nitro-review" }, }
+      end
+      { "id" => body, "isResolved" => false, "path" => "a.rb", "line" => 1, "comments" => { "nodes" => nodes } }
+    end
+
+    it "keeps only threads a person commented in since, in full" do
+      threads = history.people_threads(since: "2026-10-03T00:00:00Z")
+
+      expect(threads.size).to eq(1)
+      expect(threads.first["comments"].map { |c| c["author"] }).to eq(%w[octocat hubot])
+    end
+
+    it "keeps every thread without since" do
+      expect(history.people_threads.size).to eq(3)
+    end
+  end
+
+  describe "#last_seen_at" do
+    it "reads seen= from the latest summary" do
+      stub_reviews(review(bot, "<!-- agentic-pr-review 1.1.0 head=#{new_sha} seen=2026-10-02T09:00:00Z -->",
+                          "2026-10-02T10:00:00Z"))
+
+      expect(history.last_seen_at).to eq("2026-10-02T09:00:00Z")
+    end
+
+    it "falls back to when the summary was posted" do
+      stub_reviews(review(bot, "<!-- agentic-pr-review 1.1.0 head=#{new_sha} -->", "2026-10-02T10:00:00Z"))
+
+      expect(history.last_seen_at).to eq("2026-10-02T10:00:00Z")
+    end
+
+    it "is nil with no earlier review" do
+      stub_reviews
+
+      expect(history.last_seen_at).to be_nil
+    end
+  end
+
   describe "#people_comments_on_pull_request" do
     it "returns general comments from people only" do
       allow(api).to receive(:get_all).with("/repos/acme/widgets/issues/42/comments").and_return(
@@ -164,6 +225,18 @@ RSpec.describe ReviewHistory do
       )
 
       expect(history.people_comments_on_pull_request).to eq([{ "author" => "octocat", "body" => "Why this approach?" }])
+    end
+
+    it "keeps only comments left after since" do
+      allow(api).to receive(:get_all).with("/repos/acme/widgets/issues/42/comments").and_return(
+        [
+          { "user" => human, "body" => "Old", "created_at" => "2026-10-01T00:00:00Z" },
+          { "user" => human, "body" => "New", "created_at" => "2026-10-05T00:00:00Z" },
+        ]
+      )
+
+      expect(history.people_comments_on_pull_request(since: "2026-10-03T00:00:00Z").map { |c| c["body"] })
+        .to eq(["New"])
     end
   end
 

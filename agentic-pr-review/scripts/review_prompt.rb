@@ -97,7 +97,7 @@ private
     <<~MARKDOWN.chomp
       ## Discussion on this pull request
 
-      People have also commented on this pull request. `threads` are inline comment threads, each with its `status` (`open` or `resolved`), `path`, `line` on the current head (null once the code has changed), and `comments`. `comments` are general comments on the pull request. Each comment has an `author` and a `body`.
+      #{discussion_intro} `threads` are inline comment threads, each with its `status` (`open` or `resolved`), `path`, `line` on the current head (null once the code has changed), and `comments`. `comments` are general comments on the pull request. Each comment has an `author` and a `body`.
 
       - Do not post a finding that someone has already raised here, in a thread or a general comment.
       - If someone explains why code is the way it is, take that into account rather than flagging it.
@@ -105,6 +105,13 @@ private
 
       #{data_block("discussion", discussion)}
     MARKDOWN
+  end
+
+  def discussion_intro
+    return "People have also commented on this pull request." unless @context["discussion_since"]
+
+    "People have also commented on this pull request. Only what is new since your last review is below: " \
+      "a thread appears in full if someone has commented in it since then, and older general comments are left out."
   end
 
   # Earlier comments are written by anyone who can comment on the pull request. The markers

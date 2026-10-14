@@ -27,6 +27,23 @@ RSpec.describe AgentReviewParser do
     end
   end
 
+  describe ".seen_at" do
+    it "round-trips the time the run read the pull request" do
+      sha = "a" * 40
+      parsed = described_class.new({ "summary" => "S" }.to_json, head_sha: sha, seen_at: "2026-10-14T12:00:00Z")
+      body = parsed.summary_body
+
+      expect(body).to start_with("<!-- agentic-pr-review #{described_class::REVIEW_POSTER_VERSION} head=#{sha} " \
+                                 "seen=2026-10-14T12:00:00Z -->")
+      expect(described_class.reviewed_sha(body)).to eq(sha)
+      expect(described_class.seen_at(body)).to eq("2026-10-14T12:00:00Z")
+    end
+
+    it "is nil for a marker without it" do
+      expect(described_class.seen_at("<!-- agentic-pr-review 1.1.0 head=#{'a' * 40} -->")).to be_nil
+    end
+  end
+
   describe ".reviewed_sha" do
     it "is nil for a marker from before head= was recorded" do
       body = "<!-- agentic-pr-review 1.0.0 -->\n\nOld review"

@@ -141,10 +141,10 @@ If your workflow should avoid reviewing draft or closed pull requests, add a sma
 
 ## Follow-up reviews
 
-The bot does not re-review what it has already reviewed. Its state lives on the pull request itself, in the marker at the top of each review summary, which records the head it covered:
+The bot does not re-review what it has already reviewed. Its state lives on the pull request itself, in the marker at the top of each review summary, which records the head it covered and when the run read the PR's comments:
 
 ```html
-<!-- agentic-pr-review 1.1.0 head=<40-character SHA> -->
+<!-- agentic-pr-review 1.1.0 head=<40-character SHA> seen=<UTC timestamp> -->
 ```
 
 Only reviews posted by the GitHub App the action authenticates as count, so a marker pasted by anyone else is ignored.
@@ -159,7 +159,7 @@ Only reviews posted by the GitHub App the action authenticates as count, so a ma
 
 On an incremental review the agent gets both diffs. It reviews `pr-incremental.diff` but can read `pr.diff` and the rest of the code as context, so it can still catch a new change that breaks older code. Inline comments are only posted on lines that the incremental diff adds **and** the pull request itself changes; anything else is dropped and logged. That second condition keeps out changes merged in from the base branch.
 
-On every review, full or incremental, the agent also gets the bot's earlier inline threads (the most recent 100) with the replies people left on them, plus what people have said on the PR: the inline threads they started and their general comments (the most recent 100 of each). Comments from other bots, and the bot's own status comments, are left out. Each comment body is cut at 2,000 characters, and a thread keeps its latest 20 comments.
+On every review, full or incremental, the agent also gets the bot's earlier inline threads (the most recent 100) with the replies people left on them, plus what people have said on the PR: the inline threads they started and their general comments (the most recent 100 of each). Comments from other bots, and the bot's own status comments, are left out. On an incremental review, people's threads and comments are limited to what is new since `seen=`, since the last review already took the rest into account: a thread is included, in full, only if someone has commented in it since then. The bot's own threads are always included, because whether a finding is fixed or has come back depends on the code, not on new replies. Each comment body is cut at 2,000 characters, and a thread keeps its latest 20 comments.
 
 - **No duplicates.** It is told not to re-raise a finding that one of its threads, or a person's comment, already covers, and to accept a reply that explains the code is intentional. As a backstop, a new comment on the same line as one of the bot's open threads is dropped.
 - **Fixed findings are resolved.** The agent lists the open threads whose issue is fixed. The bot replies to each one ("looks addressed as of `<sha>`") and resolves it.
