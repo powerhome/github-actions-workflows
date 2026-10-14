@@ -225,9 +225,12 @@ runs:
       env:
         BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
         HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
+        # Outside the workspace, which the pull request controls.
+        PR_FILES_PATH: ${{ runner.temp }}/pr-files.txt
       run: |
         set -euo pipefail
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
+        git -c core.quotePath=false diff --name-only "${BASE_SHA}...${HEAD_SHA}" > "${PR_FILES_PATH}"
 
     - name: Build external dependency delta
       id: dependency_delta
@@ -282,6 +285,8 @@ runs:
         ANTHROPIC_WORKSPACE_ID: ${{ inputs.anthropic-workspace-id }}
         AGENT_OUTPUT_PATH: ${{ github.workspace }}/test-plan-agent.json
         AGENT_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
+        AGENT_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        AGENT_CHANGED_FILES_PATH: ${{ runner.temp }}/pr-files.txt
         # The caller's model, or else Cursor is pinned rather than left to its default,
         # which timed out on the cobra-test-plan profile. Set here, not inherited: a
         # composite step takes the caller's job env, so a job-level MODEL would otherwise
@@ -303,6 +308,7 @@ runs:
         name: ${{ steps.profile.outputs.artifact_name }}
         path: |
           ${{ github.workspace }}/test-plan-agent.json
+          ${{ github.workspace }}/pr.diff
           ${{ github.workspace }}/dependency-delta-manifest.json
           ${{ runner.temp }}/dependency-deltas-full.diff
           ${{ github.workspace }}/dependency-deltas-context.diff

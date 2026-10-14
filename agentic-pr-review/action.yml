@@ -144,12 +144,15 @@ runs:
         BASE_SHA: ${{ steps.pr_gate.outputs.base_sha }}
         HEAD_SHA: ${{ steps.pr_gate.outputs.head_sha }}
         PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        # Outside the workspace, which the pull request controls.
+        PR_FILES_PATH: ${{ runner.temp }}/pr-files.txt
       # The workspace is the pull-request head, so it may already hold a symlink named
       # pr.diff, and a redirect follows one. rm -rf unlinks it instead.
       run: |
         set -euo pipefail
         rm -rf -- "${PR_DIFF_PATH}"
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${PR_DIFF_PATH}"
+        git -c core.quotePath=false diff --name-only "${BASE_SHA}...${HEAD_SHA}" > "${PR_FILES_PATH}"
 
     # AGENTS.md, CLAUDE.md, .cursor/ and .claude/ are read by the CLI as instructions, so a
     # pull request editing them could tell its own reviewer what to say. The edits are still
@@ -190,6 +193,8 @@ runs:
         CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
+        AGENT_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        AGENT_CHANGED_FILES_PATH: ${{ runner.temp }}/pr-files.txt
         AGENT_OUTPUT_PATH: ${{ github.workspace }}/review-agent.json
       run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
 

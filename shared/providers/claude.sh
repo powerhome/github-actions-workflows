@@ -141,8 +141,6 @@ fi
 
 cd "${GITHUB_WORKSPACE}"
 
-PROMPT="$(cat "${AGENT_PROMPT_PATH}")"
-
 MODEL_ARGS=()
 if [[ -n "${MODEL:-}" ]]; then
   MODEL_ARGS+=(--model "${MODEL}")
@@ -175,22 +173,25 @@ clear_agent_output
 # would run shell commands outside the tool permissions and whose env could repoint the API
 # URL at another host, and the settings file disables hooks again in case a future CLI loads
 # them from elsewhere. --strict-mcp-config with no --mcp-config keeps the repository's MCP
-# servers from loading. claude-settings does not touch those two flags. stdin is /dev/null
-# because --print otherwise waits for piped input before it starts. The empty-array
-# expansions are spelled out because bash before 4.4 treats "${ARRAY[@]}" on an empty array
-# as unbound under set -u. --disallowed-tools takes every argument up to the next flag,
-# so it is followed by one. The CLI gets no ACTIONS_ID_TOKEN_REQUEST_* variables, which
-# would let it mint GitHub OIDC tokens for any audience; the refresher above keeps them.
+# servers from loading. claude-settings does not touch those two flags. run_agent sends the
+# prompt on stdin. The empty-array expansions are spelled out because bash before 4.4
+# treats "${ARRAY[@]}" on an empty array as unbound under set -u. --disallowed-tools takes
+# every argument up to the next flag, so it is followed by one. The CLI gets no
+# ACTIONS_ID_TOKEN_REQUEST_* variables, which would let it mint GitHub OIDC tokens for any
+# audience; the refresher above keeps them.
+invoke_claude() {
+  env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+    claude --print --output-format text \
+      --disallowed-tools "${DENIED_READS[@]}" \
+      --setting-sources user \
+      --settings "${SETTINGS_PATH}" \
+      --permission-mode dontAsk \
+      --strict-mcp-config \
+      ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} \
+      ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+}
+
 status=0
-env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
-  claude --print --output-format text \
-    --disallowed-tools "${DENIED_READS[@]}" \
-    --setting-sources user \
-    --settings "${SETTINGS_PATH}" \
-    --permission-mode dontAsk \
-    --strict-mcp-config \
-    ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} \
-    ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} \
-    "${PROMPT}" </dev/null >"${AGENT_OUTPUT_PATH}" || status=$?
+run_agent invoke_claude || status=$?
 
 check_agent_output claude "${status}"

@@ -8,7 +8,7 @@ Runs a headless review agent against the **merge-base diff** for a pull request,
 2. Loads PR metadata via the GitHub API to resolve the PR base/head refs.
 3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, removes the checkout's credential from `.git/config`, and writes `pr.diff` (`base...head` three-dot diff).
    Agent-instruction files — `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `.cursor/` and `.claude/` directories at any depth — are then reset to the merge base, so a PR cannot instruct its own reviewer. Their changes are still in `pr.diff` and reviewed like any other.
-4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md` plus any **additional prompt** text.
+4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md` plus any **additional prompt** text. The list of changed files and the whole of `pr.diff` are appended to the prompt, which goes to the CLI on stdin, so the agent cannot review only the part of the diff it chose to open. If the CLI reports the prompt too long for the model's context, the run is retried once with the diff left in `pr.diff` for the agent to page through.
 5. Parses the agent's JSON output and posts a review on the PR head commit.
 
 Artifacts: uploads `review-agent.json` from the workspace when present (for debugging).

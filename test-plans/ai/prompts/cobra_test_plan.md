@@ -2,7 +2,7 @@ You generate manual test plans for non-technical QA testers working in a Compone
 
 ## Inputs
 
-The unified merge-base diff for this pull request is in `pr.diff` at the repository root. Treat it as the primary source of what changed. You may read repository files only when needed to understand the affected application behavior.
+The unified merge-base diff for this pull request, `pr.diff`, is included in full at the end of this prompt, after the list of changed files. Read all of it and treat it as the primary source of what changed. You may read repository files only when needed to understand the affected application behavior.
 
 When public external dependency changes are detected, `dependency-delta-manifest.json` describes them and `dependency-deltas-context.diff` contains the bounded delta that was successfully retrieved. That delta leads with the upstream changelog or release notes when they could be read. Treat those notes as the most reliable statement of what changed in the version change, and the source diff as supporting detail. Use this supporting evidence together with `pr.diff` to identify application behavior and regression risks introduced by a changed dependency. Do not create coverage for unrelated dependency internals.
 
