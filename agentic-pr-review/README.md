@@ -209,7 +209,7 @@ Neither CLI documents a version-pinned installer for CI, so each run installs th
 
 ### Cursor (read-only)
 
-[`shared/config/cursor-cli-config.json`](../shared/config/cursor-cli-config.json) is copied to **`.cursor/cli-config.json`** (the [project-local CLI config](https://cursor.com/docs/cli/reference/permissions) path). It **allows** only `Read(**)` and **denies** `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, matching the Claude settings below. A `.cursor` symlink in the checkout is replaced rather than written through.
+[`shared/config/cursor-cli-config.json`](../shared/config/cursor-cli-config.json) is copied to **`.cursor/cli.json`**, the file the CLI reads [project permissions](https://cursor.com/docs/cli/reference/configuration) from (`cli-config.json` is only the name of the global file in the home directory). It **allows** only `Read(**)` and **denies** `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, matching the Claude settings below. Whatever the checkout has at that path, including its own permissions or a symlink, is replaced rather than used or written through, as is a `.cursor` symlink.
 
 ### Claude (read-only)
 

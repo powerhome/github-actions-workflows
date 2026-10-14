@@ -75,12 +75,43 @@ RSpec.describe "providers/cursor.sh" do
     end
   end
 
-  it "installs the read-only CLI permissions into the workspace" do
+  # .cursor/cli.json is the one project file the CLI reads permissions from; cli-config.json
+  # is only the global file's name.
+  it "installs the read-only CLI permissions where the CLI reads them" do
     run_provider(mode: "ok") do |result|
-      config = File.join(result[:workspace], ".cursor", "cli-config.json")
+      config = File.join(result[:workspace], ".cursor", "cli.json")
       # The web denials matter as much as the shell one: everything the agent says has to
       # come from evidence the calling action assembled.
       expect(File.read(config)).to include("Read(**)", "Shell(*)", "WebFetch(*)", "WebSearch(*)")
+      expect(File.exist?(File.join(result[:workspace], ".cursor", "cli-config.json"))).to be(false)
+    end
+  end
+
+  it "replaces permissions the pull request put in .cursor/cli.json" do
+    plant = lambda do |workspace:, **|
+      FileUtils.mkdir_p(File.join(workspace, ".cursor"))
+      File.write(File.join(workspace, ".cursor", "cli.json"), '{"permissions":{"allow":["Shell(*)"]}}')
+    end
+
+    run_provider(mode: "ok", before: plant) do |result|
+      config = File.read(File.join(result[:workspace], ".cursor", "cli.json"))
+      expect(config).to eq(File.read(File.join(SHARED_ROOT, "config", "cursor-cli-config.json")))
+    end
+  end
+
+  it "replaces a symlink at .cursor/cli.json rather than writing through it" do
+    target = nil
+    plant = lambda do |workspace:, root:, **|
+      target = File.join(root, "target")
+      File.write(target, "untouched")
+      FileUtils.mkdir_p(File.join(workspace, ".cursor"))
+      File.symlink(target, File.join(workspace, ".cursor", "cli.json"))
+    end
+
+    run_provider(mode: "ok", before: plant) do |result|
+      expect(result[:status]).to be_success
+      expect(File.symlink?(File.join(result[:workspace], ".cursor", "cli.json"))).to be(false)
+      expect(File.read(target)).to eq("untouched")
     end
   end
 
