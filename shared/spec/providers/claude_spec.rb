@@ -3,6 +3,7 @@
 require_relative "../spec_helper"
 
 require "fileutils"
+require "json"
 require "open3"
 require "rbconfig"
 require "tmpdir"
@@ -200,6 +201,51 @@ RSpec.describe "providers/claude.sh" do
         ["--allowed-tools", "Bash(gh pr view:*)"],
         ["--max-turns", "30"]
       )
+    end
+  end
+
+  describe "read-only gh access" do
+    let(:gh_settings) { File.join(SHARED_ROOT, "config", "claude-settings-gh-read.json") }
+
+    it "hands the CLI the read-only token as its only GitHub credential" do
+      env = { "GH_READ_TOKEN" => "ghs_readonly", "GITHUB_TOKEN" => "ghs_from_job", "GH_TOKEN" => "ghs_other" }
+
+      run_provider(env:) do |result|
+        expect(result[:status]).to be_success
+        expect(result[:stderr]).to include("gh: read-only access")
+        expect(result[:args].each_cons(2)).to include(["--settings", gh_settings])
+        expect(result[:claude_env]).to include("GH_TOKEN" => "ghs_readonly", "GH_PROMPT_DISABLED" => "1")
+        expect(result[:claude_env].keys).not_to include("GITHUB_TOKEN", "GH_READ_TOKEN")
+      end
+    end
+
+    it "leaves the bundled settings and the environment alone without a token" do
+      run_provider(env: { "GH_READ_TOKEN" => "", "GH_TOKEN" => nil }) do |result|
+        expect(result[:args].each_cons(2)).to include(
+          ["--settings", File.join(SHARED_ROOT, "config", "claude-settings.json")]
+        )
+        expect(result[:claude_env].keys).not_to include("GH_TOKEN")
+      end
+    end
+
+    it "gives way to a caller's settings" do
+      run_provider(env: { "GH_READ_TOKEN" => "ghs_readonly", "CLAUDE_SETTINGS" => '{"permissions":{}}' }) do |result|
+        expect(result[:args].each_cons(2)).to include(["--settings", '{"permissions":{}}'])
+      end
+    end
+
+    # Clones, downloads and arbitrary commands fall to dontAsk, which denies what isn't allowed.
+    it "allows only gh read commands in a shell" do
+      permissions = JSON.parse(File.read(gh_settings)).fetch("permissions")
+      bash = permissions.fetch("allow").grep(/\ABash/)
+      reads = /\ABash\(gh (api|issue (list|view)|pr (diff|list|view)|release (list|view)|repo view|search):\*\)\z/
+
+      expect(bash).to all(match(reads))
+      expect(permissions.fetch("allow")).not_to include("Bash")
+      expect(permissions.fetch("deny")).to include(
+        "Bash(gh auth:*)", "Bash(gh repo clone:*)", "Edit", "Write", "WebFetch", "WebSearch", "Read(//proc/**)"
+      )
+      expect(JSON.parse(File.read(gh_settings))).to include("disableAllHooks" => true)
     end
   end
 

@@ -37,6 +37,7 @@ The provider adapters and comment client live in [`shared/`](../shared), beside 
 | `anthropic-service-account-id` | with a rule | Claude only. The service account the rule authenticates as (`svac_...`). |
 | `anthropic-workspace-id` | no | Claude only. Needed when the rule spans more than one workspace (`wrkspc_...`). |
 | `claude-args` | no | Claude only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
+| `gh-read-access` | no | Claude only. `true` (default) lets the agent run read-only `gh` commands for context, with a separate read-only token. See [Read-only `gh` access](#read-only-gh-access). Ignored when `claude-settings` is set. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 | `review-scope` | no | `auto` (default) reviews only the commits pushed since the bot's last review, falling back to a full review as described in [Follow-up reviews](#follow-up-reviews). `full` always reviews the whole PR. |
 
@@ -219,6 +220,16 @@ Neither CLI documents a version-pinned installer for CI, so each run installs th
 - `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
 
 The CLI runs in the PR's own checkout, so the reviewed repository must not be able to configure it. `--setting-sources user` keeps its `.claude/settings.json` and `.claude/settings.local.json` from loading: their hooks would run shell commands outside the tool permissions, with the API key in the environment, and their `env` could point the API URL at another host. The settings file also sets `disableAllHooks`.
+
+### Read-only `gh` access
+
+With `gh-read-access` on (the default), the agent can look things up on GitHub that the checkout doesn't have. For example, when a PR bumps a pinned action SHA it can run `gh api repos/<owner>/<repo>/compare/<old>...<new>` to see what the new revision changes. The prompt gets a section on when and how to use it.
+
+- The action creates a second GitHub App token with only `contents: read` and `pull-requests: read`, for the current repository. Public repositories are readable with it too. Since it can't write, GitHub refuses any write the agent tries, whatever the command. The token is revoked when the job ends.
+- [`shared/config/claude-settings-gh-read.json`](../shared/config/claude-settings-gh-read.json) replaces the bundled settings. It allows the read-only commands `gh api`, `gh pr view`/`diff`/`list`, `gh issue view`/`list`, `gh repo view`, `gh release view`/`list` and `gh search`. It also explicitly denies `gh auth`, `gh config`, `gh alias`, `gh extension`, clones, checkouts and downloads. Every other shell command is still refused, so the agent can't clone anything or run code.
+- That token is the only GitHub credential the CLI gets: `GITHUB_TOKEN` and any other `GH_TOKEN` are removed from its environment.
+- Before posting, anything in the review that looks like a GitHub token is replaced with `[redacted token]`.
+- It is skipped when `claude-settings` is set (the caller decides the tools), on the `cursor` provider, and on a skipped review.
 
 ### Overriding the Claude defaults
 

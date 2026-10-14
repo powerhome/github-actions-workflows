@@ -16,6 +16,10 @@ class AgentReviewParser
   # Hyphenated, so MARKER_PATTERN never takes it for a review summary.
   FIXED_NOTE_MARKER = "<!-- agentic-pr-review-fixed -->"
 
+  # GitHub token formats. The agent can run gh with a read-only token, so a review that
+  # quotes one, whether misled by the pull request or not, has it blanked before it is posted.
+  TOKEN_PATTERN = /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})\b/
+
   def self.marker(head_sha, seen_at = nil)
     head = head_sha.to_s.empty? ? "" : " head=#{head_sha}"
     seen = seen_at.to_s.empty? ? "" : " seen=#{seen_at}"
@@ -40,10 +44,14 @@ class AgentReviewParser
     new(File.read(path), head_sha:, seen_at:)
   end
 
+  def self.redact_tokens(text)
+    text.gsub(TOKEN_PATTERN, "[redacted token]")
+  end
+
   def initialize(json_string, head_sha: nil, seen_at: nil)
     @head_sha = head_sha
     @seen_at = seen_at
-    @payload = JSON.parse(extract_json(json_string))
+    @payload = JSON.parse(extract_json(self.class.redact_tokens(json_string.to_s)))
     validate_root!
     @summary_body = build_summary_body
     @inline_comments = build_inline_comments
