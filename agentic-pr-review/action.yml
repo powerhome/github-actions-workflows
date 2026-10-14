@@ -43,6 +43,10 @@ inputs:
     description: Model to use for the review (passed to the provider CLI)
     required: false
     default: ""
+  effort:
+    description: Claude effort level (low, medium, high, xhigh, max), passed to the claude CLI as --effort. Empty uses the CLI's default (claude provider only)
+    required: false
+    default: xhigh
   claude-settings:
     description: Claude Code settings that replace the bundled read-only shared/config/claude-settings.json, as a file path relative to the workspace or a JSON string (claude provider only)
     required: false
@@ -190,6 +194,7 @@ runs:
         ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ inputs.anthropic-service-account-id }}
         ANTHROPIC_WORKSPACE_ID: ${{ inputs.anthropic-workspace-id }}
         MODEL: ${{ inputs.model }}
+        EFFORT: ${{ inputs.effort }}
         CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md

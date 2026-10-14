@@ -30,6 +30,7 @@ The provider adapters and comment client live in [`shared/`](../shared), beside 
 | `provider` | no | Review backend: `cursor` or `claude`. The action resolves it via `shared/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
 | `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default. |
+| `effort` | no | Claude only. Effort level passed as `--effort`: `low`, `medium`, `high`, `xhigh`, or `max`. Defaults to `xhigh`; empty uses the CLI's default. |
 | `claude-settings` | no | Claude only. Settings that replace the bundled read-only [`shared/config/claude-settings.json`](../shared/config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
 | `anthropic-federation-rule-id` | no | Claude only. Authenticate with [workload identity federation](#review-a-pr-with-claude-using-workload-identity-federation) instead of `provider-api-key`. |
 | `anthropic-organization-id` | with a rule | Claude only. Anthropic organization ID. |

@@ -293,6 +293,8 @@ runs:
         # pick the model. The pinned slug is Cursor's, so Claude keeps its own default.
         MODEL: ${{ inputs.model || (inputs.provider == 'cursor' && 'claude-sonnet-5-5-high' || '') }}
         CLAUDE_SETTINGS: ""
+        # Not an input here; set empty so a job-level EFFORT cannot choose one.
+        EFFORT: ""
         CLAUDE_ARGS: ${{ inputs.claude-args }}
       run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
 

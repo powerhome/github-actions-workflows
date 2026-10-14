@@ -141,6 +141,7 @@ RSpec.describe "providers/claude.sh" do
       # On the command line, so a caller's claude-settings cannot drop it.
       expect(args.each_cons(2)).to include(["--disallowed-tools", "Read(//proc/**)"])
       expect(args).not_to include("--model")
+      expect(args).not_to include("--effort")
       expect(args).not_to include("Review this.")
       expect(result[:prompts]).to eq(["Review this."])
     end
@@ -182,9 +183,10 @@ RSpec.describe "providers/claude.sh" do
     expect(settings).to include('"disableAllHooks": true', '"Bash"', '"Write"', '"WebFetch"', '"WebSearch"')
   end
 
-  it "passes the model, caller settings, and caller arguments through" do
+  it "passes the model, effort, caller settings, and caller arguments through" do
     env = {
       "MODEL" => "claude-opus-5-5",
+      "EFFORT" => "xhigh",
       "CLAUDE_SETTINGS" => '{"permissions":{}}',
       "CLAUDE_ARGS" => '--allowed-tools "Bash(gh pr view:*)" --max-turns 30',
     }
@@ -193,6 +195,7 @@ RSpec.describe "providers/claude.sh" do
       expect(result[:status]).to be_success
       expect(result[:args].each_cons(2)).to include(
         ["--model", "claude-opus-5-5"],
+        ["--effort", "xhigh"],
         ["--settings", '{"permissions":{}}'],
         ["--allowed-tools", "Bash(gh pr view:*)"],
         ["--max-turns", "30"]
