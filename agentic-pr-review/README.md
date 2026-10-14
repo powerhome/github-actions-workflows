@@ -4,7 +4,7 @@ Runs a headless review agent against the **merge-base diff** for a pull request,
 
 ## What it does
 
-1. Creates an installation token for a **GitHub App** (needs repository scopes contents:read and pull_requests:read_write).
+1. Creates an installation token for a **GitHub App** (needs repository permissions contents:read and pull_requests:read_write; contents:read_write to resolve fixed findings, see [Follow-up reviews](#follow-up-reviews)).
 2. Loads PR metadata via the GitHub API to resolve the PR base/head refs.
 3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, decides the [review scope](#follow-up-reviews), removes the checkout's credential from `.git/config`, and writes `pr.diff` (`base...head` three-dot diff), plus `pr-incremental.diff` (`last-reviewed..head`) on a follow-up review.
    Agent-instruction files — `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `.cursor/` and `.claude/` directories at any depth — are then reset to the merge base, so a PR cannot instruct its own reviewer. Their changes are still in `pr.diff` and reviewed like any other.
@@ -155,14 +155,14 @@ Only reviews posted by the GitHub App the action authenticates as count, so a ma
 | `review-scope: full`, or the run was triggered by `issue_comment` or `workflow_dispatch` (a manual request) | Full |
 | The last-reviewed SHA is no longer in the branch's history (rebase or force-push) | Full |
 | The last-reviewed SHA is an ancestor of the new head | Incremental: `last-reviewed..head` |
-| The head was already reviewed (e.g. a re-run) | Skipped: no agent run, nothing posted |
+| The head was already reviewed (e.g. a re-run) | Skipped: no agent run. A "no new findings" comment links the last review, and the next real review deletes it |
 
 On an incremental review the agent gets both diffs. It reviews `pr-incremental.diff` but can read `pr.diff` and the rest of the code as context, so it can still catch a new change that breaks older code. Inline comments are only posted on lines that the incremental diff adds **and** the pull request itself changes; anything else is dropped and logged. That second condition keeps out changes merged in from the base branch.
 
 On every review, full or incremental, the agent also gets the bot's earlier inline threads (the most recent 100) with the replies people left on them, plus what people have said on the PR: the inline threads they started and their general comments (the most recent 100 of each). Comments from other bots, and the bot's own status comments, are left out. On an incremental review, people's threads and comments are limited to what is new since `seen=`, since the last review already took the rest into account: a thread is included, in full, only if someone has commented in it since then. The bot's own threads are always included, because whether a finding is fixed or has come back depends on the code, not on new replies. Each comment body is cut at 2,000 characters, and a thread keeps its latest 20 comments.
 
 - **No duplicates.** It is told not to re-raise a finding that one of its threads, or a person's comment, already covers, and to accept a reply that explains the code is intentional. As a backstop, a new comment on the same line as one of the bot's open threads is dropped.
-- **Fixed findings are resolved.** The agent lists the open threads whose issue is fixed. The bot resolves each one, then replies ("this looks addressed as of `<sha>`"). If GitHub refuses the resolve, the bot posts no reply and logs the error, and the thread stays open. An installation with only `contents: read` and `pull_requests: write` was refused with `Resource not accessible by integration` in testing, so the App needs whatever extra permission GitHub requires for resolving threads.
+- **Fixed findings are resolved.** The agent lists the open threads whose issue is fixed. The bot resolves each one, then replies ("this looks addressed as of `<sha>`"). If GitHub refuses the resolve, the bot posts no reply and logs the error, and the thread stays open. GitHub only lets an App resolve a review thread with **Contents: Read and write**. With `pull_requests: write` alone it answers `Resource not accessible by integration`, as it did in testing, so grant Contents write if you want fixed findings resolved.
 - **Regressions are re-raised.** If an issue the bot resolved has come back, the agent raises it again, and the new comment links the original thread. A thread someone else resolved counts as dismissed and is never re-raised.
 
 Anyone who can comment on the PR writes that text, so it goes into the prompt as JSON between randomly named markers, labelled as data rather than instructions. Its effect is limited anyway: the agent can only resolve the bot's own open threads, only after the review has posted, and a reply claiming a fix still has to be checked against the code.

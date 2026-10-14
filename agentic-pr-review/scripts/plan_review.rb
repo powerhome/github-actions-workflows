@@ -94,4 +94,5 @@ File.write(
 File.open(ENV.fetch("GITHUB_OUTPUT"), "a") do |output|
   output.puts "mode=#{scope.mode}"
   output.puts "last_reviewed_sha=#{scope.last_reviewed_sha}"
+  output.puts "last_review_url=#{history.last_review_url}"
 end

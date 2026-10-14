@@ -193,6 +193,25 @@ RSpec.describe ReviewHistory do
     end
   end
 
+  describe "#last_review_url" do
+    it "links the latest summary" do
+      stub_reviews(
+        review(bot, "<!-- agentic-pr-review 1.1.0 head=#{old_sha} -->", "2026-10-01T00:00:00Z")
+          .merge("html_url" => "https://github.test/r/1"),
+        review(bot, "<!-- agentic-pr-review 1.1.0 head=#{new_sha} -->", "2026-10-02T00:00:00Z")
+          .merge("html_url" => "https://github.test/r/2")
+      )
+
+      expect(history.last_review_url).to eq("https://github.test/r/2")
+    end
+
+    it "is nil with no earlier review" do
+      stub_reviews
+
+      expect(history.last_review_url).to be_nil
+    end
+  end
+
   describe "#last_seen_at" do
     it "reads seen= from the latest summary" do
       stub_reviews(review(bot, "<!-- agentic-pr-review 1.1.0 head=#{new_sha} seen=2026-10-02T09:00:00Z -->",

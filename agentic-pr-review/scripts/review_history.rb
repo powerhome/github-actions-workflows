@@ -56,6 +56,11 @@ class ReviewHistory
     last_review && AgentReviewParser.reviewed_sha(last_review["body"])
   end
 
+  # A link to the latest summary, for a notice that points back to it.
+  def last_review_url
+    last_review&.fetch("html_url", nil)
+  end
+
   # When the run behind the latest summary read the pull request. A summary without seen=
   # falls back to when it was posted, which misses comments left while that run's agent ran.
   def last_seen_at

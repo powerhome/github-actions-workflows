@@ -121,6 +121,19 @@ RSpec.describe "agentic-pr-review action.yml wiring" do
     )
   end
 
+  it "posts the already-reviewed notice only on a skip, and clears it after a real review" do
+    notice = ReviewActionWiring.step_named("Post already-reviewed notice")
+    clear = ReviewActionWiring.step_named("Clear already-reviewed notice")
+
+    expect(notice["if"]).to eq("steps.scope.outputs.mode == 'skip'")
+    expect(clear["if"]).to eq("steps.scope.outputs.mode != 'skip'")
+    expect(notice.dig("env", "COMMENT_TAG")).to eq(clear.dig("env", "COMMENT_TAG"))
+    expect(notice.dig("env", "COMMENT_BODY")).to include("steps.scope.outputs.last_review_url")
+
+    names = ReviewActionWiring.steps.map { |step| step.fetch("name") }
+    expect(names.index("Clear already-reviewed notice")).to be > names.index("Post review to GitHub")
+  end
+
   # It fetches the last-reviewed commit, which needs the credential the later step removes.
   it "plans the review scope before the credential is removed" do
     names = ReviewActionWiring.steps.map { |step| step.fetch("name") }

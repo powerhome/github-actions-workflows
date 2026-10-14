@@ -248,6 +248,34 @@ runs:
         PR_INCREMENTAL_DIFF_PATH: ${{ github.workspace }}/pr-incremental.diff
       run: ruby "${{ github.action_path }}/scripts/post_review.rb"
 
+    # Upserted, so asking again on the same head updates one comment instead of adding more.
+    # A full SHA in a comment renders as a short commit link.
+    - name: Post already-reviewed notice
+      if: steps.scope.outputs.mode == 'skip'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        COMMENT_MODE: upsert
+        COMMENT_TAG: agentic-pr-review-up-to-date
+        COMMENT_BODY: |
+          :white_check_mark: **Agentic PR Review**: no new findings. Nothing has been pushed since the [last review](${{ steps.scope.outputs.last_review_url }}) of ${{ steps.scope.outputs.last_reviewed_sha }}.
+
+          Push new commits for a review of the changes, or request a manual review to review the whole pull request again.
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
+
+    # A real review supersedes the notice, which would otherwise point at an old head.
+    - name: Clear already-reviewed notice
+      if: steps.scope.outputs.mode != 'skip'
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.app_token.outputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        COMMENT_MODE: delete
+        COMMENT_TAG: agentic-pr-review-up-to-date
+      run: ruby "${{ github.action_path }}/../shared/bin/comment.rb"
+
     # create, not upsert: this comment carries no tag, so a second failure adds a second
     # comment. That is what the action this replaced did without one.
     - name: Post failure comment
