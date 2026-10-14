@@ -56,7 +56,7 @@ inputs:
     required: false
     default: ""
   gh-read-access:
-    description: Let the agent run read-only gh commands, such as gh pr view and gh pr diff, to gather context like the upstream changes behind a bumped action pin. It gets a separate GitHub App token limited to reading contents and pull requests, and no other shell commands. Ignored when claude-settings is set (claude provider only)
+    description: Let the agent run read-only gh commands, such as gh pr view and gh pr diff, to gather context like the upstream changes behind a bumped action pin. They run with the calling job's GITHUB_TOKEN, and no other shell command is allowed. Ignored when claude-settings is set (claude provider only)
     required: false
     default: "true"
   additional-prompt:
@@ -200,18 +200,6 @@ runs:
         HEAD_SHA: ${{ steps.pr_gate.outputs.head_sha }}
       run: ruby "${{ github.action_path }}/../shared/bin/trusted_agent_instructions.rb"
 
-    # Only read permissions, so a write fails at GitHub whatever gh command the agent runs.
-    # Public repositories, such as an action pinned by a bumped SHA, are readable with it too.
-    - name: Create read-only GitHub token for the agent
-      id: read_token
-      if: steps.scope.outputs.mode != 'skip' && inputs.provider == 'claude' && inputs.gh-read-access == 'true' && inputs.claude-settings == ''
-      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-      with:
-        client-id: ${{ inputs.app-id }}
-        private-key: ${{ inputs.private-key }}
-        permission-contents: read
-        permission-pull-requests: read
-
     # Written outside the workspace, which the pull request controls and the provider reads.
     - name: Compose review prompt
       if: steps.scope.outputs.mode != 'skip'
@@ -222,7 +210,7 @@ runs:
         REVIEW_CONTEXT_PATH: ${{ runner.temp }}/agentic-pr-review-context.json
         PR_INCREMENTAL_DIFF_PATH: ${{ github.workspace }}/pr-incremental.diff
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
-        GH_READ_ACCESS: ${{ steps.read_token.outputs.token != '' }}
+        GH_READ_ACCESS: ${{ inputs.provider == 'claude' && inputs.gh-read-access == 'true' && inputs.claude-settings == '' }}
       run: ruby "${{ github.action_path }}/scripts/compose_prompt.rb"
 
     - name: Run review provider
@@ -239,7 +227,8 @@ runs:
         EFFORT: ${{ inputs.effort }}
         CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}
-        GH_READ_TOKEN: ${{ steps.read_token.outputs.token }}
+        # The job's own token: every gh command the agent may run only reads.
+        AGENT_GH_TOKEN: ${{ (inputs.provider == 'claude' && inputs.gh-read-access == 'true' && inputs.claude-settings == '') && github.token || '' }}
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
         AGENT_DIFF_PATH: ${{ github.workspace }}/pr.diff
         AGENT_CHANGED_FILES_PATH: ${{ runner.temp }}/pr-files.txt

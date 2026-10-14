@@ -207,20 +207,20 @@ RSpec.describe "providers/claude.sh" do
   describe "read-only gh access" do
     let(:gh_settings) { File.join(SHARED_ROOT, "config", "claude-settings-gh-read.json") }
 
-    it "hands the CLI the read-only token as its only GitHub credential" do
-      env = { "GH_READ_TOKEN" => "ghs_readonly", "GITHUB_TOKEN" => "ghs_from_job", "GH_TOKEN" => "ghs_other" }
+    it "hands the CLI the agent's token as its only GitHub credential" do
+      env = { "AGENT_GH_TOKEN" => "ghs_readonly", "GITHUB_TOKEN" => "ghs_from_job", "GH_TOKEN" => "ghs_other" }
 
       run_provider(env:) do |result|
         expect(result[:status]).to be_success
         expect(result[:stderr]).to include("gh: read-only access")
         expect(result[:args].each_cons(2)).to include(["--settings", gh_settings])
         expect(result[:claude_env]).to include("GH_TOKEN" => "ghs_readonly", "GH_PROMPT_DISABLED" => "1")
-        expect(result[:claude_env].keys).not_to include("GITHUB_TOKEN", "GH_READ_TOKEN")
+        expect(result[:claude_env].keys).not_to include("GITHUB_TOKEN", "AGENT_GH_TOKEN")
       end
     end
 
     it "leaves the bundled settings and the environment alone without a token" do
-      run_provider(env: { "GH_READ_TOKEN" => "", "GH_TOKEN" => nil }) do |result|
+      run_provider(env: { "AGENT_GH_TOKEN" => "", "GH_TOKEN" => nil }) do |result|
         expect(result[:args].each_cons(2)).to include(
           ["--settings", File.join(SHARED_ROOT, "config", "claude-settings.json")]
         )
@@ -229,7 +229,7 @@ RSpec.describe "providers/claude.sh" do
     end
 
     it "gives way to a caller's settings" do
-      run_provider(env: { "GH_READ_TOKEN" => "ghs_readonly", "CLAUDE_SETTINGS" => '{"permissions":{}}' }) do |result|
+      run_provider(env: { "AGENT_GH_TOKEN" => "ghs_readonly", "CLAUDE_SETTINGS" => '{"permissions":{}}' }) do |result|
         expect(result[:args].each_cons(2)).to include(["--settings", '{"permissions":{}}'])
       end
     end

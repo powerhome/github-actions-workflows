@@ -21,7 +21,7 @@ prompt = ReviewPrompt.new(
   # UTF-8 prompt would raise on the first byte above ASCII.
   additional_instructions: ENV.fetch("REVIEW_ADDITIONAL_INSTRUCTIONS", "").dup.force_encoding(Encoding::UTF_8).scrub,
   incremental_diff:,
-  # Set only when the provider step gets a read-only token for gh.
+  # Set only when the provider step hands the agent a token for gh.
   gh_read_access: ENV.fetch("GH_READ_ACCESS", "false") == "true"
 )
 

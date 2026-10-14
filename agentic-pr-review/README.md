@@ -37,7 +37,7 @@ The provider adapters and comment client live in [`shared/`](../shared), beside 
 | `anthropic-service-account-id` | with a rule | Claude only. The service account the rule authenticates as (`svac_...`). |
 | `anthropic-workspace-id` | no | Claude only. Needed when the rule spans more than one workspace (`wrkspc_...`). |
 | `claude-args` | no | Claude only. Extra arguments for the `claude` CLI, split with shell quoting, as with `claude-code-action`'s `claude_args`. |
-| `gh-read-access` | no | Claude only. `true` (default) lets the agent run read-only `gh` commands for context, with a separate read-only token. See [Read-only `gh` access](#read-only-gh-access). Ignored when `claude-settings` is set. |
+| `gh-read-access` | no | Claude only. `true` (default) lets the agent run read-only `gh` commands for context, with the job's `GITHUB_TOKEN`. See [Read-only `gh` access](#read-only-gh-access). Ignored when `claude-settings` is set. |
 | `additional-prompt` | no | Extra text appended to the review prompt after `prompts/review.md`. |
 | `review-scope` | no | `auto` (default) reviews only the commits pushed since the bot's last review, falling back to a full review as described in [Follow-up reviews](#follow-up-reviews). `full` always reviews the whole PR. |
 
@@ -225,9 +225,9 @@ The CLI runs in the PR's own checkout, so the reviewed repository must not be ab
 
 With `gh-read-access` on (the default), the agent can look things up on GitHub that the checkout doesn't have. For example, when a PR bumps a pinned action SHA it can list the pull requests merged upstream between the old and new commits with `gh pr list --repo`, then read them with `gh pr view` and `gh pr diff`, to see what the new revision changes. The prompt gets a section on when and how to use it.
 
-- The action creates a second GitHub App token with only `contents: read` and `pull-requests: read`, for the current repository. Public repositories are readable with it too. Since it can't write, GitHub refuses any write the agent tries, whatever the command. The token is revoked when the job ends.
+- The commands run with the calling job's `GITHUB_TOKEN`, so they can read what that token can, plus any public repository. None of the allowed commands can write. The action posts with its App token, so the job doesn't need `pull-requests: write` for the review; granting only `read` means a write would also be refused by GitHub if one ever got past the command rules.
 - [`shared/config/claude-settings-gh-read.json`](../shared/config/claude-settings-gh-read.json) replaces the bundled settings. It allows the read-only commands `gh pr view`/`diff`/`list`, `gh issue view`/`list`, `gh repo view`, `gh release view`/`list` and `gh search`. It also explicitly denies `gh api`, which can reach any endpoint with any method, `gh auth`, `gh config`, `gh alias`, `gh extension`, clones, checkouts and downloads. Every other shell command is still refused, so the agent can't clone anything or run code.
-- That token is the only GitHub credential the CLI gets: `GITHUB_TOKEN` and any other `GH_TOKEN` are removed from its environment.
+- The job's token is the only GitHub credential the CLI gets: `GITHUB_TOKEN` and any other `GH_TOKEN` are removed from its environment.
 - Before posting, anything in the review that looks like a GitHub token is replaced with `[redacted token]`.
 - It is skipped when `claude-settings` is set (the caller decides the tools), on the `cursor` provider, and on a skipped review.
 

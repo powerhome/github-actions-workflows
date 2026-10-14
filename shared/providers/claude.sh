@@ -151,16 +151,15 @@ if [[ -n "${EFFORT:-}" ]]; then
   MODEL_ARGS+=(--effort "${EFFORT}")
 fi
 
-# With GH_READ_TOKEN the agent may run read-only gh commands to gather context, such as the
-# upstream changes behind a bumped action pin, and nothing else in a shell: no clone,
-# download or checkout, and no running code. That token is the only GitHub credential the
-# CLI gets, and whoever mints it scopes it to read access, so GitHub refuses a write
-# whatever the command.
-CLI_ENV=(-u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u GH_READ_TOKEN)
-if [[ -n "${GH_READ_TOKEN:-}" ]]; then
+# With AGENT_GH_TOKEN the agent may run gh commands that only read, to gather context such as
+# the upstream changes behind a bumped action pin, and nothing else in a shell: no gh api, no
+# clone, download or checkout, and no running code. That token is the only GitHub credential
+# the CLI gets.
+CLI_ENV=(-u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u AGENT_GH_TOKEN)
+if [[ -n "${AGENT_GH_TOKEN:-}" ]]; then
   SETTINGS_PATH="${SHARED_ROOT}/config/claude-settings-gh-read.json"
   CLI_ENV+=(-u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN)
-  CLI_ENV+=("GH_TOKEN=${GH_READ_TOKEN}" GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1)
+  CLI_ENV+=("GH_TOKEN=${AGENT_GH_TOKEN}" GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1)
   echo "[agent] gh: read-only access for context" >&2
 fi
 

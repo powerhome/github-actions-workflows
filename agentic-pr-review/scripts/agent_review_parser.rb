@@ -16,7 +16,7 @@ class AgentReviewParser
   # Hyphenated, so MARKER_PATTERN never takes it for a review summary.
   FIXED_NOTE_MARKER = "<!-- agentic-pr-review-fixed -->"
 
-  # GitHub token formats. The agent can run gh with a read-only token, so a review that
+  # GitHub token formats. The agent can run gh with the job's token, so a review that
   # quotes one, whether misled by the pull request or not, has it blanked before it is posted.
   TOKEN_PATTERN = /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})\b/
 
