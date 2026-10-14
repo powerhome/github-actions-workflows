@@ -3,7 +3,7 @@ description: Generate a profile-driven manual QA plan for a pull request and ups
 
 inputs:
   profile:
-    description: Test-plan profile (cobra-test-plan)
+    description: Test-plan profile (cobra-test-plan or test-plan)
     required: true
   app-id:
     description: GitHub App ID used to create an installation token
@@ -16,8 +16,37 @@ inputs:
     required: false
     default: cursor
   provider-api-key:
-    description: API credential for the selected provider
-    required: true
+    description: API credential for the selected provider; the claude provider can use the anthropic-* federation inputs instead
+    required: false
+    default: ""
+  anthropic-federation-rule-id:
+    description: Anthropic workload identity federation rule ID (fdrl_...). With anthropic-organization-id and anthropic-service-account-id, and in place of provider-api-key, the claude provider authenticates with the job's GitHub OIDC token, which needs the id-token write permission (claude provider only)
+    required: false
+    default: ""
+  anthropic-organization-id:
+    description: Anthropic organization ID for workload identity federation (claude provider only)
+    required: false
+    default: ""
+  anthropic-service-account-id:
+    description: Anthropic service account ID (svac_...) for workload identity federation (claude provider only)
+    required: false
+    default: ""
+  anthropic-workspace-id:
+    description: Anthropic workspace ID (wrkspc_...); required only when the federation rule spans more than one workspace (claude provider only)
+    required: false
+    default: ""
+  model:
+    description: Model passed to the provider CLI's --model flag, e.g. sonnet for Claude. Empty pins claude-sonnet-5-5-high on Cursor and uses the Claude CLI's default on Claude
+    required: false
+    default: ""
+  effort:
+    description: Claude effort level (low, medium, high, xhigh, max), passed to the claude CLI as --effort. Empty uses the CLI's default (claude provider only)
+    required: false
+    default: xhigh
+  claude-args:
+    description: Extra arguments for the claude CLI, parsed with shell quoting, e.g. --max-turns 30 (claude provider only)
+    required: false
+    default: ""
   pull-request-number:
     description: Pull request number to analyze
     required: true
@@ -29,9 +58,10 @@ inputs:
     description: >-
       Which gem changes to analyze. "umbrella" (the default) counts changes that reach the
       root Gemfile.lock, recording component-only gem changes as skipped; "all" analyzes
-      those too. It does not govern Yarn: every changed yarn.lock is analyzed under both
-      values, because a component's UI code is served by the deployed application. A
-      Playbook change is always analyzed, wherever its lockfile lives.
+      those too. It does not govern Yarn or npm: every changed yarn.lock and
+      package-lock.json is analyzed under both values, because a component's UI code is
+      served by the deployed application. A Playbook change is always analyzed, wherever
+      its lockfile lives. Lockfiles under vendor/ or node_modules/ are never analyzed.
     required: false
     default: umbrella
 
@@ -48,7 +78,7 @@ runs:
 
     - name: Create GitHub App token
       id: app_token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
       with:
         # client-id, not the deprecated app-id: the action resolves both to one value and
         # hands it to Octokit as the JWT issuer, so the existing App ID secret still works.
@@ -199,9 +229,12 @@ runs:
       env:
         BASE_SHA: ${{ steps.pr_metadata.outputs.base_sha }}
         HEAD_SHA: ${{ steps.pr_metadata.outputs.head_sha }}
+        # Outside the workspace, which the pull request controls.
+        PR_FILES_PATH: ${{ runner.temp }}/pr-files.txt
       run: |
         set -euo pipefail
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
+        git -c core.quotePath=false diff --name-only "${BASE_SHA}...${HEAD_SHA}" > "${PR_FILES_PATH}"
 
     - name: Build external dependency delta
       id: dependency_delta
@@ -250,15 +283,22 @@ runs:
       env:
         PROVIDER: ${{ inputs.provider }}
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
+        ANTHROPIC_FEDERATION_RULE_ID: ${{ inputs.anthropic-federation-rule-id }}
+        ANTHROPIC_ORGANIZATION_ID: ${{ inputs.anthropic-organization-id }}
+        ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ inputs.anthropic-service-account-id }}
+        ANTHROPIC_WORKSPACE_ID: ${{ inputs.anthropic-workspace-id }}
         AGENT_OUTPUT_PATH: ${{ github.workspace }}/test-plan-agent.json
         AGENT_PROMPT_PATH: ${{ steps.variant.outputs.prompt_path }}
-        # Pinned rather than left to the provider's default, which timed out on the
-        # cobra-test-plan profile. Set here, not inherited: a composite step takes the
-        # caller's job env, so a job-level MODEL would otherwise pick the model. The slug is
-        # Cursor's, so Claude keeps its own default.
-        MODEL: ${{ inputs.provider == 'cursor' && 'claude-sonnet-5-5-high' || '' }}
+        AGENT_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        AGENT_CHANGED_FILES_PATH: ${{ runner.temp }}/pr-files.txt
+        # The caller's model, or else Cursor is pinned rather than left to its default,
+        # which timed out on the cobra-test-plan profile. Set here, not inherited: a
+        # composite step takes the caller's job env, so a job-level MODEL would otherwise
+        # pick the model. The pinned slug is Cursor's, so Claude keeps its own default.
+        MODEL: ${{ inputs.model || (inputs.provider == 'cursor' && 'claude-sonnet-5-5-high' || '') }}
         CLAUDE_SETTINGS: ""
-        CLAUDE_ARGS: ""
+        EFFORT: ${{ inputs.effort }}
+        CLAUDE_ARGS: ${{ inputs.claude-args }}
       run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
 
     - name: Upload test-plan artifacts
@@ -268,11 +308,12 @@ runs:
       # service error would otherwise skip the render and the comment, throwing away a
       # provider result that has already been paid for.
       continue-on-error: true
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: ${{ steps.profile.outputs.artifact_name }}
         path: |
           ${{ github.workspace }}/test-plan-agent.json
+          ${{ github.workspace }}/pr.diff
           ${{ github.workspace }}/dependency-delta-manifest.json
           ${{ runner.temp }}/dependency-deltas-full.diff
           ${{ github.workspace }}/dependency-deltas-context.diff
@@ -288,6 +329,7 @@ runs:
         TEST_PLAN_JSON_PATH: ${{ github.workspace }}/test-plan-agent.json
         TEST_PLAN_COMMENT_PATH: ${{ github.workspace }}/test-plan-comment.md
         TEST_PLAN_PROFILE_NAME: ${{ steps.profile.outputs.display_name }}
+        TEST_PLAN_ACCESS: ${{ steps.profile.outputs.access }}
         TEST_PLAN_GENERATION_WARNING: ${{ steps.dependency_delta.outputs.generation_warning }}
         TEST_PLAN_VARIANT: ${{ steps.variant.outputs.name }}
         DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json

@@ -48,8 +48,6 @@ mkdir -p .cursor
 rm -rf -- .cursor/cli-config.json
 cp "${CLI_CONFIG_TEMPLATE}" .cursor/cli-config.json
 
-PROMPT="$(cat "${AGENT_PROMPT_PATH}")"
-
 MODEL_ARGS=()
 if [[ -n "${MODEL:-}" ]]; then
   MODEL_ARGS+=(--model "${MODEL}")
@@ -60,11 +58,14 @@ echo "[agent] provider: cursor" >&2
 clear_agent_output
 
 # --trust is required because the headless agent otherwise refuses the workspace.
-# Read-only CLI permissions are copied from config/cursor-cli-config.json. The empty-array
-# expansion is spelled out because bash before 4.4 treats "${MODEL_ARGS[@]}" on an empty
-# array as unbound under set -u.
+# Read-only CLI permissions are copied from config/cursor-cli-config.json. run_agent sends
+# the prompt on stdin. The empty-array expansion is spelled out because bash before 4.4
+# treats "${MODEL_ARGS[@]}" on an empty array as unbound under set -u.
+invoke_cursor() {
+  agent --print --trust --output-format text ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"}
+}
+
 status=0
-agent --print --trust --output-format text ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"} "${PROMPT}" \
-  >"${AGENT_OUTPUT_PATH}" || status=$?
+run_agent invoke_cursor || status=$?
 
 check_agent_output cursor "${status}"

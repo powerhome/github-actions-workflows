@@ -13,8 +13,25 @@ inputs:
     required: false
     default: cursor
   provider-api-key:
-    description: API credential for the selected provider (Cursor maps this to CURSOR_API_KEY, Claude to ANTHROPIC_API_KEY)
-    required: true
+    description: API credential for the selected provider (Cursor maps this to CURSOR_API_KEY, Claude to ANTHROPIC_API_KEY); the claude provider can use the anthropic-* federation inputs instead
+    required: false
+    default: ""
+  anthropic-federation-rule-id:
+    description: Anthropic workload identity federation rule ID (fdrl_...). With anthropic-organization-id and anthropic-service-account-id, and in place of provider-api-key, the claude provider authenticates with the job's GitHub OIDC token, which needs the id-token write permission (claude provider only)
+    required: false
+    default: ""
+  anthropic-organization-id:
+    description: Anthropic organization ID for workload identity federation (claude provider only)
+    required: false
+    default: ""
+  anthropic-service-account-id:
+    description: Anthropic service account ID (svac_...) for workload identity federation (claude provider only)
+    required: false
+    default: ""
+  anthropic-workspace-id:
+    description: Anthropic workspace ID (wrkspc_...); required only when the federation rule spans more than one workspace (claude provider only)
+    required: false
+    default: ""
   pull-request-number:
     description: Pull request number to review
     required: true
@@ -26,6 +43,10 @@ inputs:
     description: Model to use for the review (passed to the provider CLI)
     required: false
     default: ""
+  effort:
+    description: Claude effort level (low, medium, high, xhigh, max), passed to the claude CLI as --effort. Empty uses the CLI's default (claude provider only)
+    required: false
+    default: xhigh
   claude-settings:
     description: Claude Code settings that replace the bundled read-only shared/config/claude-settings.json, as a file path relative to the workspace or a JSON string (claude provider only)
     required: false
@@ -48,7 +69,7 @@ runs:
   steps:
     - name: Create GitHub App token
       id: app_token
-      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
       with:
         # client-id, not the deprecated app-id: the action resolves both to one value and
         # hands it to Octokit as the JWT issuer, so the existing App ID secret still works.
@@ -150,12 +171,15 @@ runs:
         LAST_REVIEWED_SHA: ${{ steps.scope.outputs.last_reviewed_sha }}
         PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
         PR_INCREMENTAL_DIFF_PATH: ${{ github.workspace }}/pr-incremental.diff
+        # Outside the workspace, which the pull request controls.
+        PR_FILES_PATH: ${{ runner.temp }}/pr-files.txt
       # The workspace is the pull-request head, so it may already hold a symlink named
       # pr.diff or pr-incremental.diff, and a redirect follows one. rm -rf unlinks it instead.
       run: |
         set -euo pipefail
         rm -rf -- "${PR_DIFF_PATH}" "${PR_INCREMENTAL_DIFF_PATH}"
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${PR_DIFF_PATH}"
+        git -c core.quotePath=false diff --name-only "${BASE_SHA}...${HEAD_SHA}" > "${PR_FILES_PATH}"
         if [[ "${REVIEW_MODE}" == "incremental" ]]; then
           git diff "${LAST_REVIEWED_SHA}" "${HEAD_SHA}" > "${PR_INCREMENTAL_DIFF_PATH}"
         fi
@@ -179,6 +203,7 @@ runs:
         REVIEW_PROMPT_PATH: ${{ github.action_path }}/prompts/review.md
         REVIEW_ADDITIONAL_INSTRUCTIONS: ${{ inputs.additional-prompt }}
         REVIEW_CONTEXT_PATH: ${{ runner.temp }}/agentic-pr-review-context.json
+        PR_INCREMENTAL_DIFF_PATH: ${{ github.workspace }}/pr-incremental.diff
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
       run: ruby "${{ github.action_path }}/scripts/compose_prompt.rb"
 
@@ -188,16 +213,23 @@ runs:
       env:
         PROVIDER: ${{ inputs.provider }}
         PROVIDER_API_KEY: ${{ inputs.provider-api-key }}
+        ANTHROPIC_FEDERATION_RULE_ID: ${{ inputs.anthropic-federation-rule-id }}
+        ANTHROPIC_ORGANIZATION_ID: ${{ inputs.anthropic-organization-id }}
+        ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ inputs.anthropic-service-account-id }}
+        ANTHROPIC_WORKSPACE_ID: ${{ inputs.anthropic-workspace-id }}
         MODEL: ${{ inputs.model }}
+        EFFORT: ${{ inputs.effort }}
         CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
+        AGENT_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        AGENT_CHANGED_FILES_PATH: ${{ runner.temp }}/pr-files.txt
         AGENT_OUTPUT_PATH: ${{ github.workspace }}/review-agent.json
       run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
 
     - name: Upload agent review JSON
       if: steps.scope.outputs.mode != 'skip'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: agentic-pr-review-json
         path: ${{ github.workspace }}/review-agent.json

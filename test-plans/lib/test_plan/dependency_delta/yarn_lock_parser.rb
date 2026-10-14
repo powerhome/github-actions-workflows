@@ -1,18 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "./package_record"
+
 module TestPlan
   module DependencyDelta
-    # `name` is the package the lockfile actually installed, which is what evidence has
-    # to be fetched for. `alias` is the name the manifest asked for, which is what a
-    # package.json dependency or a workspace member is listed under. For everything
-    # except an npm alias the two are the same.
-    YarnRecord = Struct.new(:name, :alias, :version, :resolved, :integrity, keyword_init: true) do
-      def initialize(**attributes)
-        super
-        self.alias ||= name
-      end
-    end
-
     class YarnLockParser
       def initialize(content)
         @content = content.to_s
@@ -28,7 +19,7 @@ module TestPlan
         flush = lambda do
           package_names(selectors).each do |requested, installed|
             if version
-              output << YarnRecord.new(
+              output << PackageRecord.new(
                 name: installed,
                 alias: requested,
                 version:,

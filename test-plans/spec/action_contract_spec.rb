@@ -9,10 +9,13 @@ RSpec.describe "test-plans/action.yml" do
   let(:action) { YAML.safe_load_file(action_path, aliases: true) }
   let(:steps) { action.fetch("runs").fetch("steps") }
 
-  it "exposes profiles but not caller-controlled prompts or models" do
+  it "exposes profiles, a model, effort, and Claude args but not caller-controlled prompts" do
     inputs = action.fetch("inputs")
-    expect(inputs).to include("profile", "provider-api-key", "pull-request-number")
-    expect(inputs).not_to include("additional-prompt", "model")
+    expect(inputs).to include("profile", "provider-api-key", "pull-request-number", "model", "effort", "claude-args")
+    expect(inputs.fetch("model").fetch("default")).to eq("")
+    expect(inputs.fetch("effort").fetch("default")).to eq("xhigh")
+    expect(inputs.fetch("claude-args").fetch("default")).to eq("")
+    expect(inputs).not_to include("additional-prompt")
   end
 
   it "checks mergeability before checkout, dependency retrieval, or provider usage" do
@@ -61,13 +64,14 @@ RSpec.describe "test-plans/action.yml" do
   end
 
   # A composite step inherits the caller's job env, so these are set rather than omitted.
-  it "pins the Cursor model and leaves Claude's settings to the provider" do
+  it "takes model, effort, and Claude args from inputs, pins Cursor's fallback, and keeps bundled settings" do
     provider_step = steps.find { |step| step.fetch("name") == "Run test-plan provider" }
     env = provider_step.fetch("env")
 
+    expect(env.fetch("MODEL")).to start_with("${{ inputs.model || ")
     expect(env.fetch("MODEL")).to include("inputs.provider == 'cursor'", "claude-sonnet-5-5-high")
-    %w[CLAUDE_SETTINGS CLAUDE_ARGS].each do |name|
-      expect(env.fetch(name)).to eq("")
-    end
+    expect(env.fetch("EFFORT")).to eq("${{ inputs.effort }}")
+    expect(env.fetch("CLAUDE_ARGS")).to eq("${{ inputs.claude-args }}")
+    expect(env.fetch("CLAUDE_SETTINGS")).to eq("")
   end
 end

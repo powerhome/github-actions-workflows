@@ -14,6 +14,9 @@ module TestPlan
       failure_comment_tag
       artifact_name
     ].freeze
+    # How a plan tells the tester who to be: Consent Subject/Action pairs, or a plain
+    # account to sign in as where the application has no Consent.
+    ACCESS_MODELS = %w[consent sign_in].freeze
 
     attr_reader :attributes, :action_root
 
@@ -58,6 +61,10 @@ module TestPlan
         raise "Test-plan profile id is invalid: #{attributes.fetch("id").inspect}"
       end
 
+      unless ACCESS_MODELS.include?(access)
+        raise "Test-plan profile access must be one of #{ACCESS_MODELS.join(", ")}: #{access.inspect}"
+      end
+
       prompt_path
       playbook_prompt_path
       dependency_prompt_path
@@ -70,6 +77,10 @@ module TestPlan
 
     def display_name
       attributes.fetch("display_name")
+    end
+
+    def access
+      attributes.fetch("access", "consent")
     end
 
     def comment_tag
@@ -110,6 +121,7 @@ module TestPlan
       {
         "profile_id" => id,
         "display_name" => display_name,
+        "access" => access,
         "comment_tag" => comment_tag,
         "status_comment_tag" => status_comment_tag,
         "failure_comment_tag" => failure_comment_tag,

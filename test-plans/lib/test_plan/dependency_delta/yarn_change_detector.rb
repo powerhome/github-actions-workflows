@@ -5,12 +5,19 @@ require_relative "./yarn_lock_parser"
 
 module TestPlan
   module DependencyDelta
+    # A package-lock.json is the same registry packages once parsed, so npm shares this
+    # detector under its own ecosystem name.
     class YarnChangeDetector
+      def initialize(ecosystem: "yarn", parser: YarnLockParser)
+        @ecosystem = ecosystem
+        @parser = parser
+      end
+
       def detect(path:, old_content:, new_content:, direct_names:, workspace_names:)
         return [] unless old_content && new_content
 
-        old_by_name = YarnLockParser.new(old_content).records.group_by(&:name)
-        new_by_name = YarnLockParser.new(new_content).records.group_by(&:name)
+        old_by_name = @parser.new(old_content).records.group_by(&:name)
+        new_by_name = @parser.new(new_content).records.group_by(&:name)
 
         new_by_name.flat_map do |name, new_records|
           # Grouped by the installed package, whose evidence is fetched; a manifest lists
@@ -20,7 +27,8 @@ module TestPlan
 
           old_records = old_by_name.fetch(name, [])
           direct = aliases.any? { |requested| direct_names.include?(requested) }
-          version_changes(path, name, old_records, new_records, direct) +
+          (version_changes(path, name, old_records, new_records, direct) +
+            install_changes(path, name, old_records, new_records, direct_names, direct)).uniq(&:key) +
             git_changes(path, name, old_records, new_records, direct) +
             mixed_source_changes(path, name, old_records, new_records, direct)
         end
@@ -44,22 +52,48 @@ module TestPlan
           new_record = new_records.find { |record| record.version == new_version }
           next if git_locator?(old_record&.resolved) || git_locator?(new_record&.resolved)
 
-          Change.new(
-            ecosystem: "yarn",
-            name:,
-            old_version:,
-            new_version:,
-            source: "npm",
-            old_locator: old_record&.resolved,
-            new_locator: new_record&.resolved,
-            old_integrity: old_record&.integrity,
-            new_integrity: new_record&.integrity,
-            direct:,
-            lockfiles: [path]
-          )
+          registry_change(path, name, old_record, new_record, direct)
         rescue ArgumentError
           nil
         end
+      end
+
+      # The version sets miss an upgrade to a version another copy already had: widget
+      # 1.0.0 -> 2.0.0 at the top level, beside a nested 2.0.0, adds no version. npm says
+      # where each copy is installed, so a copy whose version changed in place counts too
+      # -- when it is the copy a direct dependency resolves to, or its old version is gone.
+      # Otherwise hoisting only moved versions that were installed before and after.
+      def install_changes(path, name, old_records, new_records, direct_names, direct)
+        old_by_path = old_records.select(&:path).to_h { |record| [record.path, record] }
+        new_versions = new_records.map(&:version)
+
+        new_records.filter_map do |new_record|
+          old_record = old_by_path[new_record.path] if new_record.path
+          next unless old_record && old_record.version != new_record.version
+          next if git_locator?(old_record.resolved) || git_locator?(new_record.resolved)
+
+          resolved_directly = direct_names.include?(new_record.alias) &&
+                              new_record.path == "node_modules/#{new_record.alias}"
+          next unless resolved_directly || !new_versions.include?(old_record.version)
+
+          registry_change(path, name, old_record, new_record, direct)
+        end
+      end
+
+      def registry_change(path, name, old_record, new_record, direct)
+        Change.new(
+          ecosystem: @ecosystem,
+          name:,
+          old_version: old_record.version,
+          new_version: new_record.version,
+          source: "npm",
+          old_locator: old_record.resolved,
+          new_locator: new_record.resolved,
+          old_integrity: old_record.integrity,
+          new_integrity: new_record.integrity,
+          direct:,
+          lockfiles: [path]
+        )
       end
 
       def git_changes(path, name, old_records, new_records, direct)
@@ -70,7 +104,7 @@ module TestPlan
           next if old_record.resolved == new_record.resolved
 
           Change.new(
-            ecosystem: "yarn",
+            ecosystem: @ecosystem,
             name:,
             old_version: git_revision(old_record.resolved),
             new_version: git_revision(new_record.resolved),
@@ -128,7 +162,7 @@ module TestPlan
         new_record = new_records.last
         [
           Change.new(
-            ecosystem: "yarn",
+            ecosystem: @ecosystem,
             name:,
             old_version: old_git ? git_revision(old_record.resolved) : old_record.version,
             new_version: new_git ? git_revision(new_record.resolved) : new_record.version,

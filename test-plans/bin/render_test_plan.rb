@@ -16,6 +16,7 @@ begin
   pull_request_title = ENV.fetch("PULL_REQUEST_TITLE", "")
   profile_name = ENV.fetch("TEST_PLAN_PROFILE_NAME", "Test Plan")
   generation_warning = ENV.fetch("TEST_PLAN_GENERATION_WARNING", "")
+  access = ENV.fetch("TEST_PLAN_ACCESS", "consent")
 
   # The choice the provider step was given, so the plan is rendered in the shape it was
   # asked for rather than whichever one the response resembles.
@@ -46,8 +47,8 @@ begin
       parsed:, manifest: read_manifest.call, **options
     ).render
   else
-    parsed = TestPlan::Response::StandardParser.parse_file(json_path)
-    comment = TestPlan::Output::StandardFormatter.new(parsed:, **options).render
+    parsed = TestPlan::Response::StandardParser.parse_file(json_path, access:)
+    comment = TestPlan::Output::StandardFormatter.new(parsed:, access:, **options).render
   end
 
   File.write(comment_path, comment, encoding: Encoding::UTF_8)

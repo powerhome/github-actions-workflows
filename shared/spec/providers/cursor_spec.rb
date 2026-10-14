@@ -13,6 +13,7 @@ RSpec.describe "providers/cursor.sh" do
     <<~AGENT
       #!/usr/bin/env bash
       printf '%s\\n' "$@" > "#{args_path}"
+      cat > "#{args_path}.stdin"
       case "${AGENT_MODE}" in
         ok)     echo '{"permissions":{"required":"no"}}' ;;
         empty)  : ;;
@@ -57,6 +58,7 @@ RSpec.describe "providers/cursor.sh" do
         stderr:,
         output: File.exist?(json_path) ? File.read(json_path) : nil,
         agent_args: File.exist?(args_path) ? File.read(args_path).split("\n") : [],
+        prompt: File.exist?("#{args_path}.stdin") ? File.read("#{args_path}.stdin") : nil,
         workspace:
       )
     end
@@ -67,6 +69,8 @@ RSpec.describe "providers/cursor.sh" do
       expect(result[:status]).to be_success
       expect(result[:output]).to include('"permissions"')
       expect(result[:agent_args]).not_to include("--model")
+      expect(result[:agent_args]).not_to include("Generate a plan.")
+      expect(result[:prompt]).to eq("Generate a plan.")
       expect(result[:stderr]).to include("provider: cursor")
     end
   end

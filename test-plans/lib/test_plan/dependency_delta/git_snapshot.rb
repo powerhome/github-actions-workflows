@@ -7,7 +7,7 @@ require_relative "../command_output"
 module TestPlan
   module DependencyDelta
     class GitSnapshot
-      DEPENDENCY_FILENAMES = %w[Gemfile.lock yarn.lock package.json].freeze
+      DEPENDENCY_FILENAMES = %w[Gemfile.lock yarn.lock package-lock.json package.json].freeze
 
       # A trailing-substring test also accepts "my-package.json" or "custom-Gemfile", which
       # are unrelated files. Names have to match a whole path segment; ".gemspec" stays an
