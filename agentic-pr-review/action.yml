@@ -56,7 +56,7 @@ inputs:
     required: false
     default: ""
   gh-read-access:
-    description: Let the agent run read-only gh commands, such as gh api and gh pr view, to gather context like the upstream changes behind a bumped action pin. It gets a separate GitHub App token limited to reading contents and pull requests, and no other shell commands. Ignored when claude-settings is set (claude provider only)
+    description: Let the agent run read-only gh commands, such as gh pr view and gh pr diff, to gather context like the upstream changes behind a bumped action pin. It gets a separate GitHub App token limited to reading contents and pull requests, and no other shell commands. Ignored when claude-settings is set (claude provider only)
     required: false
     default: "true"
   additional-prompt:

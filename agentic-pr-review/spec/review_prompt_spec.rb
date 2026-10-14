@@ -22,9 +22,9 @@ RSpec.describe ReviewPrompt do
   it "explains the gh commands only when the agent can run them" do
     text = described_class.new(base:, context: { "mode" => "full" }, gh_read_access: true).to_s
 
-    expect(text).to include("## Reading GitHub with `gh`", "gh api repos/owner/repo/compare/<old>...<new>")
+    expect(text).to include("## Reading GitHub with `gh`", "gh pr list --repo owner/repo --state merged")
     expect(text).to end_with(described_class::REMINDER)
-    expect(prompt({ "mode" => "full" })).not_to include("gh api")
+    expect(prompt({ "mode" => "full" })).not_to include("gh pr")
   end
 
   it "is the base prompt alone on a first full review" do

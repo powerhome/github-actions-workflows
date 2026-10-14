@@ -238,12 +238,13 @@ RSpec.describe "providers/claude.sh" do
     it "allows only gh read commands in a shell" do
       permissions = JSON.parse(File.read(gh_settings)).fetch("permissions")
       bash = permissions.fetch("allow").grep(/\ABash/)
-      reads = /\ABash\(gh (api|issue (list|view)|pr (diff|list|view)|release (list|view)|repo view|search):\*\)\z/
+      reads = /\ABash\(gh (issue (list|view)|pr (diff|list|view)|release (list|view)|repo view|search):\*\)\z/
 
       expect(bash).to all(match(reads))
       expect(permissions.fetch("allow")).not_to include("Bash")
       expect(permissions.fetch("deny")).to include(
-        "Bash(gh auth:*)", "Bash(gh repo clone:*)", "Edit", "Write", "WebFetch", "WebSearch", "Read(//proc/**)"
+        "Bash(gh api:*)", "Bash(gh auth:*)", "Bash(gh repo clone:*)",
+        "Edit", "Write", "WebFetch", "WebSearch", "Read(//proc/**)"
       )
       expect(JSON.parse(File.read(gh_settings))).to include("disableAllHooks" => true)
     end

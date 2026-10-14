@@ -223,10 +223,10 @@ The CLI runs in the PR's own checkout, so the reviewed repository must not be ab
 
 ### Read-only `gh` access
 
-With `gh-read-access` on (the default), the agent can look things up on GitHub that the checkout doesn't have. For example, when a PR bumps a pinned action SHA it can run `gh api repos/<owner>/<repo>/compare/<old>...<new>` to see what the new revision changes. The prompt gets a section on when and how to use it.
+With `gh-read-access` on (the default), the agent can look things up on GitHub that the checkout doesn't have. For example, when a PR bumps a pinned action SHA it can list the pull requests merged upstream between the old and new commits with `gh pr list --repo`, then read them with `gh pr view` and `gh pr diff`, to see what the new revision changes. The prompt gets a section on when and how to use it.
 
 - The action creates a second GitHub App token with only `contents: read` and `pull-requests: read`, for the current repository. Public repositories are readable with it too. Since it can't write, GitHub refuses any write the agent tries, whatever the command. The token is revoked when the job ends.
-- [`shared/config/claude-settings-gh-read.json`](../shared/config/claude-settings-gh-read.json) replaces the bundled settings. It allows the read-only commands `gh api`, `gh pr view`/`diff`/`list`, `gh issue view`/`list`, `gh repo view`, `gh release view`/`list` and `gh search`. It also explicitly denies `gh auth`, `gh config`, `gh alias`, `gh extension`, clones, checkouts and downloads. Every other shell command is still refused, so the agent can't clone anything or run code.
+- [`shared/config/claude-settings-gh-read.json`](../shared/config/claude-settings-gh-read.json) replaces the bundled settings. It allows the read-only commands `gh pr view`/`diff`/`list`, `gh issue view`/`list`, `gh repo view`, `gh release view`/`list` and `gh search`. It also explicitly denies `gh api`, which can reach any endpoint with any method, `gh auth`, `gh config`, `gh alias`, `gh extension`, clones, checkouts and downloads. Every other shell command is still refused, so the agent can't clone anything or run code.
 - That token is the only GitHub credential the CLI gets: `GITHUB_TOKEN` and any other `GH_TOKEN` are removed from its environment.
 - Before posting, anything in the review that looks like a GitHub token is replaced with `[redacted token]`.
 - It is skipped when `claude-settings` is set (the caller decides the tools), on the `cursor` provider, and on a skipped review.
