@@ -4,9 +4,9 @@
 require_relative "agent_review_parser"
 require_relative "github_api"
 
-# What the bot has already said on a pull request: the head SHA its latest review covered,
-# and the inline comment threads it opened. Everything comes from the pull request itself,
-# so nothing is stored anywhere else between runs.
+# What has already been said on a pull request: the head SHA the bot's latest review covered,
+# the inline threads it opened and the replies to them, and what people said elsewhere on it.
+# Everything comes from the pull request itself, so nothing is stored anywhere else between runs.
 class ReviewHistory
   THREADS_QUERY = <<~GRAPHQL
     query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
@@ -20,7 +20,7 @@ class ReviewHistory
               path
               line
               resolvedBy { __typename login }
-              comments(first: 1) {
+              comments(first: 50) {
                 nodes { databaseId url body author { __typename login } }
               }
             }
@@ -29,6 +29,11 @@ class ReviewHistory
       }
     }
   GRAPHQL
+
+  # Comment bodies go into the prompt, so each is cut short, and a long thread keeps its
+  # latest replies.
+  MAX_BODY = 2000
+  MAX_REPLIES = 20
 
   def initialize(api:, owner:, repo:, pr_number:, app_slug:)
     @api = api
@@ -54,9 +59,10 @@ class ReviewHistory
   #   "status"  -- "open"; "resolved" when the bot itself resolved it, so its fix is known;
   #                or "dismissed" when someone else did, which may mean "won't fix"
   #   "line"    -- the thread's line on the current head, or nil once that code has changed
+  #   "replies" -- what people answered, e.g. "this is intentional"; the bot's own are left out
   def bot_threads
     @bot_threads ||= review_threads.filter_map do |thread|
-      root = thread.dig("comments", "nodes", 0)
+      root, *replies = thread_comments(thread)
       next unless root && bot?(root["author"])
 
       {
@@ -66,12 +72,53 @@ class ReviewHistory
         "status" => thread_status(thread),
         "path" => thread["path"],
         "line" => thread["line"],
-        "body" => root["body"].to_s,
+        "body" => excerpt(root["body"]),
+        "replies" => people_comments(replies).last(MAX_REPLIES),
       }
     end
   end
 
+  # Inline threads a person started, oldest first, with what people said in each. Other
+  # bots' threads are left out: they are tooling output, not review discussion.
+  def people_threads
+    review_threads.filter_map do |thread|
+      root, = thread_comments(thread)
+      next unless root && person?(root["author"])
+
+      {
+        "status" => thread["isResolved"] ? "resolved" : "open",
+        "path" => thread["path"],
+        "line" => thread["line"],
+        "comments" => people_comments(thread_comments(thread)).last(MAX_REPLIES),
+      }
+    end
+  end
+
+  # General comments on the pull request from people, oldest first. The bot's status and
+  # failure comments, and other bots' comments, are left out.
+  def people_comments_on_pull_request
+    people_comments(
+      @api.get_all("/repos/#{@owner}/#{@repo}/issues/#{@pr_number}/comments")
+          .map { |comment| { "author" => comment["user"], "body" => comment["body"] } }
+    )
+  end
+
 private
+
+  def thread_comments(thread)
+    Array(thread.dig("comments", "nodes"))
+  end
+
+  def people_comments(comments)
+    comments.select { |comment| person?(comment["author"]) }.map do |comment|
+      { "author" => comment.dig("author", "login") || "ghost", "body" => excerpt(comment["body"]) }
+    end
+  end
+
+  def excerpt(body)
+    body = body.to_s
+    body.length > MAX_BODY ? "#{body[0, MAX_BODY]}…" : body
+  end
 
   def bot_reviews
     @api.get_all("/repos/#{@owner}/#{@repo}/pulls/#{@pr_number}/reviews")
@@ -80,6 +127,10 @@ private
   end
 
   def review_threads
+    @review_threads ||= fetch_review_threads
+  end
+
+  def fetch_review_threads
     threads = []
     cursor = nil
 
@@ -108,5 +159,10 @@ private
 
     type = actor["type"] || actor["__typename"]
     type == "Bot" && actor["login"].to_s.delete_suffix("[bot]") == @app_slug
+  end
+
+  # A deleted account comes back as a null author, which is still a person.
+  def person?(actor)
+    actor.nil? || (actor["type"] || actor["__typename"]) != "Bot"
   end
 end

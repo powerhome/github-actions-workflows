@@ -7,14 +7,14 @@ require_relative "github_api"
 require_relative "review_history"
 require_relative "review_scope"
 
-# Reads what the bot already said on the pull request, picks the review's scope, and writes
+# Reads what was already said on the pull request, picks the review's scope, and writes
 # both to REVIEW_CONTEXT_PATH for the prompt and posting steps. Runs before the checkout's
 # credential is removed, so it can still fetch the last-reviewed commit.
 
-# Earlier comment bodies go into the prompt, so a long-running pull request is capped at its
-# most recent threads, each cut short.
+# Earlier comments go into the prompt, so a long-running pull request is capped at its most
+# recent threads and comments. ReviewHistory cuts each body short.
 MAX_FINDINGS = 100
-MAX_FINDING_BODY = 2000
+MAX_DISCUSSION = 100
 SHA_PATTERN = /\A[0-9a-f]{40}\z/
 
 def commit_present?(sha)
@@ -35,9 +35,7 @@ end
 
 def findings_for_prompt(threads)
   threads.last(MAX_FINDINGS).each_with_index.map do |thread, index|
-    body = thread["body"]
-    body = "#{body[0, MAX_FINDING_BODY]}…" if body.length > MAX_FINDING_BODY
-    thread.merge("key" => "F#{index + 1}", "body" => body)
+    thread.merge("key" => "F#{index + 1}")
   end
 end
 
@@ -63,7 +61,12 @@ scope = ReviewScope.decide(
 warn "[plan_review] #{scope.mode}: #{scope.reason}"
 
 findings = scope.skip? ? [] : findings_for_prompt(history.bot_threads)
-warn "[plan_review] #{findings.size} earlier finding(s) on the pull request"
+discussion = {
+  "threads" => scope.skip? ? [] : history.people_threads.last(MAX_DISCUSSION),
+  "comments" => scope.skip? ? [] : history.people_comments_on_pull_request.last(MAX_DISCUSSION),
+}
+warn "[plan_review] #{findings.size} earlier finding(s), #{discussion["threads"].size} inline thread(s) and " \
+     "#{discussion["comments"].size} comment(s) from people on the pull request"
 
 File.write(
   ENV.fetch("REVIEW_CONTEXT_PATH"),
@@ -72,7 +75,8 @@ File.write(
     "reason" => scope.reason,
     "head_sha" => head_sha,
     "last_reviewed_sha" => scope.last_reviewed_sha,
-    "findings" => findings
+    "findings" => findings,
+    "discussion" => discussion
   )
 )
 

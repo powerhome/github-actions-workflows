@@ -8,7 +8,7 @@ Runs a headless review agent against the **merge-base diff** for a pull request,
 2. Loads PR metadata via the GitHub API to resolve the PR base/head refs.
 3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, decides the [review scope](#follow-up-reviews), removes the checkout's credential from `.git/config`, and writes `pr.diff` (`base...head` three-dot diff), plus `pr-incremental.diff` (`last-reviewed..head`) on a follow-up review.
    Agent-instruction files — `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `.cursor/` and `.claude/` directories at any depth — are then reset to the merge base, so a PR cannot instruct its own reviewer. Their changes are still in `pr.diff` and reviewed like any other.
-4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md`, the bot's earlier findings, and any **additional prompt** text. On a follow-up review, `pr-incremental.diff` is included in the prompt too. The list of changed files and the whole of `pr.diff` are appended to the prompt, which goes to the CLI on stdin, so the agent cannot review only the part of the diff it chose to open. If the CLI reports the prompt too long for the model's context, the run is retried once with the diff left in `pr.diff` for the agent to page through.
+4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md`, the bot's earlier findings, what people have said on the PR, and any **additional prompt** text. On a follow-up review, `pr-incremental.diff` is included in the prompt too. The list of changed files and the whole of `pr.diff` are appended to the prompt, which goes to the CLI on stdin, so the agent cannot review only the part of the diff it chose to open. If the CLI reports the prompt too long for the model's context, the run is retried once with the diff left in `pr.diff` for the agent to page through.
 5. Parses the agent's JSON output, drops comments that repeat an open finding (or, on a follow-up review, fall outside the new changes), posts a review on the PR head commit, and resolves earlier threads the agent reports as fixed.
 
 Artifacts: uploads `review-agent.json` from the workspace when present (for debugging).
@@ -159,11 +159,13 @@ Only reviews posted by the GitHub App the action authenticates as count, so a ma
 
 On an incremental review the agent gets both diffs. It reviews `pr-incremental.diff` but can read `pr.diff` and the rest of the code as context, so it can still catch a new change that breaks older code. Inline comments are only posted on lines that the incremental diff adds **and** the pull request itself changes; anything else is dropped and logged. That second condition keeps out changes merged in from the base branch.
 
-On every review, full or incremental, the agent also gets the bot's earlier inline threads (the most recent 100):
+On every review, full or incremental, the agent also gets the bot's earlier inline threads (the most recent 100) with the replies people left on them, plus what people have said on the PR: the inline threads they started and their general comments (the most recent 100 of each). Comments from other bots, and the bot's own status comments, are left out. Each comment body is cut at 2,000 characters, and a thread keeps its latest 20 comments.
 
-- **No duplicates.** It is told not to re-raise a finding a thread already covers. As a backstop, a new comment on the same line as one of the bot's open threads is dropped.
+- **No duplicates.** It is told not to re-raise a finding that one of its threads, or a person's comment, already covers, and to accept a reply that explains the code is intentional. As a backstop, a new comment on the same line as one of the bot's open threads is dropped.
 - **Fixed findings are resolved.** The agent lists the open threads whose issue is fixed. The bot replies to each one ("looks addressed as of `<sha>`") and resolves it.
 - **Regressions are re-raised.** If an issue the bot resolved has come back, the agent raises it again, and the new comment links the original thread. A thread someone else resolved counts as dismissed and is never re-raised.
+
+Anyone who can comment on the PR writes that text, so it goes into the prompt as JSON between randomly named markers, labelled as data rather than instructions. Its effect is limited anyway: the agent can only resolve the bot's own open threads, only after the review has posted, and a reply claiming a fix still has to be checked against the code.
 
 ## Status comments
 

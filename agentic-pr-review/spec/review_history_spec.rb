@@ -61,8 +61,8 @@ RSpec.describe ReviewHistory do
     end
   end
 
-  describe "#bot_threads" do
-    def thread(id, author:, resolved: false, resolved_by: nil, line: 5)
+  describe "review threads" do
+    def thread(id, author:, resolved: false, resolved_by: nil, line: 5, replies: [])
       {
         "id" => id,
         "isResolved" => resolved,
@@ -71,7 +71,8 @@ RSpec.describe ReviewHistory do
         "resolvedBy" => resolved_by,
         "comments" => {
           "nodes" => [{ "databaseId" => 100, "url" => "https://github.test/#{id}", "body" => "Body #{id}",
-                        "author" => author, }],
+                        "author" => author, }] +
+            replies.map { |who, body| { "databaseId" => 101, "body" => body, "author" => who } },
         },
       }
     end
@@ -109,7 +110,60 @@ RSpec.describe ReviewHistory do
         [["T1", "open", 5], ["T3", "resolved", nil], ["T4", "dismissed", 5]]
       )
       expect(threads.first).to include("comment_id" => 100, "url" => "https://github.test/T1", "body" => "Body T1",
-                                       "path" => "a.rb")
+                                       "path" => "a.rb", "replies" => [])
+    end
+
+    def stub_threads(*nodes)
+      allow(api).to receive(:graphql).with(described_class::THREADS_QUERY, anything).and_return(page(nodes))
+    end
+
+    let(:gql_other_bot) { { "__typename" => "Bot", "login" => "dependabot" } }
+
+    it "keeps people's replies to the bot's threads, but not the bot's own" do
+      stub_threads(
+        thread("T1", author: gql_bot, replies: [[gql_human, "Intentional"], [gql_bot, "Looks addressed"], [nil, "Old"]])
+      )
+
+      expect(history.bot_threads.first["replies"]).to eq(
+        [{ "author" => "octocat", "body" => "Intentional" }, { "author" => "ghost", "body" => "Old" }]
+      )
+    end
+
+    it "cuts long bodies short" do
+      stub_threads(thread("T1", author: gql_bot, replies: [[gql_human, "x" * (described_class::MAX_BODY + 10)]]))
+
+      reply = history.bot_threads.first["replies"].first["body"]
+      expect(reply.length).to eq(described_class::MAX_BODY + 1)
+      expect(reply).to end_with("…")
+    end
+
+    it "returns the threads people started, without other bots' threads or comments" do
+      stub_threads(
+        thread("T1", author: gql_bot),
+        thread("T2", author: gql_human, resolved: true, replies: [[gql_other_bot, "CI"], [gql_human, "Fixed"]]),
+        thread("T3", author: gql_other_bot)
+      )
+
+      expect(history.people_threads).to eq(
+        [{
+          "status" => "resolved", "path" => "a.rb", "line" => 5,
+          "comments" => [{ "author" => "octocat", "body" => "Body T2" }, { "author" => "octocat", "body" => "Fixed" }],
+        }]
+      )
+    end
+  end
+
+  describe "#people_comments_on_pull_request" do
+    it "returns general comments from people only" do
+      allow(api).to receive(:get_all).with("/repos/acme/widgets/issues/42/comments").and_return(
+        [
+          { "user" => human, "body" => "Why this approach?" },
+          { "user" => bot, "body" => "in progress" },
+          { "user" => { "login" => "dependabot[bot]", "type" => "Bot" }, "body" => "Bump" },
+        ]
+      )
+
+      expect(history.people_comments_on_pull_request).to eq([{ "author" => "octocat", "body" => "Why this approach?" }])
     end
   end
 
