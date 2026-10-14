@@ -17,6 +17,31 @@ RSpec.describe AgentReviewParser do
     end
   end
 
+  describe "coverage warning" do
+    def summary_for(payload, changed_files)
+      described_class.new(payload.to_json, changed_files:).summary_body
+    end
+
+    it "adds nothing when the reviewer read every changed file" do
+      expect(summary_for({ "summary" => "S", "files_reviewed" => 4 }, 4)).not_to include(":warning:")
+    end
+
+    it "adds nothing when the changed file count is unknown" do
+      expect(summary_for({ "summary" => "S" }, nil)).not_to include(":warning:")
+    end
+
+    it "says how many files were read when that falls short" do
+      body = summary_for({ "summary" => "S", "files_reviewed" => 2 }, 5)
+
+      expect(body).to include("reading 2 of 5 changed files")
+      expect(body).to match(/\A<!-- agentic-pr-review [\d.]+ -->\n\n:warning:.*\n\nS\z/)
+    end
+
+    it "says so when the reviewer reports no count" do
+      expect(summary_for({ "summary" => "S" }, 5)).to include("did not report how many of the 5 changed files")
+    end
+  end
+
   describe "#inline_comments" do
     it "builds entries with severity prefix and metadata" do
       json = {

@@ -7,9 +7,10 @@ Runs a headless review agent against the **merge-base diff** for a pull request,
 1. Creates an installation token for a **GitHub App** (needs repository scopes contents:read and pull_requests:read_write).
 2. Loads PR metadata via the GitHub API to resolve the PR base/head refs.
 3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, removes the checkout's credential from `.git/config`, and writes `pr.diff` (`base...head` three-dot diff).
+   The diff is then split into `pr-chunks/NNN.diff` files of at most 400 lines or 32KB each, breaking at file and hunk boundaries, with a `pr-chunks/INDEX.md` listing each chunk and its files. One read of a large `pr.diff` comes back truncated, and a reviewer given the first thousand lines reviews those and stops, so the prompt has the reviewer read every chunk.
    Agent-instruction files — `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `.cursor/` and `.claude/` directories at any depth — are then reset to the merge base, so a PR cannot instruct its own reviewer. Their changes are still in `pr.diff` and reviewed like any other.
 4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md` plus any **additional prompt** text.
-5. Parses the agent's JSON output and posts a review on the PR head commit.
+5. Parses the agent's JSON output and posts a review on the PR head commit. The agent reports `files_reviewed`; when that is missing or lower than the number of changed files, the posted summary starts with a warning that the review may be partial.
 
 Artifacts: uploads `review-agent.json` from the workspace when present (for debugging).
 

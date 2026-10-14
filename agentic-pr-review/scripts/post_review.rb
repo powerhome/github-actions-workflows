@@ -4,8 +4,8 @@
 require_relative "agent_review_parser"
 require_relative "github_review_poster"
 
-def load_review(path)
-  AgentReviewParser.parse_file(path)
+def load_review(path, changed_files)
+  AgentReviewParser.parse_file(path, changed_files:)
 rescue JSON::ParserError => e
   warn "Failed to parse review JSON: #{e.message}"
   exit 1
@@ -24,7 +24,7 @@ unless File.file?(review_path)
   exit 1
 end
 
-parsed = load_review(review_path)
+parsed = load_review(review_path, Integer(ENV["CHANGED_FILE_COUNT"].to_s, exception: false))
 
 repo_full = ENV["GITHUB_REPOSITORY"].to_s
 owner, repo = repo_full.split("/", 2)

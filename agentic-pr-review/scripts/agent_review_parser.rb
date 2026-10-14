@@ -6,13 +6,14 @@ require "json"
 class AgentReviewParser
   MAX_INLINE_COMMENTS = 50
   # Bump when changing review posting behavior or summary format.
-  REVIEW_POSTER_VERSION = "1.0.0"
+  REVIEW_POSTER_VERSION = "1.1.0"
 
-  def self.parse_file(path)
-    new(File.read(path))
+  def self.parse_file(path, changed_files: nil)
+    new(File.read(path), changed_files:)
   end
 
-  def initialize(json_string)
+  def initialize(json_string, changed_files: nil)
+    @changed_files = changed_files
     @payload = JSON.parse(extract_json(json_string))
     validate_root!
     @summary_body = build_summary_body
@@ -61,7 +62,24 @@ private
 
   def build_summary_body
     summary = @payload["summary"].to_s.strip
-    "<!-- agentic-pr-review #{REVIEW_POSTER_VERSION} -->\n\n#{summary}"
+    ["<!-- agentic-pr-review #{REVIEW_POSTER_VERSION} -->", coverage_warning, summary].compact.join("\n\n")
+  end
+
+  # A review that read part of the diff still reads as a complete one, so a shortfall is
+  # said at the top of the summary rather than left for the reader to notice.
+  def coverage_warning
+    return unless @changed_files&.positive?
+
+    reviewed = Integer(@payload["files_reviewed"], exception: false)
+    return if reviewed && reviewed >= @changed_files
+
+    if reviewed.nil?
+      ":warning: The reviewer did not report how many of the #{@changed_files} changed files it read, " \
+        "so this review may be partial."
+    else
+      ":warning: The reviewer reported reading #{reviewed} of #{@changed_files} changed files. " \
+        "The rest were not reviewed."
+    end
   end
 
   def build_inline_comments

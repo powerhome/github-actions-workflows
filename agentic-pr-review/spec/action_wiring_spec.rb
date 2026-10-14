@@ -143,4 +143,23 @@ RSpec.describe "agentic-pr-review action.yml wiring" do
       names.index("Fetch through merge-base"), provider
     )
   end
+
+  it "splits the diff before the provider runs and hands the changed file count to the poster" do
+    names = ReviewActionWiring.steps.map { |step| step.fetch("name") }
+    split = ReviewActionWiring.step_named("Split PR diff into chunks")
+    post = ReviewActionWiring.step_named("Post review to GitHub")
+
+    expect(names.index("Split PR diff into chunks")).to be_between(
+      names.index("Compute PR diff"), names.index("Run review provider")
+    )
+    expect(split.fetch("id")).to eq("diff_chunks")
+    expect(split.dig("env", "PR_CHUNKS_DIR")).to end_with("/pr-chunks")
+    expect(post.dig("env", "CHANGED_FILE_COUNT")).to eq("${{ steps.diff_chunks.outputs.changed_files }}")
+  end
+
+  it "tells the reviewer to read the chunks the split step writes" do
+    prompt = File.read(File.join(ReviewActionWiring::ACTION_ROOT, "prompts", "review.md"))
+
+    expect(prompt).to include("pr-chunks/INDEX.md", "files_reviewed")
+  end
 end

@@ -151,6 +151,17 @@ runs:
         rm -rf -- "${PR_DIFF_PATH}"
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${PR_DIFF_PATH}"
 
+    # One read of a large pr.diff comes back truncated, and a reviewer that is handed the
+    # first thousand lines reviews those and stops. The chunks are read whole, and INDEX.md
+    # says how many there are.
+    - name: Split PR diff into chunks
+      id: diff_chunks
+      shell: bash
+      env:
+        PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        PR_CHUNKS_DIR: ${{ github.workspace }}/pr-chunks
+      run: ruby "${{ github.action_path }}/scripts/split_pr_diff.rb"
+
     # AGENTS.md, CLAUDE.md, .cursor/ and .claude/ are read by the CLI as instructions, so a
     # pull request editing them could tell its own reviewer what to say. The edits are still
     # in pr.diff, where they get reviewed like any other change.
@@ -207,6 +218,7 @@ runs:
         PULL_NUMBER: ${{ inputs.pull-request-number }}
         COMMIT_SHA: ${{ steps.pr_gate.outputs.head_sha }}
         REVIEW_JSON_PATH: ${{ github.workspace }}/review-agent.json
+        CHANGED_FILE_COUNT: ${{ steps.diff_chunks.outputs.changed_files }}
       run: ruby "${{ github.action_path }}/scripts/post_review.rb"
 
     # create, not upsert: this comment carries no tag, so a second failure adds a second
