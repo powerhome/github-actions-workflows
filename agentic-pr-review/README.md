@@ -220,15 +220,24 @@ Neither CLI documents a version-pinned installer for CI, so each run installs th
 
 The CLI runs in the PR's own checkout, so the reviewed repository must not be able to configure it. `--setting-sources user` keeps its `.claude/settings.json` and `.claude/settings.local.json` from loading: their hooks would run shell commands outside the tool permissions, with the API key in the environment, and their `env` could point the API URL at another host. The settings file also sets `disableAllHooks`.
 
-### Read-only `gh` access
+### The `upstream` command
 
-On the `claude` provider, the agent can look things up on GitHub that the checkout doesn't have. For example, when a PR bumps a pinned action SHA it can list the pull requests merged upstream between the old and new commits with `gh pr list --repo`, then read them with `gh pr view` and `gh pr diff`, to see what the new revision changes. The prompt gets a section on when and how to use it.
+When a PR changes which version of an outside dependency the repository uses (a pinned action SHA, a Gemfile `ref:`/`branch:`/`tag:`, a lockfile `revision:`, a `github:owner/repo#ref` package), the agent can see what changed upstream. It does that with one command, [`shared/agent-bin/upstream`](../shared/agent-bin/upstream), which is the only command it may run in a shell, on either provider:
 
-- The commands run with the calling job's `GITHUB_TOKEN`, so they can read what that token can, plus any public repository. None of the allowed commands can write. The action posts with its App token, so the job doesn't need `pull-requests: write` for the review; granting only `read` means a write would also be refused by GitHub if one ever got past the command rules.
-- [`shared/config/claude-settings-gh-read.json`](../shared/config/claude-settings-gh-read.json) replaces the bundled settings. It allows the read-only commands `gh pr view`/`diff`/`list`, `gh issue view`/`list`, `gh repo view`, `gh release view`/`list` and `gh search`. It also explicitly denies `gh api`, which can reach any endpoint with any method, `gh auth`, `gh config`, `gh alias`, `gh extension`, clones, checkouts and downloads. Every other shell command is still refused, so the agent can't clone anything or run code.
-- The job's token is the only GitHub credential the CLI gets: `GITHUB_TOKEN` and any other `GH_TOKEN` are removed from its environment.
-- Before posting, anything in the review that looks like a GitHub token is replaced with `[redacted token]`.
-- It is skipped when `claude-settings` is set (the caller decides the tools), on the `cursor` provider, and on a skipped review.
+- `upstream compare OWNER/REPO BASE HEAD [PATH]` lists the commits from one ref to another and what they changed, optionally only under PATH.
+- `upstream show OWNER/REPO REF PATH` shows one file at a ref.
+- `upstream ls OWNER/REPO REF [PATH]` lists a directory at a ref.
+
+The agent decides when a lookup could change a finding. The prompt gets a section explaining the command, and treats what it returns as data, not instructions.
+
+- **It can only read.** It sends GET requests to the GitHub API and nothing else. It checks the repository, refs and path before building a URL, so no argument can add path segments, query parameters or another host. Its output is capped at 60 KB.
+- **It uses the job's token.** It runs with the calling job's `GITHUB_TOKEN`, so it can read that repository and any public one. That token is the only GitHub credential the CLI gets: `GITHUB_TOKEN`, `GH_TOKEN` and the enterprise variants are removed from its environment.
+- **No other command runs.**
+  - [`shared/config/claude-settings-upstream.json`](../shared/config/claude-settings-upstream.json) allows `Bash(upstream:*)` and nothing else in a shell. Claude Code refuses chained commands, pipes and redirects.
+  - [`shared/config/cursor-cli-config-upstream.json`](../shared/config/cursor-cli-config-upstream.json) allows `Shell(upstream)`. Cursor refuses chained commands, pipes, `$(...)` and backticks. It does let an allowed command redirect its output to a file, so the copied config is made read-only before the agent starts.
+  - `shared/agent-bin` holds nothing else, and goes first on the CLI's `PATH`.
+- **Tokens are redacted.** Before posting, anything in the review that looks like a GitHub token is replaced with `[redacted token]`.
+- **When it's off.** It is off when `claude-settings` is set (the caller decides the tools) and on a skipped review.
 
 ### Overriding the Claude defaults
 

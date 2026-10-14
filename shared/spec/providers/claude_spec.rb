@@ -204,49 +204,46 @@ RSpec.describe "providers/claude.sh" do
     end
   end
 
-  describe "read-only gh access" do
-    let(:gh_settings) { File.join(SHARED_ROOT, "config", "claude-settings-gh-read.json") }
+  describe "the upstream command" do
+    let(:upstream_settings) { File.join(SHARED_ROOT, "config", "claude-settings-upstream.json") }
 
-    it "hands the CLI the agent's token as its only GitHub credential" do
-      env = { "AGENT_GH_TOKEN" => "ghs_readonly", "GITHUB_TOKEN" => "ghs_from_job", "GH_TOKEN" => "ghs_other" }
+    it "puts upstream on the CLI's PATH with the token as its only GitHub credential" do
+      env = { "UPSTREAM_GITHUB_TOKEN" => "ghs_job", "GITHUB_TOKEN" => "ghs_from_job", "GH_TOKEN" => "ghs_other" }
 
       run_provider(env:) do |result|
         expect(result[:status]).to be_success
-        expect(result[:stderr]).to include("gh: read-only access")
-        expect(result[:args].each_cons(2)).to include(["--settings", gh_settings])
-        expect(result[:claude_env]).to include("GH_TOKEN" => "ghs_readonly", "GH_PROMPT_DISABLED" => "1")
-        expect(result[:claude_env].keys).not_to include("GITHUB_TOKEN", "AGENT_GH_TOKEN")
+        expect(result[:stderr]).to include("upstream: may read")
+        expect(result[:args].each_cons(2)).to include(["--settings", upstream_settings])
+        expect(result[:claude_env]).to include("UPSTREAM_GITHUB_TOKEN" => "ghs_job")
+        expect(result[:claude_env].fetch("PATH")).to start_with("#{File.join(SHARED_ROOT, 'agent-bin')}:")
+        expect(result[:claude_env].keys).not_to include("GITHUB_TOKEN", "GH_TOKEN")
       end
     end
 
     it "leaves the bundled settings and the environment alone without a token" do
-      run_provider(env: { "AGENT_GH_TOKEN" => "", "GH_TOKEN" => nil }) do |result|
+      run_provider(env: { "UPSTREAM_GITHUB_TOKEN" => "" }) do |result|
         expect(result[:args].each_cons(2)).to include(
           ["--settings", File.join(SHARED_ROOT, "config", "claude-settings.json")]
         )
-        expect(result[:claude_env].keys).not_to include("GH_TOKEN")
+        expect(result[:claude_env].fetch("PATH")).not_to include("agent-bin")
       end
     end
 
     it "gives way to a caller's settings" do
-      run_provider(env: { "AGENT_GH_TOKEN" => "ghs_readonly", "CLAUDE_SETTINGS" => '{"permissions":{}}' }) do |result|
+      run_provider(env: { "UPSTREAM_GITHUB_TOKEN" => "ghs_job", "CLAUDE_SETTINGS" => '{"permissions":{}}' }) do |result|
         expect(result[:args].each_cons(2)).to include(["--settings", '{"permissions":{}}'])
       end
     end
 
-    # Clones, downloads and arbitrary commands fall to dontAsk, which denies what isn't allowed.
-    it "allows only gh read commands in a shell" do
-      permissions = JSON.parse(File.read(gh_settings)).fetch("permissions")
-      bash = permissions.fetch("allow").grep(/\ABash/)
-      reads = /\ABash\(gh (issue (list|view)|pr (diff|list|view)|release (list|view)|repo view|search):\*\)\z/
+    # dontAsk refuses every other command, including chained ones and redirects.
+    it "allows upstream and no other shell command" do
+      settings = JSON.parse(File.read(upstream_settings))
+      permissions = settings.fetch("permissions")
 
-      expect(bash).to all(match(reads))
-      expect(permissions.fetch("allow")).not_to include("Bash")
-      expect(permissions.fetch("deny")).to include(
-        "Bash(gh api:*)", "Bash(gh auth:*)", "Bash(gh repo clone:*)",
-        "Edit", "Write", "WebFetch", "WebSearch", "Read(//proc/**)"
-      )
-      expect(JSON.parse(File.read(gh_settings))).to include("disableAllHooks" => true)
+      expect(permissions.fetch("allow").grep(/\ABash/)).to eq(["Bash(upstream:*)"])
+      expect(permissions.fetch("deny")).to include("Edit", "Write", "WebFetch", "WebSearch", "Read(//proc/**)")
+      expect(settings).to include("disableAllHooks" => true)
+      expect(Dir.children(File.join(SHARED_ROOT, "agent-bin"))).to eq(["upstream"])
     end
   end
 

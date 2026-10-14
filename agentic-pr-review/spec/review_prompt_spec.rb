@@ -19,12 +19,12 @@ RSpec.describe ReviewPrompt do
 
   let(:incremental) { { "mode" => "incremental", "last_reviewed_sha" => last, "head_sha" => head, "findings" => [] } }
 
-  it "explains the gh commands only when the agent can run them" do
-    text = described_class.new(base:, context: { "mode" => "full" }, gh_read_access: true).to_s
+  it "explains the upstream command only when the agent can run it" do
+    text = described_class.new(base:, context: { "mode" => "full" }, upstream: true).to_s
 
-    expect(text).to include("## Reading GitHub with `gh`", "gh pr list --repo owner/repo --state merged")
+    expect(text).to include("## Looking up upstream changes", "upstream compare OWNER/REPO BASE HEAD")
     expect(text).to end_with(described_class::REMINDER)
-    expect(prompt({ "mode" => "full" })).not_to include("gh pr")
+    expect(prompt({ "mode" => "full" })).not_to include("upstream")
   end
 
   it "is the base prompt alone on a first full review" do

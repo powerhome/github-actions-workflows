@@ -151,16 +151,9 @@ if [[ -n "${EFFORT:-}" ]]; then
   MODEL_ARGS+=(--effort "${EFFORT}")
 fi
 
-# With AGENT_GH_TOKEN the agent may run gh commands that only read, to gather context such as
-# the upstream changes behind a bumped action pin, and nothing else in a shell: no gh api, no
-# clone, download or checkout, and no running code. That token is the only GitHub credential
-# the CLI gets.
-CLI_ENV=(-u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u AGENT_GH_TOKEN)
-if [[ -n "${AGENT_GH_TOKEN:-}" ]]; then
-  SETTINGS_PATH="${SHARED_ROOT}/config/claude-settings-gh-read.json"
-  CLI_ENV+=(-u GITHUB_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN)
-  CLI_ENV+=("GH_TOKEN=${AGENT_GH_TOKEN}" GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1)
-  echo "[agent] gh: read-only access for context" >&2
+agent_cli_env "${SHARED_ROOT}/agent-bin"
+if [[ -n "${UPSTREAM_GITHUB_TOKEN:-}" ]]; then
+  SETTINGS_PATH="${SHARED_ROOT}/config/claude-settings-upstream.json"
 fi
 
 # A caller's workflow can replace the bundled settings, which deny Bash outright: a deny
@@ -193,11 +186,10 @@ clear_agent_output
 # servers from loading. claude-settings does not touch those two flags. run_agent sends the
 # prompt on stdin. The empty-array expansions are spelled out because bash before 4.4
 # treats "${ARRAY[@]}" on an empty array as unbound under set -u. --disallowed-tools takes
-# every argument up to the next flag, so it is followed by one. The CLI gets no
-# ACTIONS_ID_TOKEN_REQUEST_* variables, which would let it mint GitHub OIDC tokens for any
-# audience; the refresher above keeps them. CLI_ENV is never empty.
+# every argument up to the next flag, so it is followed by one. agent_cli_env keeps the
+# ACTIONS_ID_TOKEN_REQUEST_* variables from the CLI; the refresher above keeps them.
 invoke_claude() {
-  env "${CLI_ENV[@]}" \
+  env "${AGENT_CLI_ENV[@]}" \
     claude --print --output-format text \
       --disallowed-tools "${DENIED_READS[@]}" \
       --setting-sources user \

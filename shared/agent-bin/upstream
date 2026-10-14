@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The only command a review agent may run in a shell; this directory is put on its PATH and
+# holds nothing else. See shared/lib/upstream.rb.
+
+require_relative "../lib/upstream"
+
+begin
+  puts Upstream.new(
+    token: ENV.fetch("UPSTREAM_GITHUB_TOKEN", nil),
+    api_url: ENV.fetch("GITHUB_API_URL", "https://api.github.com")
+  ).run(ARGV)
+rescue Upstream::UsageError, Upstream::RequestError => e
+  warn "upstream: #{e.message}"
+  exit 1
+end

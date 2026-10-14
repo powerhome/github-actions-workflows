@@ -3,6 +3,7 @@
 require_relative "../spec_helper"
 
 require "fileutils"
+require "json"
 require "open3"
 require "tmpdir"
 
@@ -13,6 +14,7 @@ RSpec.describe "providers/cursor.sh" do
     <<~AGENT
       #!/usr/bin/env bash
       printf '%s\\n' "$@" > "#{args_path}"
+      env > "#{args_path}.env"
       cat > "#{args_path}.stdin"
       case "${AGENT_MODE}" in
         ok)     echo '{"permissions":{"required":"no"}}' ;;
@@ -59,9 +61,16 @@ RSpec.describe "providers/cursor.sh" do
         output: File.exist?(json_path) ? File.read(json_path) : nil,
         agent_args: File.exist?(args_path) ? File.read(args_path).split("\n") : [],
         prompt: File.exist?("#{args_path}.stdin") ? File.read("#{args_path}.stdin") : nil,
+        agent_env: read_env("#{args_path}.env"),
         workspace:
       )
     end
+  end
+
+  def read_env(path)
+    return {} unless File.exist?(path)
+
+    File.read(path).lines.to_h { |line| line.chomp.split("=", 2) }
   end
 
   it "writes the agent's response without pinning a model" do
@@ -81,6 +90,33 @@ RSpec.describe "providers/cursor.sh" do
       # The web denials matter as much as the shell one: everything the agent says has to
       # come from evidence the calling action assembled.
       expect(File.read(config)).to include("Read(**)", "Shell(*)", "WebFetch(*)", "WebSearch(*)")
+    end
+  end
+
+  describe "the upstream command" do
+    it "allows upstream and no other shell command, in a config the agent can't overwrite" do
+      env = { "UPSTREAM_GITHUB_TOKEN" => "ghs_job", "GITHUB_TOKEN" => "ghs_from_job", "GH_TOKEN" => "ghs_other" }
+
+      run_provider(mode: "ok", env:) do |result|
+        expect(result[:status]).to be_success
+        config = File.join(result[:workspace], ".cursor", "cli-config.json")
+        permissions = JSON.parse(File.read(config)).fetch("permissions")
+        expect(permissions.fetch("allow")).to contain_exactly("Read(**)", "Shell(upstream)")
+        expect(permissions.fetch("deny")).to include("Write(**)", "WebFetch(*)", "WebSearch(*)")
+        expect(File.stat(config).mode & 0o222).to eq(0)
+
+        expect(result[:agent_env]).to include("UPSTREAM_GITHUB_TOKEN" => "ghs_job")
+        expect(result[:agent_env].fetch("PATH")).to start_with("#{File.join(SHARED_ROOT, 'agent-bin')}:")
+        expect(result[:agent_env].keys).not_to include("GITHUB_TOKEN", "GH_TOKEN")
+      end
+    end
+
+    it "keeps the shell denied without a token" do
+      run_provider(mode: "ok", env: { "UPSTREAM_GITHUB_TOKEN" => "" }) do |result|
+        config = File.read(File.join(result[:workspace], ".cursor", "cli-config.json"))
+        expect(config).to include("Shell(*)")
+        expect(result[:agent_env].fetch("PATH")).not_to include("agent-bin")
+      end
     end
   end
 
