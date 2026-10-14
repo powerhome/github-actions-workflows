@@ -8,7 +8,7 @@ Runs a headless review agent against the **merge-base diff** for a pull request,
 2. Loads PR metadata via the GitHub API to resolve the PR base/head refs.
 3. Checks out the PR **head** ref, fetches enough history to compute the merge-base with the base branch, removes the checkout's credential from `.git/config`, and writes `pr.diff` (`base...head` three-dot diff).
    Agent-instruction files — `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.cursorrules`, `.cursorignore`, `.cursorindexingignore`, and `.cursor/` and `.claude/` directories at any depth — are then reset to the merge base, so a PR cannot instruct its own reviewer. Their changes are still in `pr.diff` and reviewed like any other.
-4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md` plus any **additional prompt** text.
+4. Invokes the configured **provider** via [`shared/providers/<provider>.sh`](../shared/providers) with `prompts/review.md` plus any **additional prompt** text. The list of changed files and the whole of `pr.diff` are appended to the prompt, which goes to the CLI on stdin, so the agent cannot review only the part of the diff it chose to open. If the CLI reports the prompt too long for the model's context, the run is retried once with the diff left in `pr.diff` for the agent to page through.
 5. Parses the agent's JSON output and posts a review on the PR head commit.
 
 Artifacts: uploads `review-agent.json` from the workspace when present (for debugging).
@@ -30,6 +30,7 @@ The provider adapters and comment client live in [`shared/`](../shared), beside 
 | `provider` | no | Review backend: `cursor` or `claude`. The action resolves it via `shared/providers/<provider>.sh` (default: `cursor`). |
 | `deepen-length` | no | Passed to `rmacklin/fetch-through-merge-base` as `deepen_length` (default: `30`). |
 | `model` | no | Model passed to the provider CLI's `--model` flag. Empty uses the CLI's default. |
+| `effort` | no | Claude only. Effort level passed as `--effort`: `low`, `medium`, `high`, `xhigh`, or `max`. Defaults to `xhigh`; empty uses the CLI's default. |
 | `claude-settings` | no | Claude only. Settings that replace the bundled read-only [`shared/config/claude-settings.json`](../shared/config/claude-settings.json): a file path relative to the workspace, or a JSON string. See [Overriding the Claude defaults](#overriding-the-claude-defaults). |
 | `anthropic-federation-rule-id` | no | Claude only. Authenticate with [workload identity federation](#review-a-pr-with-claude-using-workload-identity-federation) instead of `provider-api-key`. |
 | `anthropic-organization-id` | with a rule | Claude only. Anthropic organization ID. |

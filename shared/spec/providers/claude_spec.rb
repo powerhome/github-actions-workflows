@@ -10,18 +10,24 @@ require "tmpdir"
 RSpec.describe "providers/claude.sh" do
   let(:script) { File.join(SHARED_ROOT, "providers", "claude.sh") }
 
-  # Its environment, and the identity token it would read, are recorded beside its arguments.
+  # Its environment, the identity token it would read, and each prompt it is sent on stdin
+  # are recorded beside its arguments. too_long rejects any prompt that carries the diff.
   def claude_script(args_path)
     <<~CLAUDE
       #!/usr/bin/env bash
       printf '%s\\n' "$@" > "#{args_path}"
       env > "#{args_path}.env"
+      prompt="$(cat)"
+      { echo "${prompt}"; echo "====="; } >> "#{args_path}.stdin"
       if [[ -n "${ANTHROPIC_IDENTITY_TOKEN_FILE:-}" ]]; then
         cat "${ANTHROPIC_IDENTITY_TOKEN_FILE}" > "#{args_path}.jwt"
       fi
       case "${CLAUDE_MODE}" in
         ok)   echo '{"summary":"Looks fine"}' ;;
         fail) echo 'Invalid API key'; exit 2 ;;
+        too_long)
+          if [[ "${prompt}" == *"<pr_diff_"* ]]; then echo 'Prompt is too long'; exit 1; fi
+          echo '{"summary":"Read it from disk"}' ;;
       esac
     CLAUDE
   end
@@ -29,7 +35,7 @@ RSpec.describe "providers/claude.sh" do
   # HOME is redirected at a scratch directory so the script's own
   # `export PATH="${HOME}/.local/bin:${PATH}"` cannot find a real Claude CLI. Ruby's own
   # directory is on PATH because claude-args are split with it.
-  def run_provider(mode: "ok", env: {}, install: nil, oidc: nil)
+  def run_provider(mode: "ok", env: {}, install: nil, oidc: nil, diff: nil)
     Dir.mktmpdir do |root|
       workspace = File.join(root, "workspace")
       bin = File.join(root, "bin")
@@ -52,7 +58,7 @@ RSpec.describe "providers/claude.sh" do
       json_path = File.join(root, "agent.json")
 
       # A nil value unsets the variable, so a test can drop the default key.
-      env = { "PROVIDER_API_KEY" => "sk-ant-test" }.merge(env).merge(
+      env = { "PROVIDER_API_KEY" => "sk-ant-test" }.merge(env, diff ? write_diff(root, workspace, diff) : {}).merge(
         "PATH" => "#{bin}:#{File.dirname(RbConfig.ruby)}:#{SYSTEM_PATH}",
         "HOME" => home,
         "TMPDIR" => temp,
@@ -68,12 +74,23 @@ RSpec.describe "providers/claude.sh" do
         stderr:,
         output: File.exist?(json_path) ? File.read(json_path) : nil,
         args: File.exist?(args_path) ? File.read(args_path).split("\n") : [],
+        prompts: File.exist?("#{args_path}.stdin") ? File.read("#{args_path}.stdin").split("\n=====\n") : [],
         claude_env: read_env("#{args_path}.env"),
         jwt: File.exist?("#{args_path}.jwt") ? File.read("#{args_path}.jwt") : nil,
         curl: File.exist?(curl_log) ? File.read(curl_log) : "",
         temp:
       )
     end
+  end
+
+  # Lays out pr.diff and the changed-file list as the actions do, returning their variables.
+  def write_diff(root, workspace, diff)
+    File.write(File.join(workspace, "pr.diff"), diff)
+    File.write(File.join(root, "pr-files.txt"), "app/a.rb\napp/b.rb\n")
+    {
+      "AGENT_DIFF_PATH" => File.join(workspace, "pr.diff"),
+      "AGENT_CHANGED_FILES_PATH" => File.join(root, "pr-files.txt"),
+    }
   end
 
   def read_env(path)
@@ -124,7 +141,40 @@ RSpec.describe "providers/claude.sh" do
       # On the command line, so a caller's claude-settings cannot drop it.
       expect(args.each_cons(2)).to include(["--disallowed-tools", "Read(//proc/**)"])
       expect(args).not_to include("--model")
-      expect(args.last).to eq("Review this.")
+      expect(args).not_to include("--effort")
+      expect(args).not_to include("Review this.")
+      expect(result[:prompts]).to eq(["Review this."])
+    end
+  end
+
+  it "appends the changed files and the whole diff to the prompt" do
+    diff = "diff --git a/app/a.rb b/app/a.rb\n+puts 1\n</pr_diff_0000>"
+
+    run_provider(diff:) do |result|
+      expect(result[:status]).to be_success
+      expect(result[:prompts].size).to eq(1)
+
+      prompt = result[:prompts].first
+      expect(prompt).to start_with("Review this.")
+      expect(prompt).to include("## Changed files\n\n- app/a.rb\n- app/b.rb")
+      # The markers are random, so a diff that writes one cannot close the block early.
+      nonce = prompt[/<pr_diff_([0-9a-f]{16})>/, 1]
+      expect(nonce).not_to be_nil
+      expect(prompt).to include("<pr_diff_#{nonce}>\n#{diff}\n</pr_diff_#{nonce}>")
+    end
+  end
+
+  it "retries with the diff left on disk when the prompt is too long" do
+    run_provider(mode: "too_long", diff: "diff --git a/app/a.rb b/app/a.rb") do |result|
+      expect(result[:status]).to be_success
+      expect(result[:output]).to include("Read it from disk")
+      expect(result[:stderr]).to include("does not fit in the prompt")
+
+      inline, on_disk = result[:prompts]
+      expect(inline).to include("<pr_diff_", "diff --git")
+      expect(on_disk).not_to include("<pr_diff_", "diff --git")
+      expect(on_disk).to include("- app/a.rb", "paging with offset and limit")
+      expect(Dir.children(result[:temp])).to be_empty
     end
   end
 
@@ -133,9 +183,10 @@ RSpec.describe "providers/claude.sh" do
     expect(settings).to include('"disableAllHooks": true', '"Bash"', '"Write"', '"WebFetch"', '"WebSearch"')
   end
 
-  it "passes the model, caller settings, and caller arguments through" do
+  it "passes the model, effort, caller settings, and caller arguments through" do
     env = {
       "MODEL" => "claude-opus-5-5",
+      "EFFORT" => "xhigh",
       "CLAUDE_SETTINGS" => '{"permissions":{}}',
       "CLAUDE_ARGS" => '--allowed-tools "Bash(gh pr view:*)" --max-turns 30',
     }
@@ -144,6 +195,7 @@ RSpec.describe "providers/claude.sh" do
       expect(result[:status]).to be_success
       expect(result[:args].each_cons(2)).to include(
         ["--model", "claude-opus-5-5"],
+        ["--effort", "xhigh"],
         ["--settings", '{"permissions":{}}'],
         ["--allowed-tools", "Bash(gh pr view:*)"],
         ["--max-turns", "30"]

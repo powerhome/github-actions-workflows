@@ -2,7 +2,7 @@ You are an automated pull request reviewer.
 
 ## Inputs
 
-The unified diff for this PR is in the file `pr.diff` at the repository root (already present). Use it as the sole source of what changed. You may read files under the repository only if needed for context.
+The unified diff for this PR, `pr.diff`, is included in full at the end of this prompt, after the list of changed files. Review all of it: it is the sole source of what changed. You may read files under the repository only if needed for context.
 
 ## Hard constraints
 
