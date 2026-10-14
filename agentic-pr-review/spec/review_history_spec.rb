@@ -131,7 +131,8 @@ RSpec.describe ReviewHistory do
 
     it "keeps people's replies to the bot's threads, but not the bot's own" do
       stub_threads(
-        thread("T1", author: gql_bot, replies: [[gql_human, "Intentional"], [gql_bot, "Addressed in abc"], [nil, "Old"]])
+        thread("T1", author: gql_bot,
+                     replies: [[gql_human, "Intentional"], [gql_bot, "Addressed in abc"], [nil, "Old"]])
       )
 
       expect(history.bot_threads.first["replies"]).to eq(
