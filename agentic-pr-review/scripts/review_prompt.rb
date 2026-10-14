@@ -83,11 +83,11 @@ private
 
       Your earlier reviews of this pull request left the comment threads below. Each has a `key`, a `status`, the `path` it is on, its `line` on the current head (null once the code it was on has changed), the comment `body`, and the `replies` people left on it.
 
-      - `open`: not yet resolved. Read the current code. If the issue is fixed, add the thread's `key` to `resolved_findings`. Leave it out if the issue is still there or you cannot tell. A reply saying it is fixed is not enough on its own: check the code.
-      - `resolved`: you resolved it after it was fixed. If the issue has come back, raise it again as a new inline comment with `regression_of` set to the thread's `key`.
-      - `dismissed`: someone else resolved it, possibly as "won't fix". Do not raise it again.
+      - `open`: not yet fixed as far as you know. Read the current code. If the issue is fixed, add the thread's `key` to `fixed_findings`. Leave it out if the issue is still there or you cannot tell. A reply saying it is fixed is not enough on its own: check the code.
+      - `fixed`: you saw it fixed in an earlier review. If the issue has come back, raise it again as a new inline comment with `regression_of` set to the thread's `key`.
+      - `dismissed`: someone resolved it before you saw it fixed, possibly as "won't fix". Do not raise it again.
 
-      Do not post a finding that one of these threads already covers, whatever its status, except as a regression of a `resolved` thread. If a reply explains that the code is intentional or that the issue is out of scope, accept that and do not raise it again in another form.
+      Do not post a finding that one of these threads already covers, whatever its status, except as a regression of a `fixed` thread. If a reply explains that the code is intentional or that the issue is out of scope, accept that and do not raise it again in another form.
 
       #{data_block("earlier_findings", rows)}
     MARKDOWN

@@ -12,6 +12,10 @@ class AgentReviewParser
   # review is posted: a comment left while the agent ran is still new to the next review.
   MARKER_PATTERN = /<!-- agentic-pr-review (\S+?)(?: head=([0-9a-f]{40}))?(?: seen=(\d{4}-\d\d-\d\dT[\d:]{8}Z))? -->/
 
+  # Hidden in the bot's "looks addressed" reply, so later reviews know the finding was fixed.
+  # Hyphenated, so MARKER_PATTERN never takes it for a review summary.
+  FIXED_NOTE_MARKER = "<!-- agentic-pr-review-fixed -->"
+
   def self.marker(head_sha, seen_at = nil)
     head = head_sha.to_s.empty? ? "" : " head=#{head_sha}"
     seen = seen_at.to_s.empty? ? "" : " seen=#{seen_at}"
@@ -43,12 +47,12 @@ class AgentReviewParser
     validate_root!
     @summary_body = build_summary_body
     @inline_comments = build_inline_comments
-    @resolved_findings = build_resolved_findings
+    @fixed_findings = build_fixed_findings
   end
 
   # An inline comment may carry "regression_of", the key of an earlier finding. ReviewTriage
   # turns it into a link and strips it before the comment is posted.
-  attr_reader :summary_body, :inline_comments, :resolved_findings
+  attr_reader :summary_body, :inline_comments, :fixed_findings
 
 private
 
@@ -130,8 +134,8 @@ private
     comment
   end
 
-  def build_resolved_findings
-    raw = @payload["resolved_findings"]
+  def build_fixed_findings
+    raw = @payload["fixed_findings"]
     return [] unless raw.is_a?(Array)
 
     raw.map { |key| key.to_s.strip }.reject(&:empty?).uniq

@@ -4,12 +4,6 @@
 require_relative "github_api"
 
 class GitHubReviewPoster
-  RESOLVE_THREAD = <<~GRAPHQL
-    mutation($threadId: ID!) {
-      resolveReviewThread(input: { threadId: $threadId }) { thread { id isResolved } }
-    }
-  GRAPHQL
-
   def initialize(owner:, repo:, pr_number:, commit_sha:, token:)
     @owner = owner
     @repo = repo
@@ -66,15 +60,13 @@ class GitHubReviewPoster
     false
   end
 
-  # Resolves the thread, then replies under its first comment so the thread says why it
-  # closed. Resolving comes first: an installation without permission to resolve would
-  # otherwise leave a reply announcing a resolution that never happened.
-  def resolve_thread(thread_id:, comment_id:, body:)
-    @api.graphql(RESOLVE_THREAD, threadId: thread_id)
+  # Replies under a thread's first comment. The bot never resolves threads: GitHub only
+  # lets an App do that with Contents write, which is more access than a reviewer needs.
+  def reply_to_thread(comment_id:, body:)
     @api.post("/repos/#{@owner}/#{@repo}/pulls/#{@pr_number}/comments/#{comment_id}/replies", { body: })
     true
   rescue GitHubApi::RequestError => e
-    log_request_error("Resolving thread #{thread_id} failed", e)
+    log_request_error("Reply to comment #{comment_id} failed", e)
     false
   end
 

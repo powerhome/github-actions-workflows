@@ -37,12 +37,12 @@ def allowed_lines(context)
   )
 end
 
-def scope_note(context, resolved_count)
+def scope_note(context, fixed_count)
   notes = []
   if context["mode"] == "incremental"
     notes << "Reviewed the commits since `#{context['last_reviewed_sha'][0, 7]}`."
   end
-  notes << "#{resolved_count} earlier finding(s) look fixed." if resolved_count.positive?
+  notes << "#{fixed_count} earlier finding(s) look fixed." if fixed_count.positive?
   notes.empty? ? "" : "\n\n---\n\n_#{notes.join(' ')}_"
 end
 
@@ -92,7 +92,7 @@ parsed = load_review(review_path, commit_sha, context["seen_at"])
 
 triage = ReviewTriage.new(
   comments: parsed.inline_comments,
-  resolved_keys: parsed.resolved_findings,
+  fixed_keys: parsed.fixed_findings,
   findings: Array(context["findings"]),
   allowed_lines: allowed_lines(context)
 )
@@ -105,17 +105,17 @@ poster = GitHubReviewPoster.new(
   token:
 )
 
-summary_body = parsed.summary_body + scope_note(context, triage.threads_to_resolve.size)
+summary_body = parsed.summary_body + scope_note(context, triage.newly_fixed.size)
 exit 1 unless post_review(poster, summary_body, triage.comments)
 
-# After the review, so a run that failed to post leaves every thread as it found it.
-triage.threads_to_resolve.each do |finding|
-  resolved = poster.resolve_thread(
-    thread_id: finding["thread_id"],
+# After the review, so a run that failed to post leaves every thread as it found it. The
+# thread stays open for a person to resolve; the marker tells later reviews it was fixed.
+triage.newly_fixed.each do |finding|
+  replied = poster.reply_to_thread(
     comment_id: finding["comment_id"],
-    body: "Resolved by the agentic review: this looks addressed as of #{commit_sha[0, 7]}."
+    body: "#{AgentReviewParser::FIXED_NOTE_MARKER}\nThis looks addressed as of #{commit_sha}."
   )
-  warn "[process_review] Resolved #{finding['key']} (#{finding['path']})" if resolved
+  warn "[process_review] Marked #{finding['key']} fixed (#{finding['path']})" if replied
 end
 
 exit 0

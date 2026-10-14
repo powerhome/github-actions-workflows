@@ -51,7 +51,7 @@ RSpec.describe ReviewPrompt do
   it "lists earlier findings without their thread or comment IDs" do
     text = prompt({ "mode" => "full", "findings" => [finding] })
 
-    expect(text).to include("## Earlier findings", "resolved_findings", "regression_of", '"key": "F1"', "Broken")
+    expect(text).to include("## Earlier findings", "fixed_findings", "regression_of", '"key": "F1"', "Broken")
     expect(text).not_to include("T1")
     expect(text).not_to include("## Scope of this review")
   end

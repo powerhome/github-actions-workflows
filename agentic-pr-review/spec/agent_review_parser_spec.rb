@@ -62,15 +62,15 @@ RSpec.describe AgentReviewParser do
     end
   end
 
-  describe "#resolved_findings" do
+  describe "#fixed_findings" do
     it "returns the stripped, unique keys" do
-      parsed = described_class.new({ "summary" => "S", "resolved_findings" => ["F1", " F2 ", "F1", ""] }.to_json)
-      expect(parsed.resolved_findings).to eq(%w[F1 F2])
+      parsed = described_class.new({ "summary" => "S", "fixed_findings" => ["F1", " F2 ", "F1", ""] }.to_json)
+      expect(parsed.fixed_findings).to eq(%w[F1 F2])
     end
 
     it "is empty when the agent leaves it out or sends a non-array" do
-      expect(described_class.new({ "summary" => "S" }.to_json).resolved_findings).to eq([])
-      expect(described_class.new({ "summary" => "S", "resolved_findings" => "F1" }.to_json).resolved_findings).to eq([])
+      expect(described_class.new({ "summary" => "S" }.to_json).fixed_findings).to eq([])
+      expect(described_class.new({ "summary" => "S", "fixed_findings" => "F1" }.to_json).fixed_findings).to eq([])
     end
   end
 

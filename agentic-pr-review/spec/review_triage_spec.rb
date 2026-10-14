@@ -11,7 +11,7 @@ RSpec.describe ReviewTriage do
     [
       { "key" => "F1", "thread_id" => "T1", "status" => "open", "path" => "a.rb", "line" => 10,
         "url" => "https://github.test/c/1", },
-      { "key" => "F2", "thread_id" => "T2", "status" => "resolved", "path" => "a.rb", "line" => 20,
+      { "key" => "F2", "thread_id" => "T2", "status" => "fixed", "path" => "a.rb", "line" => 20,
         "url" => "https://github.test/c/2", },
       { "key" => "F3", "thread_id" => "T3", "status" => "dismissed", "path" => "b.rb", "line" => nil,
         "url" => "https://github.test/c/3", },
@@ -24,8 +24,8 @@ RSpec.describe ReviewTriage do
     entry
   end
 
-  def triage(comments, resolved_keys: [], allowed_lines: nil)
-    described_class.new(comments:, resolved_keys:, findings:, allowed_lines:)
+  def triage(comments, fixed_keys: [], allowed_lines: nil)
+    described_class.new(comments:, fixed_keys:, findings:, allowed_lines:)
   end
 
   it "passes new comments through without the regression_of key" do
@@ -41,13 +41,13 @@ RSpec.describe ReviewTriage do
     expect(result.comments).to be_empty
   end
 
-  it "keeps a comment on an open thread's line when that thread is being resolved" do
-    result = triage([comment("a.rb", 10)], resolved_keys: ["F1"])
+  it "keeps a comment on an open thread's line when that thread is being marked fixed" do
+    result = triage([comment("a.rb", 10)], fixed_keys: ["F1"])
 
     expect(result.comments.size).to eq(1)
   end
 
-  it "links a regression to the resolved thread it repeats" do
+  it "links a regression to the fixed thread it repeats" do
     result = triage([comment("a.rb", 21, "back", regression_of: "F2")])
 
     expect(result.comments.size).to eq(1)
@@ -75,9 +75,9 @@ RSpec.describe ReviewTriage do
     expect(result.comments.map { |c| [c["path"], c["line"]] }).to eq([["c.rb", 5]])
   end
 
-  it "resolves only open threads, once each, and ignores unknown keys" do
-    result = triage([], resolved_keys: %w[F1 F1 F2 F3 F9])
+  it "marks only open threads fixed, once each, and ignores unknown keys" do
+    result = triage([], fixed_keys: %w[F1 F1 F2 F3 F9])
 
-    expect(result.threads_to_resolve.map { |f| f["thread_id"] }).to eq(["T1"])
+    expect(result.newly_fixed.map { |f| f["thread_id"] }).to eq(["T1"])
   end
 end

@@ -21,7 +21,6 @@ class ReviewHistory
               isResolved
               path
               line
-              resolvedBy { __typename login }
               comments(first: 50) {
                 nodes { databaseId url body createdAt author { __typename login } }
               }
@@ -70,8 +69,9 @@ class ReviewHistory
   end
 
   # The threads the bot opened, oldest first, each as:
-  #   "status"  -- "open"; "resolved" when the bot itself resolved it, so its fix is known;
-  #                or "dismissed" when someone else did, which may mean "won't fix"
+  #   "status"  -- "fixed" once the bot has replied that it looks addressed, whether or not
+  #                someone then resolved it; otherwise "open", or "dismissed" when someone
+  #                resolved it without a fix, which may mean "won't fix"
   #   "line"    -- the thread's line on the current head, or nil once that code has changed
   #   "replies" -- what people answered, e.g. "this is intentional"; the bot's own are left out
   def bot_threads
@@ -83,7 +83,7 @@ class ReviewHistory
         "thread_id" => thread["id"],
         "comment_id" => root["databaseId"],
         "url" => root["url"],
-        "status" => thread_status(thread),
+        "status" => thread_status(thread, replies),
         "path" => thread["path"],
         "line" => thread["line"],
         "body" => excerpt(root["body"]),
@@ -181,10 +181,13 @@ private
     threads
   end
 
-  def thread_status(thread)
-    return "open" unless thread["isResolved"]
+  def thread_status(thread, replies)
+    fixed = replies.any? do |reply|
+      bot?(reply["author"]) && reply["body"].to_s.include?(AgentReviewParser::FIXED_NOTE_MARKER)
+    end
+    return "fixed" if fixed
 
-    bot?(thread["resolvedBy"]) ? "resolved" : "dismissed"
+    thread["isResolved"] ? "dismissed" : "open"
   end
 
   # REST spells an app's login "slug[bot]" with type "Bot"; GraphQL spells it "slug" with

@@ -62,13 +62,12 @@ RSpec.describe ReviewHistory do
   end
 
   describe "review threads" do
-    def thread(id, author:, resolved: false, resolved_by: nil, line: 5, replies: [], at: "2026-10-01T00:00:00Z")
+    def thread(id, author:, resolved: false, line: 5, replies: [], at: "2026-10-01T00:00:00Z")
       {
         "id" => id,
         "isResolved" => resolved,
         "path" => "a.rb",
         "line" => line,
-        "resolvedBy" => resolved_by,
         "comments" => {
           "nodes" => [{ "databaseId" => 100, "url" => "https://github.test/#{id}", "body" => "Body #{id}",
                         "author" => author, "createdAt" => at, }] +
@@ -94,6 +93,14 @@ RSpec.describe ReviewHistory do
 
     let(:gql_bot) { { "__typename" => "Bot", "login" => "nitro-review" } }
     let(:gql_human) { { "__typename" => "User", "login" => "octocat" } }
+    let(:fixed_note) { "#{AgentReviewParser::FIXED_NOTE_MARKER}\nThis looks addressed as of abc." }
+
+    it "does not take a person's reply quoting the fixed note for the bot's" do
+      allow(api).to receive(:graphql).and_return(page([thread("T1", author: gql_bot,
+                                                                    replies: [[gql_human, fixed_note]])]))
+
+      expect(history.bot_threads.first["status"]).to eq("open")
+    end
 
     it "returns the bot's threads across pages, with a status for each" do
       allow(api).to receive(:graphql)
@@ -102,14 +109,15 @@ RSpec.describe ReviewHistory do
       allow(api).to receive(:graphql)
         .with(described_class::THREADS_QUERY, hash_including(cursor: "c1"))
         .and_return(page([
-                           thread("T3", author: gql_bot, resolved: true, resolved_by: gql_bot, line: nil),
-                           thread("T4", author: gql_bot, resolved: true, resolved_by: gql_human),
+                           thread("T3", author: gql_bot, line: nil, replies: [[gql_bot, fixed_note]]),
+                           thread("T4", author: gql_bot, resolved: true),
+                           thread("T5", author: gql_bot, resolved: true, replies: [[gql_bot, fixed_note]]),
                          ]))
 
       threads = history.bot_threads
 
       expect(threads.map { |t| [t["thread_id"], t["status"], t["line"]] }).to eq(
-        [["T1", "open", 5], ["T3", "resolved", nil], ["T4", "dismissed", 5]]
+        [["T1", "open", 5], ["T3", "fixed", nil], ["T4", "dismissed", 5], ["T5", "fixed", 5]]
       )
       expect(threads.first).to include("comment_id" => 100, "url" => "https://github.test/T1", "body" => "Body T1",
                                        "path" => "a.rb", "replies" => [])

@@ -87,47 +87,26 @@ RSpec.describe GitHubReviewPoster do
     end
   end
 
-  describe "#resolve_thread" do
-    let(:http) { instance_double(Net::HTTP) }
-    let(:requests) { [] }
+  describe "#reply_to_thread" do
+    it "replies under the thread's first comment" do
+      response = build_response(Net::HTTPCreated, code: 201, message: "Created", body: { id: 3 }.to_json)
+      request_for = stub_post(response)
 
-    before do
-      allow(Net::HTTP).to receive(:start).with("api.github.com", 443, use_ssl: true).and_yield(http)
+      expect(poster.reply_to_thread(comment_id: 99, body: "Fixed")).to eq(true)
+
+      request = request_for.call
+      expect(request.path).to eq("/repos/acme/widgets/pulls/42/comments/99/replies")
+      expect(JSON.parse(request.body)).to eq("body" => "Fixed")
     end
 
-    def respond_with(*responses)
-      allow(http).to receive(:request) do |request|
-        requests << request
-        responses.shift
-      end
-    end
-
-    it "resolves the thread, then replies under its first comment" do
-      respond_with(
-        build_response(Net::HTTPOK, code: 200, message: "OK",
-                                    body: { data: { resolveReviewThread: { thread: { id: "T1" } } } }.to_json),
-        build_response(Net::HTTPCreated, code: 201, message: "Created", body: { id: 3 }.to_json)
-      )
-
-      expect(poster.resolve_thread(thread_id: "T1", comment_id: 99, body: "Fixed")).to eq(true)
-
-      expect(requests.map(&:path)).to eq(["/graphql", "/repos/acme/widgets/pulls/42/comments/99/replies"])
-      expect(JSON.parse(requests.first.body)).to include("variables" => { "threadId" => "T1" })
-      expect(JSON.parse(requests.last.body)).to eq("body" => "Fixed")
-    end
-
-    # "Resource not accessible by integration" is what an installation without permission
-    # to resolve threads gets back.
-    it "does not reply when resolving fails, and logs the error" do
-      respond_with(
-        build_response(Net::HTTPOK, code: 200, message: "OK",
-                                    body: { errors: [{ message: "Resource not accessible by integration" }] }.to_json)
-      )
+    it "returns false and logs the API error" do
+      response = build_response(Net::HTTPNotFound, code: 404, message: "Not Found",
+                                                   body: { message: "Not Found" }.to_json)
+      stub_post(response)
 
       expect do
-        expect(poster.resolve_thread(thread_id: "T1", comment_id: 99, body: "Fixed")).to eq(false)
-      end.to output(/Resolving thread T1 failed: GraphQL: Resource not accessible by integration/).to_stderr
-      expect(requests.map(&:path)).to eq(["/graphql"])
+        expect(poster.reply_to_thread(comment_id: 99, body: "Fixed")).to eq(false)
+      end.to output(/Reply to comment 99 failed: HTTP 404: Not Found/).to_stderr
     end
   end
 
