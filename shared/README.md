@@ -33,6 +33,7 @@ shared/
 | `AGENT_PROMPT_PATH` | yes | The complete prompt. Keep it outside the workspace, which is the pull request's head. |
 | `AGENT_OUTPUT_PATH` | yes | Where the agent's response is written. Anything already there, including a symlink, is removed first. |
 | `MODEL` | no | Passed as `--model`; empty leaves the choice to the CLI. |
+| `EFFORT` | no | Claude only: passed as `--effort`; empty leaves the choice to the CLI. Both actions default to `xhigh`. |
 | `CLAUDE_SETTINGS` | no | Claude only: replaces `config/claude-settings.json`. |
 | `CLAUDE_ARGS` | no | Claude only: extra arguments, split with shell quoting. |
 

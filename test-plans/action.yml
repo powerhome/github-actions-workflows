@@ -39,8 +39,12 @@ inputs:
     description: Model passed to the provider CLI's --model flag, e.g. sonnet for Claude. Empty pins claude-sonnet-5-5-high on Cursor and uses the Claude CLI's default on Claude
     required: false
     default: ""
+  effort:
+    description: Claude effort level (low, medium, high, xhigh, max), passed to the claude CLI as --effort. Empty uses the CLI's default (claude provider only)
+    required: false
+    default: xhigh
   claude-args:
-    description: Extra arguments for the claude CLI, parsed with shell quoting, e.g. --effort high (claude provider only)
+    description: Extra arguments for the claude CLI, parsed with shell quoting, e.g. --max-turns 30 (claude provider only)
     required: false
     default: ""
   pull-request-number:
@@ -293,8 +297,7 @@ runs:
         # pick the model. The pinned slug is Cursor's, so Claude keeps its own default.
         MODEL: ${{ inputs.model || (inputs.provider == 'cursor' && 'claude-sonnet-5-5-high' || '') }}
         CLAUDE_SETTINGS: ""
-        # Not an input here; set empty so a job-level EFFORT cannot choose one.
-        EFFORT: ""
+        EFFORT: ${{ inputs.effort }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}
       run: bash "${{ github.action_path }}/../shared/bin/run_provider.sh"
 
