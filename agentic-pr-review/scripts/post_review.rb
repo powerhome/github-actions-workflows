@@ -42,7 +42,7 @@ def scope_note(context, resolved_count)
   if context["mode"] == "incremental"
     notes << "Reviewed the commits since `#{context['last_reviewed_sha'][0, 7]}`."
   end
-  notes << "Resolving #{resolved_count} earlier finding(s) that look fixed." if resolved_count.positive?
+  notes << "#{resolved_count} earlier finding(s) look fixed." if resolved_count.positive?
   notes.empty? ? "" : "\n\n---\n\n_#{notes.join(' ')}_"
 end
 
@@ -113,7 +113,7 @@ triage.threads_to_resolve.each do |finding|
   resolved = poster.resolve_thread(
     thread_id: finding["thread_id"],
     comment_id: finding["comment_id"],
-    body: "This looks addressed as of #{commit_sha[0, 7]}, so the agentic review is resolving it."
+    body: "Resolved by the agentic review: this looks addressed as of #{commit_sha[0, 7]}."
   )
   warn "[process_review] Resolved #{finding['key']} (#{finding['path']})" if resolved
 end

@@ -66,11 +66,12 @@ class GitHubReviewPoster
     false
   end
 
-  # Replies under the thread's first comment, then resolves it, so the thread says why it
-  # closed rather than just collapsing.
+  # Resolves the thread, then replies under its first comment so the thread says why it
+  # closed. Resolving comes first: an installation without permission to resolve would
+  # otherwise leave a reply announcing a resolution that never happened.
   def resolve_thread(thread_id:, comment_id:, body:)
-    @api.post("/repos/#{@owner}/#{@repo}/pulls/#{@pr_number}/comments/#{comment_id}/replies", { body: })
     @api.graphql(RESOLVE_THREAD, threadId: thread_id)
+    @api.post("/repos/#{@owner}/#{@repo}/pulls/#{@pr_number}/comments/#{comment_id}/replies", { body: })
     true
   rescue GitHubApi::RequestError => e
     log_request_error("Resolving thread #{thread_id} failed", e)

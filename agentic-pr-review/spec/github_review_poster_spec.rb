@@ -102,30 +102,32 @@ RSpec.describe GitHubReviewPoster do
       end
     end
 
-    it "replies under the thread's first comment, then resolves it" do
+    it "resolves the thread, then replies under its first comment" do
       respond_with(
-        build_response(Net::HTTPCreated, code: 201, message: "Created", body: { id: 3 }.to_json),
         build_response(Net::HTTPOK, code: 200, message: "OK",
-                                    body: { data: { resolveReviewThread: { thread: { id: "T1" } } } }.to_json)
+                                    body: { data: { resolveReviewThread: { thread: { id: "T1" } } } }.to_json),
+        build_response(Net::HTTPCreated, code: 201, message: "Created", body: { id: 3 }.to_json)
       )
 
       expect(poster.resolve_thread(thread_id: "T1", comment_id: 99, body: "Fixed")).to eq(true)
 
-      expect(requests.map(&:path)).to eq(["/repos/acme/widgets/pulls/42/comments/99/replies", "/graphql"])
-      expect(JSON.parse(requests.first.body)).to eq("body" => "Fixed")
-      expect(JSON.parse(requests.last.body)).to include("variables" => { "threadId" => "T1" })
+      expect(requests.map(&:path)).to eq(["/graphql", "/repos/acme/widgets/pulls/42/comments/99/replies"])
+      expect(JSON.parse(requests.first.body)).to include("variables" => { "threadId" => "T1" })
+      expect(JSON.parse(requests.last.body)).to eq("body" => "Fixed")
     end
 
-    it "returns false and logs a GraphQL error" do
+    # "Resource not accessible by integration" is what an installation without permission
+    # to resolve threads gets back.
+    it "does not reply when resolving fails, and logs the error" do
       respond_with(
-        build_response(Net::HTTPCreated, code: 201, message: "Created", body: { id: 3 }.to_json),
         build_response(Net::HTTPOK, code: 200, message: "OK",
-                                    body: { errors: [{ message: "Resource not accessible" }] }.to_json)
+                                    body: { errors: [{ message: "Resource not accessible by integration" }] }.to_json)
       )
 
       expect do
         expect(poster.resolve_thread(thread_id: "T1", comment_id: 99, body: "Fixed")).to eq(false)
-      end.to output(/Resolving thread T1 failed: GraphQL: Resource not accessible/).to_stderr
+      end.to output(/Resolving thread T1 failed: GraphQL: Resource not accessible by integration/).to_stderr
+      expect(requests.map(&:path)).to eq(["/graphql"])
     end
   end
 
