@@ -9,6 +9,7 @@ require_relative "../lib/test_plan/output/playbook_formatter"
 require_relative "../lib/test_plan/playbook/kit_facts"
 require_relative "../lib/test_plan/response/playbook_parser"
 require_relative "../lib/test_plan/variant"
+require_relative "../lib/test_plan/coverage_warning"
 
 begin
   json_path = ENV.fetch("TEST_PLAN_JSON_PATH")
@@ -48,6 +49,12 @@ begin
     ).render
   else
     parsed = TestPlan::Response::StandardParser.parse_file(json_path, access:)
+    # Only this shape is asked for files_reviewed; the dependency and Playbook plans work
+    # from a small diff and are not.
+    coverage_warning = TestPlan::CoverageWarning.for(
+      files_reviewed: parsed.files_reviewed, changed_files: ENV.fetch("TEST_PLAN_CHANGED_FILES", "")
+    )
+    options[:generation_warning] = [generation_warning, coverage_warning].reject(&:empty?).join(" ")
     comment = TestPlan::Output::StandardFormatter.new(parsed:, access:, **options).render
   end
 

@@ -9,7 +9,7 @@ require "tmpdir"
 RSpec.describe "bin/render_test_plan.rb" do
   # Read back as UTF-8, not at the locale's encoding: the plan carries the heading's check
   # mark and the arrow between versions, so otherwise this passes or fails on LANG.
-  def render(variant:, payload:, dependencies:, expect_success: true, access: nil)
+  def render(variant:, payload:, dependencies:, expect_success: true, access: nil, changed_files: nil)
     Dir.mktmpdir do |directory|
       json_path = File.join(directory, "response.json")
       manifest_path = File.join(directory, "manifest.json")
@@ -28,6 +28,7 @@ RSpec.describe "bin/render_test_plan.rb" do
         "TEST_PLAN_PROFILE_NAME" => "Cobra Test Plan",
       }
       env["TEST_PLAN_ACCESS"] = access if access
+      env["TEST_PLAN_CHANGED_FILES"] = changed_files if changed_files
       _stdout, stderr, status = Open3.capture3(env, "ruby", File.join(ACTION_ROOT, "bin", "render_test_plan.rb"))
       next stderr unless expect_success
 
@@ -65,6 +66,48 @@ RSpec.describe "bin/render_test_plan.rb" do
 
     expect(output).to include("**Sign in as:** Public visitor, not signed in")
     expect(output).not_to include("Permissions")
+  end
+
+  describe "coverage warning" do
+    let(:payload) do
+      {
+        "files_reviewed" => 2,
+        "feature_areas" => [
+          {
+            "test_path" => "Request a quote", "domain" => "", "code" => "QTE",
+            "scenarios" => [
+              {
+                "title" => "Submit the form", "landing_page" => "/get-a-quote", "audience" => "",
+                "sign_in_as" => "Public visitor, not signed in", "include_in_regression" => false,
+                "steps" => ["Fill in the form and submit it.", "Verify the confirmation appears."]
+              },
+            ],
+          },
+        ],
+        "regression_tests" => [],
+      }
+    end
+
+    it "warns when the plan read fewer files than the PR changed" do
+      output = render(variant: "", access: "sign_in", payload:, dependencies: [], changed_files: "5")
+
+      expect(output).to include("> ⚠️ The test plan reported reading 2 of 5 changed files")
+    end
+
+    it "stays silent when every changed file was read" do
+      output = render(variant: "", access: "sign_in", payload:, dependencies: [], changed_files: "2")
+
+      expect(output).not_to include("⚠️")
+    end
+
+    it "does not ask the dependency variant for a count" do
+      output = render(
+        variant: "dependency", payload: { "dependencies" => [], "regression_tests" => [] },
+        dependencies: [], changed_files: "5"
+      )
+
+      expect(output).not_to include("changed files")
+    end
   end
 
   it "renders every manifest dependency through the dependency variant" do

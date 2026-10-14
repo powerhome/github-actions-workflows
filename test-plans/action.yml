@@ -161,6 +161,7 @@ runs:
       shell: bash
       env:
         PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        PR_CHUNKS_DIR: ${{ github.workspace }}/pr-chunks
         DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
         DEPENDENCY_DELTA_CONTEXT_PATH: ${{ github.workspace }}/dependency-deltas-context.diff
         DEPENDENCY_KIT_USAGE_PATH: ${{ github.workspace }}/dependency-kit-usage.md
@@ -178,6 +179,7 @@ runs:
 
         rm -rf -- \
           "${PR_DIFF_PATH}" \
+          "${PR_CHUNKS_DIR}" \
           "${DEPENDENCY_DELTA_MANIFEST_PATH}" \
           "${DEPENDENCY_DELTA_CONTEXT_PATH}" \
           "${DEPENDENCY_KIT_USAGE_PATH}" \
@@ -228,6 +230,18 @@ runs:
       run: |
         set -euo pipefail
         git diff "${BASE_SHA}...${HEAD_SHA}" > "${GITHUB_WORKSPACE}/pr.diff"
+
+    # One read of a large pr.diff comes back truncated, and a model handed the first
+    # thousand lines plans those and stops. The chunks are read whole, and INDEX.md says
+    # how many there are.
+    - name: Split PR diff into chunks
+      id: diff_chunks
+      if: steps.pr_metadata.outputs.generate == 'true'
+      shell: bash
+      env:
+        PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
+        PR_CHUNKS_DIR: ${{ github.workspace }}/pr-chunks
+      run: ruby "${{ github.action_path }}/../shared/bin/split_pr_diff.rb"
 
     - name: Build external dependency delta
       id: dependency_delta
@@ -303,6 +317,8 @@ runs:
         name: ${{ steps.profile.outputs.artifact_name }}
         path: |
           ${{ github.workspace }}/test-plan-agent.json
+          ${{ github.workspace }}/pr.diff
+          ${{ github.workspace }}/pr-chunks
           ${{ github.workspace }}/dependency-delta-manifest.json
           ${{ runner.temp }}/dependency-deltas-full.diff
           ${{ github.workspace }}/dependency-deltas-context.diff
@@ -321,6 +337,7 @@ runs:
         TEST_PLAN_ACCESS: ${{ steps.profile.outputs.access }}
         TEST_PLAN_GENERATION_WARNING: ${{ steps.dependency_delta.outputs.generation_warning }}
         TEST_PLAN_VARIANT: ${{ steps.variant.outputs.name }}
+        TEST_PLAN_CHANGED_FILES: ${{ steps.diff_chunks.outputs.changed_files }}
         DEPENDENCY_DELTA_MANIFEST_PATH: ${{ github.workspace }}/dependency-delta-manifest.json
         PLAYBOOK_KIT_FACTS_PATH: ${{ runner.temp }}/playbook-kit-facts.json
         PULL_REQUEST_TITLE: ${{ steps.pr_metadata.outputs.title }}

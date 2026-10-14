@@ -43,6 +43,10 @@ Before checkout or provider usage, the action asks GitHub whether the PR can be 
 
 A blocked run completes successfully, consumes no provider usage, and replaces that profile's previous plan so testers do not follow stale instructions.
 
+## Reading the Diff
+
+One read of a large `pr.diff` comes back truncated, and a model handed the first thousand lines plans those and stops. The action splits the diff into `pr-chunks/NNN.diff` files of at most 400 lines or 32KB, breaking at file and hunk boundaries, with a `pr-chunks/INDEX.md` listing each chunk and its files (the splitter is shared with `agentic-pr-review`). The standard prompts (`cobra_test_plan` and `test_plan`) have the model read every chunk, then inventory the affected pages, then resolve permissions for each, and report `files_reviewed` in its JSON. When that is missing or lower than the number of changed files, the comment opens with a warning that the plan may be partial. The Playbook and dependency prompts work from a small diff and still read `pr.diff`. `pr.diff` and `pr-chunks/` are uploaded with the other artifacts.
+
 ## Dependency Evidence
 
 The action detects changed Bundler, Yarn v1, and npm (`package-lock.json` lockfileVersion 2 and 3) dependencies in every lockfile the pull request changed, wherever it lives, comparing the merge base against the head so it sees the same range as `pr.diff`. Local CoBRA PATH components and Yarn or npm workspace/file/link packages are excluded. A lockfile under a `vendor/` or `node_modules/` directory is not read at all: it belongs to third-party code committed with the application — a WordPress plugin's vendor tree, for one — and describes how that code was built, not what the application depends on. An npm lockfile older than version 2 is reported as unreadable, like any lockfile the action cannot parse. Duplicate changes are collapsed across lockfiles.

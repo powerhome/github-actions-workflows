@@ -160,7 +160,7 @@ runs:
       env:
         PR_DIFF_PATH: ${{ github.workspace }}/pr.diff
         PR_CHUNKS_DIR: ${{ github.workspace }}/pr-chunks
-      run: ruby "${{ github.action_path }}/scripts/split_pr_diff.rb"
+      run: ruby "${{ github.action_path }}/../shared/bin/split_pr_diff.rb"
 
     # AGENTS.md, CLAUDE.md, .cursor/ and .claude/ are read by the CLI as instructions, so a
     # pull request editing them could tell its own reviewer what to say. The edits are still

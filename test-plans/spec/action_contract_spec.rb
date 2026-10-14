@@ -29,7 +29,7 @@ RSpec.describe "test-plans/action.yml" do
   it "gates every generation step on the mergeability result" do
     generation_step_names = Regexp.union(
       [
-        "Check out", "agent instructions", "Fetch base", "Fetch through", "Compute PR diff",
+        "Check out", "agent instructions", "Fetch base", "Fetch through", "Compute PR diff", "Split PR diff",
         "dependency delta", "provider", "Render test-plan", "Upsert test-plan"
       ]
     )
@@ -71,5 +71,25 @@ RSpec.describe "test-plans/action.yml" do
     expect(env.fetch("MODEL")).to include("inputs.provider == 'cursor'", "claude-sonnet-5-5-high")
     expect(env.fetch("CLAUDE_ARGS")).to eq("${{ inputs.claude-args }}")
     expect(env.fetch("CLAUDE_SETTINGS")).to eq("")
+  end
+
+  it "splits the diff before the provider runs and hands the changed file count to the renderer" do
+    names = steps.map { |step| step.fetch("name") }
+    split = steps.find { |step| step.fetch("name") == "Split PR diff into chunks" }
+    render = steps.find { |step| step.fetch("name") == "Render test-plan comment" }
+
+    expect(names.index("Split PR diff into chunks")).to be_between(
+      names.index("Compute PR diff"), names.index("Run test-plan provider")
+    )
+    expect(split.fetch("id")).to eq("diff_chunks")
+    expect(render.fetch("env").fetch("TEST_PLAN_CHANGED_FILES")).to eq("${{ steps.diff_chunks.outputs.changed_files }}")
+  end
+
+  it "has the standard prompts read every chunk and report files_reviewed" do
+    %w[cobra_test_plan.md test_plan.md].each do |name|
+      prompt = File.read(File.join(File.dirname(action_path), "ai", "prompts", name), encoding: Encoding::UTF_8)
+
+      expect(prompt).to include("pr-chunks/INDEX.md", "files_reviewed")
+    end
   end
 end

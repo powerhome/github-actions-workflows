@@ -12,7 +12,7 @@ module TestPlan::Response
     DEFAULT_FEATURE_CODE = "AC"
     FEATURE_CODE_PATTERN = /\A[A-Z][A-Z0-9]{1,5}\z/
 
-    attr_reader :permissions, :feature_areas, :regression_tests, :discarded
+    attr_reader :permissions, :feature_areas, :regression_tests, :discarded, :files_reviewed
 
     def self.parse_file(path, access: "consent")
       new(File.read(path, encoding: Encoding::UTF_8), access:)
@@ -25,6 +25,7 @@ module TestPlan::Response
       @consent = access == "consent"
       @payload = JSON.parse(extract_json(json_string))
       validate_root!
+      @files_reviewed = Integer(@payload["files_reviewed"], exception: false)
       @permissions = build_permissions if @consent
       @feature_areas = build_feature_areas
       @regression_tests = build_regression_tests
