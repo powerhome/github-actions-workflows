@@ -4,6 +4,7 @@
 require "json"
 require "time"
 
+require_relative "branch_ancestry"
 require_relative "github_api"
 require_relative "review_history"
 require_relative "review_scope"
@@ -17,22 +18,6 @@ require_relative "review_scope"
 MAX_FINDINGS = 100
 MAX_DISCUSSION = 100
 SHA_PATTERN = /\A[0-9a-f]{40}\z/
-
-def commit_present?(sha)
-  system("git", "cat-file", "-e", "#{sha}^{commit}", out: File::NULL, err: File::NULL)
-end
-
-# The checkout only reaches back to the merge base, so a last-reviewed commit before a merge
-# from the base branch may be missing. Fetching it by SHA settles that; if the fetch fails, the
-# commit is gone from the branch and the review is a full one.
-def ancestor?(sha, head_sha)
-  unless commit_present?(sha)
-    system("git", "fetch", "--no-tags", "--quiet", "--depth=1", "origin", sha, out: File::NULL, err: File::NULL)
-  end
-
-  commit_present?(sha) &&
-    system("git", "merge-base", "--is-ancestor", sha, head_sha, out: File::NULL, err: File::NULL)
-end
 
 def findings_for_prompt(threads)
   threads.last(MAX_FINDINGS).each_with_index.map do |thread, index|
@@ -48,8 +33,10 @@ raise "HEAD_SHA is not a full commit SHA: #{head_sha.inspect}" unless SHA_PATTER
 seen_at = Time.now.utc.iso8601
 
 owner, repo = ENV.fetch("GITHUB_REPOSITORY").split("/", 2)
+api = GitHubApi.new(token: ENV.fetch("GITHUB_TOKEN"))
+ancestry = BranchAncestry.new(api:, owner:, repo:)
 history = ReviewHistory.new(
-  api: GitHubApi.new(token: ENV.fetch("GITHUB_TOKEN")),
+  api:,
   owner:,
   repo:,
   pr_number: ENV.fetch("PULL_NUMBER"),
@@ -61,7 +48,7 @@ scope = ReviewScope.decide(
   event_name: ENV.fetch("EVENT_NAME"),
   last_reviewed_sha: history.last_reviewed_sha,
   head_sha:,
-  ancestor: ->(sha) { ancestor?(sha, head_sha) }
+  ancestor: ->(sha) { ancestry.ancestor?(sha, head_sha) }
 )
 warn "[plan_review] #{scope.mode}: #{scope.reason}"
 

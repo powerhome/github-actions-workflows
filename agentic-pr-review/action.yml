@@ -129,8 +129,9 @@ runs:
         head_ref: ${{ steps.pr_gate.outputs.head_sha }}
         deepen_length: ${{ inputs.deepen-length }}
 
-    # Before the credential goes: a last-reviewed commit outside the fetched history is
-    # fetched by SHA to tell a merge from the base branch apart from a rewritten branch.
+    # Before the credential goes: the last-reviewed commit may be outside the fetched history,
+    # and is fetched by SHA for the incremental diff. Whether it is still in the branch is
+    # asked of the compare API, since the shallow checkout can hide the path back to it.
     - name: Plan review scope
       id: scope
       shell: bash

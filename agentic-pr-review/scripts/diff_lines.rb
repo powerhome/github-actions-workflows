@@ -40,7 +40,9 @@ module_function
 
   ESCAPES = { "a" => "\a", "b" => "\b", "t" => "\t", "n" => "\n", "v" => "\v", "f" => "\f", "r" => "\r" }.freeze
 
+  # git ends the line with a tab when an unquoted path contains a space.
   def new_path(target)
+    target = target.delete_suffix("\t")
     return nil if target == "/dev/null"
 
     unquote(target).delete_prefix("b/")

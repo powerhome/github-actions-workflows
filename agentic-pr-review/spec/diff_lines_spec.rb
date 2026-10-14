@@ -47,6 +47,12 @@ RSpec.describe DiffLines do
       expect(added["spécial.rb"].to_a).to eq([1])
     end
 
+    it "drops the tab git puts after a path with a space" do
+      spaced = "diff --git a/foo bar.rb b/foo bar.rb\n--- a/foo bar.rb\t\n+++ b/foo bar.rb\t\n@@ -1 +1 @@\n-a\n+b\n"
+
+      expect(described_class.added(spaced)).to eq("foo bar.rb" => Set[1])
+    end
+
     it "is empty for an empty diff" do
       expect(described_class.added("")).to eq({})
     end
