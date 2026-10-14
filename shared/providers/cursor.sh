@@ -38,15 +38,18 @@ fi
 
 cd "${GITHUB_WORKSPACE}"
 
-# The workspace is the pull request's head, which can put a symlink at .cursor or at the
-# config file itself, and both mkdir -p and cp follow one. Clearing them first keeps the
-# copy inside the workspace and makes it the config the CLI reads.
+# The CLI reads a project's permissions from .cursor/cli.json; cli-config.json is only the
+# global file's name, under ~/.cursor. The workspace is the pull request's head, which can
+# put its own permissions there, or a symlink at .cursor or at the file itself, and both
+# mkdir -p and cp follow one. Clearing them first keeps the copy inside the workspace and
+# makes it the config the CLI reads.
+PROJECT_CONFIG=.cursor/cli.json
 if [[ -L .cursor || ( -e .cursor && ! -d .cursor ) ]]; then
   rm -rf -- .cursor
 fi
 mkdir -p .cursor
-rm -rf -- .cursor/cli-config.json
-cp "${CLI_CONFIG_TEMPLATE}" .cursor/cli-config.json
+rm -rf -- "${PROJECT_CONFIG}"
+cp "${CLI_CONFIG_TEMPLATE}" "${PROJECT_CONFIG}"
 
 MODEL_ARGS=()
 if [[ -n "${MODEL:-}" ]]; then
@@ -58,9 +61,10 @@ echo "[agent] provider: cursor" >&2
 clear_agent_output
 
 # --trust is required because the headless agent otherwise refuses the workspace.
-# Read-only CLI permissions are copied from config/cursor-cli-config.json. run_agent sends
-# the prompt on stdin. The empty-array expansion is spelled out because bash before 4.4
-# treats "${MODEL_ARGS[@]}" on an empty array as unbound under set -u.
+# Read-only CLI permissions are copied from config/cursor-cli-config.json to
+# .cursor/cli.json above. run_agent sends the prompt on stdin. The empty-array expansion
+# is spelled out because bash before 4.4 treats "${MODEL_ARGS[@]}" on an empty array as
+# unbound under set -u.
 invoke_cursor() {
   agent --print --trust --output-format text ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"}
 }
