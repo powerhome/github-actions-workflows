@@ -3,7 +3,6 @@
 require_relative "../spec_helper"
 
 require "fileutils"
-require "json"
 require "open3"
 require "rbconfig"
 require "tmpdir"
@@ -179,9 +178,9 @@ RSpec.describe "providers/claude.sh" do
     end
   end
 
-  it "bundles settings that deny shell, edits, and the web" do
+  it "bundles settings that allow only the upstream command, and deny edits and the web" do
     settings = File.read(File.join(SHARED_ROOT, "config", "claude-settings.json"))
-    expect(settings).to include('"disableAllHooks": true', '"Bash"', '"Write"', '"WebFetch"', '"WebSearch"')
+    expect(settings).to include('"disableAllHooks": true', '"Bash(upstream:*)"', '"Write"', '"WebFetch"', '"WebSearch"')
   end
 
   it "passes the model, effort, caller settings, and caller arguments through" do
@@ -201,49 +200,6 @@ RSpec.describe "providers/claude.sh" do
         ["--allowed-tools", "Bash(gh pr view:*)"],
         ["--max-turns", "30"]
       )
-    end
-  end
-
-  describe "the upstream command" do
-    let(:upstream_settings) { File.join(SHARED_ROOT, "config", "claude-settings-upstream.json") }
-
-    it "puts upstream on the CLI's PATH with the token as its only GitHub credential" do
-      env = { "UPSTREAM_GITHUB_TOKEN" => "ghs_job", "GITHUB_TOKEN" => "ghs_from_job", "GH_TOKEN" => "ghs_other" }
-
-      run_provider(env:) do |result|
-        expect(result[:status]).to be_success
-        expect(result[:stderr]).to include("upstream: may read")
-        expect(result[:args].each_cons(2)).to include(["--settings", upstream_settings])
-        expect(result[:claude_env]).to include("UPSTREAM_GITHUB_TOKEN" => "ghs_job")
-        expect(result[:claude_env].fetch("PATH")).to start_with("#{File.join(SHARED_ROOT, 'agent-bin')}:")
-        expect(result[:claude_env].keys).not_to include("GITHUB_TOKEN", "GH_TOKEN")
-      end
-    end
-
-    it "leaves the bundled settings and the environment alone without a token" do
-      run_provider(env: { "UPSTREAM_GITHUB_TOKEN" => "" }) do |result|
-        expect(result[:args].each_cons(2)).to include(
-          ["--settings", File.join(SHARED_ROOT, "config", "claude-settings.json")]
-        )
-        expect(result[:claude_env].fetch("PATH")).not_to include("agent-bin")
-      end
-    end
-
-    it "gives way to a caller's settings" do
-      run_provider(env: { "UPSTREAM_GITHUB_TOKEN" => "ghs_job", "CLAUDE_SETTINGS" => '{"permissions":{}}' }) do |result|
-        expect(result[:args].each_cons(2)).to include(["--settings", '{"permissions":{}}'])
-      end
-    end
-
-    # dontAsk refuses every other command, including chained ones and redirects.
-    it "allows upstream and no other shell command" do
-      settings = JSON.parse(File.read(upstream_settings))
-      permissions = settings.fetch("permissions")
-
-      expect(permissions.fetch("allow").grep(/\ABash/)).to eq(["Bash(upstream:*)"])
-      expect(permissions.fetch("deny")).to include("Edit", "Write", "WebFetch", "WebSearch", "Read(//proc/**)")
-      expect(settings).to include("disableAllHooks" => true)
-      expect(Dir.children(File.join(SHARED_ROOT, "agent-bin"))).to eq(["upstream"])
     end
   end
 

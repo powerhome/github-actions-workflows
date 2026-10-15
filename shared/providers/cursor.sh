@@ -38,11 +38,6 @@ fi
 
 cd "${GITHUB_WORKSPACE}"
 
-agent_cli_env "${SHARED_ROOT}/agent-bin"
-if [[ -n "${UPSTREAM_GITHUB_TOKEN:-}" ]]; then
-  CLI_CONFIG_TEMPLATE="${SHARED_ROOT}/config/cursor-cli-config-upstream.json"
-fi
-
 # The workspace is the pull request's head, which can put a symlink at .cursor or at the
 # config file itself, and both mkdir -p and cp follow one. Clearing them first keeps the
 # copy inside the workspace and makes it the config the CLI reads.
@@ -52,9 +47,6 @@ fi
 mkdir -p .cursor
 rm -rf -- .cursor/cli-config.json
 cp "${CLI_CONFIG_TEMPLATE}" .cursor/cli-config.json
-# The CLI lets an allowed command redirect its output to a file even with Write(**) denied, so
-# the agent could otherwise overwrite these permissions with the upstream command.
-chmod 0444 .cursor/cli-config.json
 
 MODEL_ARGS=()
 if [[ -n "${MODEL:-}" ]]; then
@@ -66,12 +58,11 @@ echo "[agent] provider: cursor" >&2
 clear_agent_output
 
 # --trust is required because the headless agent otherwise refuses the workspace.
-# Read-only CLI permissions are copied from config/cursor-cli-config.json, or with upstream
-# from config/cursor-cli-config-upstream.json. run_agent sends the prompt on stdin. The
-# empty-array expansion is spelled out because bash before 4.4 treats "${MODEL_ARGS[@]}" on
-# an empty array as unbound under set -u.
+# Read-only CLI permissions are copied from config/cursor-cli-config.json. run_agent sends
+# the prompt on stdin. The empty-array expansion is spelled out because bash before 4.4
+# treats "${MODEL_ARGS[@]}" on an empty array as unbound under set -u.
 invoke_cursor() {
-  env "${AGENT_CLI_ENV[@]}" agent --print --trust --output-format text ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"}
+  agent --print --trust --output-format text ${MODEL_ARGS[@]+"${MODEL_ARGS[@]}"}
 }
 
 status=0

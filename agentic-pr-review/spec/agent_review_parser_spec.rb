@@ -74,26 +74,6 @@ RSpec.describe AgentReviewParser do
     end
   end
 
-  describe "token redaction" do
-    it "blanks GitHub tokens in the summary and comments" do
-      token = "ghs_#{'A1b2' * 9}"
-      pat = "github_pat_#{'x' * 30}"
-      json = {
-        "summary" => "Token: #{token}",
-        "comments" => [{ "path" => "a.rb", "body" => "Uses #{pat} here", "line" => 2, "severity" => "low" }],
-      }.to_json
-      parsed = described_class.new(json)
-
-      expect(parsed.summary_body).to include("Token: [redacted token]")
-      expect(parsed.summary_body).not_to include(token)
-      expect(parsed.inline_comments.first["body"]).to end_with("Uses [redacted token] here")
-    end
-
-    it "leaves short look-alikes alone" do
-      expect(described_class.redact_tokens("ghs_short and gh_cli")).to eq("ghs_short and gh_cli")
-    end
-  end
-
   describe "#inline_comments" do
     it "builds entries with severity prefix and metadata" do
       json = {

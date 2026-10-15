@@ -206,7 +206,6 @@ runs:
         REVIEW_CONTEXT_PATH: ${{ runner.temp }}/agentic-pr-review-context.json
         PR_INCREMENTAL_DIFF_PATH: ${{ github.workspace }}/pr-incremental.diff
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
-        UPSTREAM_ACCESS: ${{ inputs.provider != 'claude' || inputs.claude-settings == '' }}
       run: ruby "${{ github.action_path }}/scripts/compose_prompt.rb"
 
     - name: Run review provider
@@ -223,9 +222,8 @@ runs:
         EFFORT: ${{ inputs.effort }}
         CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}
-        # For the upstream command, which only reads. A caller's claude-settings replace the ones
-        # that allow it, so the agent gets no token then.
-        UPSTREAM_GITHUB_TOKEN: ${{ (inputs.provider != 'claude' || inputs.claude-settings == '') && github.token || '' }}
+        # For the agent's upstream command, which only reads.
+        GH_TOKEN: ${{ github.token }}
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
         AGENT_DIFF_PATH: ${{ github.workspace }}/pr.diff
         AGENT_CHANGED_FILES_PATH: ${{ runner.temp }}/pr-files.txt

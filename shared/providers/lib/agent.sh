@@ -131,20 +131,3 @@ run_agent() {
   rm -f -- "${prompt_file}"
   return "${status}"
 }
-
-# Fills AGENT_CLI_ENV with the env(1) arguments to run the agent CLI under. It never gets the
-# ACTIONS_ID_TOKEN_REQUEST_* variables, which would let it mint GitHub OIDC tokens for any
-# audience. With UPSTREAM_GITHUB_TOKEN set, the agent may run the upstream command, which
-# only reads another repository's changes between two refs: the directory given, which holds
-# nothing else, goes first on PATH, and that token is the only GitHub credential the CLI
-# gets. Each provider's settings allow upstream and no other shell command.
-agent_cli_env() {
-  local agent_bin="$1"
-
-  AGENT_CLI_ENV=(-u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN)
-  if [[ -n "${UPSTREAM_GITHUB_TOKEN:-}" ]]; then
-    AGENT_CLI_ENV+=(-u GITHUB_TOKEN -u GH_TOKEN -u GH_ENTERPRISE_TOKEN -u GITHUB_ENTERPRISE_TOKEN)
-    AGENT_CLI_ENV+=("PATH=${agent_bin}:${PATH}")
-    echo "[agent] upstream: may read other repositories' changes between refs" >&2
-  fi
-}

@@ -1,6 +1,0 @@
-{
-  "permissions": {
-    "allow": ["Read(**)", "Shell(upstream)"],
-    "deny": ["Write(**)", "Mcp(*:*)", "WebFetch(*)", "WebSearch(*)"]
-  }
-}

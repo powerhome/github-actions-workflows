@@ -151,13 +151,9 @@ if [[ -n "${EFFORT:-}" ]]; then
   MODEL_ARGS+=(--effort "${EFFORT}")
 fi
 
-agent_cli_env "${SHARED_ROOT}/agent-bin"
-if [[ -n "${UPSTREAM_GITHUB_TOKEN:-}" ]]; then
-  SETTINGS_PATH="${SHARED_ROOT}/config/claude-settings-upstream.json"
-fi
-
-# A caller's workflow can replace the bundled settings, which deny Bash outright: a deny
-# rule wins over any --allowed-tools, so loosening the tools means supplying settings too.
+# A caller's workflow can replace the bundled settings, which allow no shell command but
+# upstream: dontAsk refuses anything they do not allow, so loosening the tools means
+# supplying settings too.
 if [[ -n "${CLAUDE_SETTINGS:-}" ]]; then
   SETTINGS_PATH="${CLAUDE_SETTINGS}"
 fi
@@ -186,10 +182,11 @@ clear_agent_output
 # servers from loading. claude-settings does not touch those two flags. run_agent sends the
 # prompt on stdin. The empty-array expansions are spelled out because bash before 4.4
 # treats "${ARRAY[@]}" on an empty array as unbound under set -u. --disallowed-tools takes
-# every argument up to the next flag, so it is followed by one. agent_cli_env keeps the
-# ACTIONS_ID_TOKEN_REQUEST_* variables from the CLI; the refresher above keeps them.
+# every argument up to the next flag, so it is followed by one. The CLI gets no
+# ACTIONS_ID_TOKEN_REQUEST_* variables, which would let it mint GitHub OIDC tokens for any
+# audience; the refresher above keeps them.
 invoke_claude() {
-  env "${AGENT_CLI_ENV[@]}" \
+  env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
     claude --print --output-format text \
       --disallowed-tools "${DENIED_READS[@]}" \
       --setting-sources user \

@@ -20,9 +20,7 @@ prompt = ReviewPrompt.new(
   # Tagged with the locale's encoding, US-ASCII when nothing sets LANG, and joining it to the
   # UTF-8 prompt would raise on the first byte above ASCII.
   additional_instructions: ENV.fetch("REVIEW_ADDITIONAL_INSTRUCTIONS", "").dup.force_encoding(Encoding::UTF_8).scrub,
-  incremental_diff:,
-  # Set only when the provider step lets the agent run upstream.
-  upstream: ENV.fetch("UPSTREAM_ACCESS", "false") == "true"
+  incremental_diff:
 )
 
 File.write(ENV.fetch("AGENT_PROMPT_PATH"), prompt.to_s)
