@@ -1,5 +1,9 @@
 {
-  "extends": ["config:base", "group:allNonMajor"],
+  "extends": [
+    "config:base",
+    "group:allNonMajor",
+    "local>powerhome/renovate-config:ignore-stalebot-action"
+  ],
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true
