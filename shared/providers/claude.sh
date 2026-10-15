@@ -151,8 +151,9 @@ if [[ -n "${EFFORT:-}" ]]; then
   MODEL_ARGS+=(--effort "${EFFORT}")
 fi
 
-# A caller's workflow can replace the bundled settings, which deny Bash outright: a deny
-# rule wins over any --allowed-tools, so loosening the tools means supplying settings too.
+# A caller's workflow can replace the bundled settings, which allow no shell command but
+# upstream: dontAsk refuses anything they do not allow, so loosening the tools means
+# supplying settings too.
 if [[ -n "${CLAUDE_SETTINGS:-}" ]]; then
   SETTINGS_PATH="${CLAUDE_SETTINGS}"
 fi

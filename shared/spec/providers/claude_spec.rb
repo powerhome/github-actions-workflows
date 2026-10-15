@@ -178,9 +178,9 @@ RSpec.describe "providers/claude.sh" do
     end
   end
 
-  it "bundles settings that deny shell, edits, and the web" do
+  it "bundles settings that allow only the upstream command, and deny edits and the web" do
     settings = File.read(File.join(SHARED_ROOT, "config", "claude-settings.json"))
-    expect(settings).to include('"disableAllHooks": true', '"Bash"', '"Write"', '"WebFetch"', '"WebSearch"')
+    expect(settings).to include('"disableAllHooks": true', '"Bash(upstream:*)"', '"Write"', '"WebFetch"', '"WebSearch"')
   end
 
   it "passes the model, effort, caller settings, and caller arguments through" do

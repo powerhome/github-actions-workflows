@@ -21,4 +21,7 @@ if [[ ! -f "${provider_script}" ]]; then
   exit 1
 fi
 
+# upstream, the one shell command the agent may run, reads with gh and the caller's GH_TOKEN.
+export PATH="${SHARED_ROOT}/agent-bin:${PATH}"
+
 exec bash "${provider_script}"

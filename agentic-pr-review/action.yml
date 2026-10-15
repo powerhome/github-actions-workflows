@@ -222,6 +222,8 @@ runs:
         EFFORT: ${{ inputs.effort }}
         CLAUDE_SETTINGS: ${{ inputs.claude-settings }}
         CLAUDE_ARGS: ${{ inputs.claude-args }}
+        # For the agent's upstream command, which only reads.
+        GH_TOKEN: ${{ github.token }}
         AGENT_PROMPT_PATH: ${{ runner.temp }}/agentic-pr-review-prompt.md
         AGENT_DIFF_PATH: ${{ github.workspace }}/pr.diff
         AGENT_CHANGED_FILES_PATH: ${{ runner.temp }}/pr-files.txt

@@ -209,16 +209,20 @@ Neither CLI documents a version-pinned installer for CI, so each run installs th
 
 ### Cursor (read-only)
 
-[`shared/config/cursor-cli-config.json`](../shared/config/cursor-cli-config.json) is copied to **`.cursor/cli-config.json`** (the [project-local CLI config](https://cursor.com/docs/cli/reference/permissions) path). It **allows** only `Read(**)` and **denies** `Shell(*)`, `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, matching the Claude settings below. A `.cursor` symlink in the checkout is replaced rather than written through.
+[`shared/config/cursor-cli-config.json`](../shared/config/cursor-cli-config.json) is copied to **`.cursor/cli-config.json`** (the [project-local CLI config](https://cursor.com/docs/cli/reference/permissions) path). It **allows** `Read(**)` and the [`upstream`](#the-upstream-command) command, and **denies** `Write(**)`, `Mcp(*:*)`, `WebFetch(*)`, and `WebSearch(*)`, matching the Claude settings below. A `.cursor` symlink in the checkout is replaced rather than written through.
 
 ### Claude (read-only)
 
-[`shared/config/claude-settings.json`](../shared/config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, and `Grep` and **denies** `Bash`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, `WebSearch`, and reading `/proc` (`Read(//proc/**)`), where the process environment and its credentials are. The `/proc` deny, and with federation a deny on the directory holding the OIDC token, are also passed with `--disallowed-tools`, so they hold under replacement settings too. The CLI also runs with:
+[`shared/config/claude-settings.json`](../shared/config/claude-settings.json) is passed to `claude` with `--settings`, so nothing is written into the checked-out repository. It **allows** `Read`, `Glob`, `Grep`, and the [`upstream`](#the-upstream-command) command (`Bash(upstream:*)`), and **denies** `Edit`, `Write`, `NotebookEdit`, `WebFetch`, `WebSearch`, and reading `/proc` (`Read(//proc/**)`), where the process environment and its credentials are. The `/proc` deny, and with federation a deny on the directory holding the OIDC token, are also passed with `--disallowed-tools`, so they hold under replacement settings too. The CLI also runs with:
 
 - `--permission-mode dontAsk`, which denies any tool the settings do not allow instead of waiting on a prompt.
 - `--strict-mcp-config` with no `--mcp-config`, so MCP servers configured by the reviewed repository are not loaded.
 
 The CLI runs in the PR's own checkout, so the reviewed repository must not be able to configure it. `--setting-sources user` keeps its `.claude/settings.json` and `.claude/settings.local.json` from loading: their hooks would run shell commands outside the tool permissions, with the API key in the environment, and their `env` could point the API URL at another host. The settings file also sets `disableAllHooks`.
+
+### The `upstream` command
+
+[`shared/agent-bin/upstream`](../shared/agent-bin/upstream) is the one shell command either CLI may run. It lets the agent see what changed in another repository when the diff bumps a ref, such as an action pin or a Gemfile revision. It wraps `gh api` GET requests (`compare`, `show`, and `ls`) and uses the job's `github.token` as `GH_TOKEN`, which reads this repository and public ones.
 
 ### Overriding the Claude defaults
 
@@ -240,7 +244,7 @@ A caller can widen what the agent may do, for example to let it read PR context 
     claude-args: --max-turns 30
 ```
 
-- `claude-settings` **replaces** the bundled settings rather than adding to them, and the bundled file denies `Bash` outright. A deny rule wins over any allow, so `--allowed-tools "Bash(...)"` in `claude-args` has no effect unless `claude-settings` also drops that deny.
+- `claude-settings` **replaces** the bundled settings rather than adding to them, so keep `Bash(upstream:*)` in the allow list if the agent should still look up upstream changes. A deny rule wins over any allow, so `--allowed-tools "Bash(...)"` in `claude-args` has no effect while `claude-settings` denies `Bash`.
 - `--setting-sources user` and `--strict-mcp-config` are passed regardless, so the reviewed repository still cannot configure the CLI. `claude-args` comes after them, though, so a caller that passes its own `--setting-sources` changes that.
 - Whatever the settings allow runs with the API key, or with federation the GitHub OIDC request token, in the environment, against a prompt built from the PR, so allow only what the review needs.
 - The checkout's credential is removed from `.git/config` before the agent runs, so allowed Git commands that need authentication, such as `git fetch`, fail. Local ones — `git log`, `git diff`, `git show` — still work.

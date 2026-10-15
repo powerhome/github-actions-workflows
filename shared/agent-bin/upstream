@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Lets the review agent see what changed in another repository between two refs, such as a
+# bumped action pin or Gemfile revision. Every call is a GET through gh api, with the job's
+# GH_TOKEN, and the agent's settings allow this command and no other.
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: upstream compare OWNER/REPO BASE HEAD [PATH]
+       upstream show OWNER/REPO REF PATH
+       upstream ls OWNER/REPO REF [PATH]
+USAGE
+  exit 1
+}
+
+case "${1:-} $#" in
+  "compare 4" | "compare 5")
+    # PATH goes in through the environment rather than the jq program, so it is only ever data.
+    UPSTREAM_PATH="${5:-}" gh api "repos/$2/compare/$3...$4" --jq '
+      (.commits[] | "\(.sha[0:12]) \(.commit.message | split("\n")[0])"),
+      (.files[] | select(.filename | startswith(env.UPSTREAM_PATH))
+        | "\n--- \(.filename) (\(.status))\n\(.patch // "(no patch)")")'
+    ;;
+  "show 4")
+    gh api -H "Accept: application/vnd.github.raw+json" "repos/$2/contents/$4?ref=$3"
+    ;;
+  "ls 3" | "ls 4")
+    gh api "repos/$2/contents/${4:-}?ref=$3" --jq '.[] | "\(.type)\t\(.path)"'
+    ;;
+  *)
+    usage
+    ;;
+esac
