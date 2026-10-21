@@ -33,6 +33,9 @@ on:
         required: false
         type: string
         default: doc/dependency_decisions.yml
+      license-arguments:
+        required: false
+        type: string
 
 jobs:
   build:
@@ -62,6 +65,7 @@ jobs:
     with:
       workdir: "${{ inputs.workdir }}"
       decisions: "${{ inputs.license-decisions }}"
+      arguments: "${{ inputs.license-arguments }}"
 
   all:
     if: ${{ always() }}
