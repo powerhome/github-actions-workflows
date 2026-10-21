@@ -65,7 +65,7 @@ jobs:
     with:
       workdir: "${{ inputs.workdir }}"
       decisions: "${{ inputs.license-decisions }}"
-      arguments: "${{ inputs.license-arguments }}"
+      arguments: "${{ inputs.license-arguments }} --bundler_gemfiles ${{ join(fromJSON(inputs.gemfiles), ' ') }}"
 
   all:
     if: ${{ always() }}
