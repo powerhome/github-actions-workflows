@@ -39,7 +39,7 @@ jobs:
           ruby-version: 3.4.11
           bundler-cache: true
           working-directory: ${{ inputs.workdir }}
-      - run: gem install license_finder
+      - run: gem install license_patrol
       - name: Ensure license compliance with ${{ inputs.workdir }}/${{ inputs.decisions }}
         working-directory: ${{ inputs.workdir }}
-        run: "license_finder --decisions-file=${{ inputs.decisions }}"
+        run: "license_patrol --decisions-file=${{ inputs.decisions }}"
