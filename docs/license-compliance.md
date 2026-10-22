@@ -21,7 +21,11 @@ jobs:
 
 ## Inputs
 
+The first of the `gemfiles` (or the `Gemfile`) is installed with the bundler cache of `ruby/setup-ruby`, which is shared with any build using the same `ruby` and gemfile. The other gemfiles are installed without a cache.
+
 | **Input** | **Type** | **Required** | **Default**                  |
 | --------- | -------- | ------------ | ---------------------------- |
 | workdir   | string   | false        |                              |
+| ruby      | string   | false        | 3.4.11                       |
+| gemfiles  | string   | false        |                              |
 | decisions | string   | true         | doc/dependency_decisions.yml |

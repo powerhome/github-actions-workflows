@@ -5,7 +5,7 @@ For each ruby version, bundler version, and Gemfile (see inputs), it will:
 1. Setup ruby;
 2. Run an optional before-build step (see inputs);
 3. Run the build script (`bundle exec rake` default task);
-4. Run the license_finder gem to ensure license compliance.
+4. Run the license_patrol gem to ensure license compliance.
 
 When the workflow is run in `main`, and the commit is tagged with a tag containing the package (see inputs) name, it will publish to Rubygems (see secrets).
 
