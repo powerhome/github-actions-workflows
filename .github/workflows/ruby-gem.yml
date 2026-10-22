@@ -64,6 +64,7 @@ jobs:
     uses: ./.github/workflows/license-compliance.yml
     with:
       workdir: "${{ inputs.workdir }}"
+      ruby: "${{ fromJSON(inputs.ruby)[0] }}"
       gemfiles: "${{ inputs.gemfiles }}"
       decisions: "${{ inputs.license-decisions }}"
       arguments: "${{ inputs.license-arguments }} --bundler_gemfiles ${{ join(fromJSON(inputs.gemfiles), ' ') }}"

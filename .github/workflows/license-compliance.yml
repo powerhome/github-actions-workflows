@@ -10,8 +10,12 @@ on:
       workdir:
         required: false
         type: string
+      ruby:
+        required: false
+        type: string
+        default: 3.4.11
       gemfiles:
-        description: JSON list of the gemfiles to install. When not given, the Gemfile is installed and cached by ruby/setup-ruby
+        description: JSON list of the gemfiles to install. The first one is installed and cached by ruby/setup-ruby, defaulting to the Gemfile
         required: false
         type: string
       decisions:
@@ -42,18 +46,22 @@ jobs:
           } >> "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
+        env:
+          # Reuses the bundler cache of a build with the same ruby and gemfile
+          BUNDLE_GEMFILE: ${{ fromJSON(inputs.gemfiles || '[""]')[0] }}
         with:
-          ruby-version: 3.4.11
-          bundler-cache: ${{ inputs.gemfiles == '' }}
+          ruby-version: ${{ inputs.ruby }}
+          bundler-cache: true
           working-directory: ${{ inputs.workdir }}
-      - name: Install gems
+      - name: Install the other gemfiles
         if: ${{ inputs.gemfiles != '' }}
         working-directory: ${{ inputs.workdir }}
         env:
           GEMFILES: ${{ toJSON(fromJSON(inputs.gemfiles || '[]')) }}
         run: |
-          mapfile -t gemfiles < <(jq -r '.[]' <<< "$GEMFILES")
+          mapfile -t gemfiles < <(jq -r '.[1:][]' <<< "$GEMFILES")
           for gemfile in "${gemfiles[@]}"; do
+            BUNDLE_GEMFILE="$gemfile" bundle config set --local path "$PWD/vendor/bundle"
             BUNDLE_GEMFILE="$gemfile" bundle install --jobs 4
           done
       - run: gem install license_patrol
