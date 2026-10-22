@@ -10,6 +10,10 @@ on:
       workdir:
         required: false
         type: string
+      gemfiles:
+        description: JSON list of the gemfiles to install. When not given, the Gemfile is installed and cached by ruby/setup-ruby
+        required: false
+        type: string
       decisions:
         required: false
         type: string
@@ -40,8 +44,18 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.4.11
-          bundler-cache: true
+          bundler-cache: ${{ inputs.gemfiles == '' }}
           working-directory: ${{ inputs.workdir }}
+      - name: Install gems
+        if: ${{ inputs.gemfiles != '' }}
+        working-directory: ${{ inputs.workdir }}
+        env:
+          GEMFILES: ${{ toJSON(fromJSON(inputs.gemfiles || '[]')) }}
+        run: |
+          mapfile -t gemfiles < <(jq -r '.[]' <<< "$GEMFILES")
+          for gemfile in "${gemfiles[@]}"; do
+            BUNDLE_GEMFILE="$gemfile" bundle install --jobs 4
+          done
       - run: gem install license_patrol
       - name: Ensure license compliance with ${{ inputs.workdir }}/${{ inputs.decisions }}
         working-directory: ${{ inputs.workdir }}

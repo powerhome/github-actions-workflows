@@ -24,4 +24,5 @@ jobs:
 | **Input** | **Type** | **Required** | **Default**                  |
 | --------- | -------- | ------------ | ---------------------------- |
 | workdir   | string   | false        |                              |
+| gemfiles  | string   | false        |                              |
 | decisions | string   | true         | doc/dependency_decisions.yml |
