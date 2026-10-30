@@ -33,7 +33,7 @@ jobs:
 | **Input** | **Type** | **Required** | **Default**    |
 | --------- | -------- | ------------ | -------------- |
 | workdir   | string   | false        |                |
-| node      | string   | false        | '["18", "16"]' |
+| node      | string   | false        | '["22"]'       |
 
 ## Secrets
 
