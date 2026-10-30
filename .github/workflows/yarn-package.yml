@@ -5,7 +5,7 @@ on:
         required: true
     inputs:
       node:
-        default: '["18", "16"]'
+        default: '["22"]'
         required: false
         type: string
       workdir:
@@ -20,7 +20,7 @@ on:
         default: doc/dependency_decisions.yml
 
 env:
-  NODE_RELEASE_VERSION: "20"
+  NODE_RELEASE_VERSION: "22"
   REGISTRY_URL: "https://registry.npmjs.org"
 
 jobs:
@@ -36,6 +36,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
+          check-latest: true
       - name: Enable npm.powerapp.cloud auth
         shell: bash
         env:
@@ -76,6 +77,7 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_RELEASE_VERSION }}
+          check-latest: true
           registry-url: ${{ env.REGISTRY_URL }}
       - run: yarn install --frozen-lockfile
         working-directory: ${{ inputs.workdir }}
