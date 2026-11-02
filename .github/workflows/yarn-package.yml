@@ -20,7 +20,9 @@ on:
         default: doc/dependency_decisions.yml
 
 env:
-  NODE_RELEASE_VERSION: "22"
+  # Exact patch so publishing never falls back to an older cached Node.
+  # 22.23.4 is the first Node 22 release that distrusts the compromised eMudhra CAs.
+  NODE_RELEASE_VERSION: "22.23.4"
   REGISTRY_URL: "https://registry.npmjs.org"
 
 jobs:
@@ -37,6 +39,23 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           check-latest: true
+      - name: Require a Node release that distrusts the compromised eMudhra CAs
+        shell: bash
+        run: |
+          node -e '
+            const minimums = { 22: "22.23.4", 24: "24.22.1", 26: "26.12.1" };
+            const current = process.versions.node;
+            const minimum = minimums[current.split(".")[0]];
+            const older = (a, b) => {
+              const [x, y] = [a, b].map((v) => v.split(".").map(Number));
+              for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] < y[i];
+              return false;
+            };
+            if (!minimum || older(current, minimum)) {
+              console.log(`::error::Node ${current} still trusts the compromised eMudhra CAs. Use Node ${Object.values(minimums).join(", ")} or newer in the same line.`);
+              process.exit(1);
+            }
+          '
       - name: Enable npm.powerapp.cloud auth
         shell: bash
         env:
@@ -77,7 +96,6 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_RELEASE_VERSION }}
-          check-latest: true
           registry-url: ${{ env.REGISTRY_URL }}
       - run: yarn install --frozen-lockfile
         working-directory: ${{ inputs.workdir }}
