@@ -22,6 +22,10 @@ Adds issues and pull requests to an organization project and sets their Status.
 
 Carries unfinished project items over to the current iteration when an iteration ends.
 
+[pr-title](pr-title.md) 🏷️
+
+Checks that pull request titles are Conventional Commits.
+
 ## Maintenance 🚧
 
 These packages are maintained by [Power's](https://github.com/powerhome) Heroes for Hire team.

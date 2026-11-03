@@ -1,0 +1,32 @@
+# Checks that the calling repository's pull request titles are Conventional Commits,
+# `type(scope)!: description [KEY-123]`. Repositories squash-merge with the title as the commit
+# subject, so the title is what has to follow the convention. See docs/pr-title.md.
+
+name: PR title
+
+on:
+  workflow_call:
+    inputs:
+      require-scope:
+        description: Fail titles that have no scope.
+        type: boolean
+        default: false
+      scopes:
+        description: Newline-separated scopes to allow. Any scope is allowed when empty.
+        type: string
+        default: ""
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate:
+    name: Conventional Commit title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          requireScope: ${{ inputs.require-scope }}
+          scopes: ${{ inputs.scopes }}
