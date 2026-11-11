@@ -10,6 +10,10 @@ on:
       package:
         required: true
         type: string
+      release-tag:
+        required: false
+        default: true
+        type: boolean
       workdir:
         required: false
         type: string
@@ -86,7 +90,7 @@ jobs:
   release:
     needs: [build, license-compliance]
     runs-on: ubuntu-latest
-    if: ${{ contains(github.ref, 'refs/tags/v') && contains(github.ref, inputs.package) }}
+    if: ${{ contains(github.ref, 'refs/tags/v') && (contains(github.ref, inputs.package) || !inputs.release-tag) }}
     steps:
       - uses: actions/checkout@v7
       - uses: cadwallion/publish-rubygems-action@master
