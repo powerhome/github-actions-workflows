@@ -7,7 +7,7 @@ For each ruby version, bundler version, and Gemfile (see inputs), it will:
 3. Run the build script (`bundle exec rake` default task);
 4. Run the license_patrol gem to ensure license compliance.
 
-When the workflow is run in `main`, and the commit is tagged with a tag containing the package (see inputs) name, it will publish to Rubygems (see secrets).
+When the workflow is run in `main`, and the commit is tagged with a tag starting with `v` and containing the package (see inputs) name, it will publish to Rubygems (see secrets). Set `release-tag` to `false` to publish from any tag starting with `v`, such as the `v1.2.0` tags release-please creates.
 
 ## Installation 🛠
 
@@ -34,6 +34,7 @@ jobs:
 | ------------ | -------- | ------------ | --------------------------- |
 | before_build | string   | false        |                             |
 | package      | string   | true         |                             |
+| release-tag  | boolean  | false        | true                        |
 | workdir      | string   | false        |                             |
 | ruby         | string   | false        | '["2.7","3.0","3.1","3.2"]' |
 | gemfiles     | string   | false        | '["Gemfile"]'               |
