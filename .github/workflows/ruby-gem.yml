@@ -53,16 +53,32 @@ jobs:
         bundler: ${{ fromJSON(inputs.bundler) }}
         exclude: ${{ fromJSON(inputs.exclude)}}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Before build
         if: ${{ inputs.before_build != '' }}
         run: "${{ inputs.before_build }}"
-      - uses: powerhome/github-actions-workflows/build-ruby-gem@main
+      # These are the steps of ./build-ruby-gem. A reusable workflow can't call
+      # an action from its own repository by relative path, and calling it by
+      # SHA would need a commit to contain its own SHA.
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        env:
+          BUNDLE_GEMFILE: ${{ matrix.gemfile }}
+          BUNDLER_VERSION: ${{ matrix.bundler }}
+          RAILS_ENV: test
         with:
-          workdir: ${{ inputs.workdir }}
-          ruby: ${{ matrix.ruby }}
-          gemfile: ${{ matrix.gemfile }}
+          bundler-cache: true
           bundler: ${{ matrix.bundler }}
+          ruby-version: ${{ matrix.ruby }}
+          working-directory: ${{ inputs.workdir }}
+      - name: Run the build script
+        env:
+          BUNDLE_GEMFILE: ${{ matrix.gemfile }}
+          BUNDLER_VERSION: ${{ matrix.bundler }}
+          RAILS_ENV: test
+        working-directory: ${{ inputs.workdir }}
+        shell: bash
+        run: bundle exec rake
 
   license-compliance:
     uses: ./.github/workflows/license-compliance.yml
@@ -92,8 +108,8 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ contains(github.ref, 'refs/tags/v') && (contains(github.ref, inputs.package) || !inputs.release-tag) }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: cadwallion/publish-rubygems-action@master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cadwallion/publish-rubygems-action@94a6f4cd5350581749c569b5001eecc864e3ad0b # v1.1.0
         env:
           RELEASE_COMMAND: rake build release:guard_clean release:rubygem_push
           RUBYGEMS_API_KEY: ${{ secrets.rubygems_api_key }}

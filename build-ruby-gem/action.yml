@@ -20,7 +20,7 @@ runs:
   using: 'composite'
   steps:
     - name: 'Set up Ruby'
-      uses: ruby/setup-ruby@v1
+      uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
       env:
         BUNDLE_GEMFILE: '${{ inputs.gemfile }}'
         BUNDLER_VERSION: '${{ inputs.bundler }}'

@@ -27,7 +27,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Enable npm.powerapp.cloud auth
         shell: bash
         env:
@@ -45,7 +45,7 @@ jobs:
             echo "//npm.powerapp.cloud/:always-auth=true"
           } >> "${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
       - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
         env:
           # Reuses the bundler cache of a build with the same ruby and gemfile
           BUNDLE_GEMFILE: ${{ fromJSON(inputs.gemfiles || '[""]')[0] }}
