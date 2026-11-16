@@ -1,6 +1,6 @@
 # decision-records
 
-Checks a repository's decision records against [RFC 0115](https://github.com/powerhome/rfcs/pull/240): architecture decision records (ADRs) in [MADR 4.0.0](https://adr.github.io/madr/) format, and change intent records (CIRs) in the format published on [blog.bryanl.dev](https://blog.bryanl.dev/posts/change-intent-records/). The [BT Handbook](https://github.com/powerhome/bt-handbook) documents the standard itself.
+Checks a repository's decision records against [RFC 0116](https://github.com/powerhome/rfcs/pull/240): architecture decision records (ADRs) in [MADR 4.0.0](https://adr.github.io/madr/) format, and change intent records (CIRs) in the format published on [blog.bryanl.dev](https://blog.bryanl.dev/posts/change-intent-records/). The [BT Handbook](https://github.com/powerhome/bt-handbook) documents the standard itself.
 
 The checks are mechanical. Whether a record says something sensible is for review; whether its number is unique and its metadata and links are valid is checked here.
 

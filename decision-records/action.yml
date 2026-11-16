@@ -1,5 +1,5 @@
 name: Decision records
-description: Check ADRs (MADR 4.0.0) and change intent records (CIRs) for unique numbers, file names, metadata and links, as RFC 0115 sets out
+description: Check ADRs (MADR 4.0.0) and change intent records (CIRs) for unique numbers, file names, metadata and links, as RFC 0116 sets out
 
 inputs:
   adr-directories:

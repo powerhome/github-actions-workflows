@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Checks ADRs and CIRs against RFC 0115. Runs from the action, or on its own anywhere Ruby
+# Checks ADRs and CIRs against RFC 0116. Runs from the action, or on its own anywhere Ruby
 # 3.1+ is installed, such as a Jenkins stage:
 #
 #   ruby check_decision_records.rb --adr docs/decisions --cir docs/cir --mkdocs mkdocs.yml
@@ -54,7 +54,7 @@ end
 
 checked = (options[:adr_dirs] + options[:cir_dirs]).join(", ")
 if problems.empty?
-  puts "Decision records in #{checked} follow RFC 0115."
+  puts "Decision records in #{checked} follow RFC 0116."
 else
   warn "#{problems.size} problem(s) in #{checked}. See https://github.com/powerhome/rfcs/pull/240 for the format."
   exit 1

@@ -24,7 +24,7 @@ Carries unfinished project items over to the current iteration when an iteration
 
 [decision-records](decision-records.md) 📜
 
-Checks ADRs and change intent records for unique numbers, valid metadata and resolvable links (RFC 0115).
+Checks ADRs and change intent records for unique numbers, valid metadata and resolvable links (RFC 0116).
 
 ## Maintenance 🚧
 
