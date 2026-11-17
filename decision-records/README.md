@@ -9,7 +9,8 @@ The checks are mechanical. Whether a record says something sensible is for revie
 For every record directory:
 
 - Each record is named `NNNN-title-with-dashes.md`, in lower case. `README.md`, `index.md` and the directory's template (`adr-template.md` or `cir-template.md`) are not records.
-- No two records share a number. The error names the next free number to renumber the later record to.
+- No two records share a number. The error names the next number to renumber the later record to.
+- The numbers run from `0001` with no gaps. A missing number is reported against the record after it, which is usually a record that took a number ahead of the default branch.
 
 For ADRs:
 
@@ -30,7 +31,9 @@ Where `mkdocs.yml` lists record pages one by one, every record in that directory
 
 ## Usage
 
-Run it on pull requests and on pushes to the default branch. A pull request's check compares against the default branch as it was when the build ran, so two open pull requests that each add record 0007 both pass, and the second to merge creates a duplicate. The push run catches that within minutes of the merge; renumber the later record to fix it. Where pull request volume allows, also require branches to be up to date before merging, which prevents it.
+Records are numbered from the default branch: a new record takes the highest number there, plus one. Open pull requests don't reserve numbers, so two can take the same one. The first to merge keeps it; the other merges the default branch in and renumbers its record, and this check fails it until it does.
+
+A pull request's check only sees the default branch as it was when it ran, and doesn't run again when the default branch moves. Require branches to be up to date before merging, so the losing pull request has to merge the default branch in, which re-runs the check and fails on the duplicate before it lands. Also run the check on pushes to the default branch, as a backstop where up-to-date branches aren't required.
 
 ```yaml
 name: Decision records

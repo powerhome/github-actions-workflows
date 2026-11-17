@@ -95,10 +95,26 @@ module_function
       files.drop(1).each do |path|
         problems << Problem.new(path: relative(root, path),
                                 message: "number #{number} is shared by #{names}; " \
-                                         "renumber the later record to #{next_free}, the next free number")
+                                         "renumber the later record to #{next_free}, the next number")
       end
     end
+    problems.concat(gaps(root, records))
     [records, problems]
+  end
+
+  # The series runs from 0001 with no gaps. A missing number usually means a record took
+  # a number ahead of the default branch, so it is reported against the record after it.
+  def gaps(root, records)
+    present = records.keys.map(&:to_i).reject(&:zero?).sort
+    return [] if present.empty?
+
+    ((1..present.last).to_a - present).map do |missing|
+      above = present.find { |number| number > missing }
+      path = records.fetch(format("%04d", above)).first
+      Problem.new(path: relative(root, path),
+                  message: "number #{format('%04d', missing)} is missing before this record; " \
+                           "number records from the highest on the default branch, with no gaps")
+    end
   end
 
   def check_adr(root, path, numbers)

@@ -93,14 +93,32 @@ RSpec.describe DecisionRecords do
     end
 
     it "reports a shared number with the next free number" do
-      write("docs/decisions/0006-first.md", adr)
-      write("docs/decisions/0006-second.md", adr)
-      write("docs/decisions/0007-third.md", adr)
+      write("docs/decisions/0001-first.md", adr)
+      write("docs/decisions/0001-second.md", adr)
+      write("docs/decisions/0002-third.md", adr)
 
       expect(problems(adr_dirs: ["docs/decisions"])).to contain_exactly(
-        a_string_including("docs/decisions/0006-second.md: number 0006 is shared by 0006-first.md, 0006-second.md; " \
-                           "renumber the later record to 0008")
+        a_string_including("docs/decisions/0001-second.md: number 0001 is shared by 0001-first.md, 0001-second.md; " \
+                           "renumber the later record to 0003, the next number")
       )
+    end
+
+    it "reports a gap against the record after it" do
+      write("docs/decisions/0001-a.md", adr)
+      write("docs/decisions/0002-b.md", adr)
+      write("docs/decisions/0004-ahead.md", adr)
+
+      expect(problems(adr_dirs: ["docs/decisions"])).to eq(
+        ["docs/decisions/0004-ahead.md: number 0003 is missing before this record; " \
+         "number records from the highest on the default branch, with no gaps"]
+      )
+    end
+
+    it "does not count 0000 as the start of the series" do
+      write("docs/decisions/0000-foundations.md", adr)
+      write("docs/decisions/0001-a.md", adr)
+
+      expect(problems(adr_dirs: ["docs/decisions"])).to be_empty
     end
 
     it "reports misnamed files" do
@@ -166,10 +184,10 @@ RSpec.describe DecisionRecords do
     end
 
     it "reports a title that disagrees with the file name" do
-      write("docs/cir/0002-cap-logs.md", cir(number: "0003"))
+      write("docs/cir/0001-cap-logs.md", cir(number: "0003"))
 
       expect(problems(cir_dirs: ["docs/cir"])).to eq(
-        ["docs/cir/0002-cap-logs.md: title says CIR-0003 but the file is 0002"]
+        ["docs/cir/0001-cap-logs.md: title says CIR-0003 but the file is 0001"]
       )
     end
 
@@ -184,10 +202,10 @@ RSpec.describe DecisionRecords do
     end
 
     it "reports shared numbers" do
-      write("docs/cir/0005-one.md", cir(number: "0005"))
-      write("docs/cir/0005-two.md", cir(number: "0005"))
+      write("docs/cir/0001-one.md", cir(number: "0001"))
+      write("docs/cir/0001-two.md", cir(number: "0001"))
 
-      expect(problems(cir_dirs: ["docs/cir"])).to contain_exactly(a_string_including("number 0005 is shared"))
+      expect(problems(cir_dirs: ["docs/cir"])).to contain_exactly(a_string_including("number 0001 is shared"))
     end
   end
 
