@@ -51,7 +51,7 @@ RSpec.describe "decision-records action wiring" do
       )
 
       expect(status.exitstatus).to eq(0)
-      expect(stdout).to include("follow RFC 0116")
+      expect(stdout).to include("follow RFC 0110")
     end
   end
 end

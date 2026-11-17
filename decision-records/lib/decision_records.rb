@@ -4,7 +4,7 @@ require "date"
 require "pathname"
 require "yaml"
 
-# Checks a repository's decision records against RFC 0116: ADRs in MADR 4.0.0 format and
+# Checks a repository's decision records against RFC 0110: ADRs in MADR 4.0.0 format and
 # change intent records (CIRs) in their published format, each numbered NNNN-title.md.
 #
 # The checks are deliberately mechanical. Whether a record says something sensible is for
