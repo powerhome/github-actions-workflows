@@ -10,7 +10,7 @@ For every record directory:
 
 - Each record is named `NNNN-title-with-dashes.md`, in lower case. `README.md`, `index.md` and the directory's template (`adr-template.md` or `cir-template.md`) are not records.
 - No two records share a number. The error names the next number to renumber the later record to.
-- The numbers run from `0001` with no gaps. A missing number is reported against the record after it, which is usually a record that took a number ahead of the default branch.
+- On a pull request, each record it adds takes the next number after the highest on the default branch, so no new gap opens. Gaps already on the default branch stay, because renumbering a merged record would give a number people already cite a second meaning.
 
 For ADRs:
 
@@ -59,6 +59,7 @@ jobs:
 | `adr-directories` | `docs/decisions` | ADR directories, one per line, relative to the repository root. Empty checks no ADRs. A monorepo lists one directory per component. |
 | `cir-directories` | empty | CIR directories, one per line. Empty checks no CIRs. |
 | `mkdocs-config` | `mkdocs.yml` | MkDocs config for the nav check. Empty, or a file that does not exist, skips it. |
+| `base-ref` | empty | Git ref of the default branch to number new records from. Empty uses the pull request's base branch, which the action fetches, and skips the new-record check on other events. |
 
 The action runs on the runner's preinstalled Ruby and needs no other setup.
 
@@ -68,10 +69,10 @@ The script needs only Ruby 3.1 or later and its standard library, so a Jenkins s
 
 ```sh
 ruby decision-records/bin/check_decision_records.rb --root path/to/repo \
-  --adr docs/decisions --cir docs/cir --mkdocs mkdocs.yml
+  --adr docs/decisions --cir docs/cir --mkdocs mkdocs.yml --base origin/main
 ```
 
-`--adr` and `--cir` repeat for several directories. It exits 1 when it finds a problem, and prints each as `path: message`.
+`--adr` and `--cir` repeat for several directories. `--base` names the default branch to check new records against; leave it out on the default branch itself. It exits 1 when it finds a problem, and prints each as `path: message`.
 
 ## Tests
 

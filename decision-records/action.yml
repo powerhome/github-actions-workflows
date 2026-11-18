@@ -14,14 +14,36 @@ inputs:
     description: MkDocs config whose nav must list every record, where it lists any record page by page. Empty skips the nav check
     required: false
     default: mkdocs.yml
+  base-ref:
+    description: Git ref of the default branch to number new records from. Empty uses the pull request's base branch, fetched by the action, and skips the new-record check on other events
+    required: false
+    default: ""
 
 runs:
   using: composite
   steps:
+    - name: Fetch the base branch
+      id: base
+      shell: bash
+      env:
+        BASE_REF: ${{ inputs.base-ref }}
+        PR_BASE: ${{ github.base_ref }}
+      run: |
+        set -euo pipefail
+        if [ -n "${BASE_REF}" ]; then
+          echo "ref=${BASE_REF}" >> "${GITHUB_OUTPUT}"
+        elif [ -n "${PR_BASE}" ]; then
+          git fetch --no-tags --depth=1 origin "+refs/heads/${PR_BASE}:refs/remotes/origin/${PR_BASE}"
+          echo "ref=origin/${PR_BASE}" >> "${GITHUB_OUTPUT}"
+        else
+          echo "ref=" >> "${GITHUB_OUTPUT}"
+        fi
+
     - name: Check decision records
       shell: bash
       env:
         DECISION_RECORDS_ADR_DIRS: ${{ inputs.adr-directories }}
         DECISION_RECORDS_CIR_DIRS: ${{ inputs.cir-directories }}
         DECISION_RECORDS_MKDOCS: ${{ inputs.mkdocs-config }}
+        DECISION_RECORDS_BASE: ${{ steps.base.outputs.ref }}
       run: ruby "${{ github.action_path }}/bin/check_decision_records.rb"

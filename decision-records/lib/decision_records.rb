@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "date"
+require "open3"
 require "pathname"
 require "yaml"
 
@@ -17,6 +18,9 @@ module DecisionRecords
   end
 
   FILE_NAME = /\A(?<number>\d{4})-[a-z0-9]+(?:-[a-z0-9]+)*\.md\z/
+  # Numbers in names from before migration, such as CIR-012-title.md, still count toward
+  # the highest number on the default branch.
+  LEGACY_NUMBER = /\A(?:(?:ADR|CIR)-)?(?<number>\d{3,4})-.+\.md\z/i
   # Pages in a records directory that are not records.
   ADR_EXEMPT = %w[README.md index.md adr-template.md].freeze
   CIR_EXEMPT = %w[README.md index.md cir-template.md].freeze
@@ -36,11 +40,17 @@ module_function
 
   # Returns the problems found in the given ADR and CIR directories, and in the MkDocs
   # navigation if `mkdocs` names a config file that lists record pages one by one.
-  def check(root:, adr_dirs: [], cir_dirs: [], mkdocs: nil)
+  #
+  # With `base`, a git ref for the default branch, the records the working tree adds
+  # beyond it must take the next numbers after the highest on it, so no new gap opens.
+  # Gaps already on the default branch stay: renumbering a merged record would give a
+  # number people already cite a second meaning.
+  def check(root:, adr_dirs: [], cir_dirs: [], mkdocs: nil, base: nil)
     root = Pathname.new(root)
     problems = []
     adr_dirs.each { |dir| problems.concat(check_adr_dir(root, dir)) }
     cir_dirs.each { |dir| problems.concat(check_cir_dir(root, dir)) }
+    (adr_dirs + cir_dirs).each { |dir| problems.concat(check_added(root, dir, base)) } if base
     problems.concat(check_nav(root, mkdocs, adr_dirs + cir_dirs)) if mkdocs
     problems
   end
@@ -98,23 +108,44 @@ module_function
                                          "renumber the later record to #{next_free}, the next number")
       end
     end
-    problems.concat(gaps(root, records))
     [records, problems]
   end
 
-  # The series runs from 0001 with no gaps. A missing number usually means a record took
-  # a number ahead of the default branch, so it is reported against the record after it.
-  def gaps(root, records)
-    present = records.keys.map(&:to_i).reject(&:zero?).sort
-    return [] if present.empty?
+  # Records the working tree adds beyond `base` must continue its series: the first takes
+  # the highest number on `base` plus one, the next one more, and so on. A number that
+  # collides with a record on `base` is already reported as shared, so it is skipped here.
+  def check_added(root, dir, base)
+    base_names = names_on(root, base, dir)
+    base_numbers = base_names.filter_map { |name| LEGACY_NUMBER.match(name)&.[](:number)&.to_i }
+    expected = (base_numbers.max || 0) + 1
+    directory = root.join(dir)
+    return [] unless directory.directory?
 
-    ((1..present.last).to_a - present).map do |missing|
-      above = present.find { |number| number > missing }
-      path = records.fetch(format("%04d", above)).first
-      Problem.new(path: relative(root, path),
-                  message: "number #{format('%04d', missing)} is missing before this record; " \
-                           "number records from the highest on the default branch, with no gaps")
+    added = directory.children.select(&:file?).filter_map do |path|
+      name = path.basename.to_s
+      match = FILE_NAME.match(name)
+      [match[:number].to_i, path] if match && !base_names.include?(name)
     end
+
+    added.sort_by { |number, path| [number, path.to_s] }.filter_map do |number, path|
+      next if base_numbers.include?(number)
+
+      if number == expected
+        expected += 1
+        next
+      end
+
+      Problem.new(path: relative(root, path),
+                  message: "a new record takes #{format('%04d', expected)}, the next number after the highest on " \
+                           "#{base}, not #{format('%04d', number)}")
+    end
+  end
+
+  # The file names in `dir` on `ref`, or none when the directory is not there yet.
+  def names_on(root, ref, dir)
+    output, status = Open3.capture2("git", "-C", root.to_s, "ls-tree", "--name-only", "#{ref}:#{dir}",
+                                    err: File::NULL)
+    status.success? ? output.lines.map(&:strip) : []
   end
 
   def check_adr(root, path, numbers)

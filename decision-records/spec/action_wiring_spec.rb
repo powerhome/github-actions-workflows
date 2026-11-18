@@ -12,14 +12,23 @@ ACTION_ROOT = File.expand_path("..", __dir__)
 # fails on a real pull request rather than here.
 RSpec.describe "decision-records action wiring" do
   let(:action) { YAML.safe_load_file(File.join(ACTION_ROOT, "action.yml")) }
-  let(:step) { action.fetch("runs").fetch("steps").first }
+  let(:steps) { action.fetch("runs").fetch("steps") }
+  let(:step) { steps.find { |candidate| candidate["name"] == "Check decision records" } }
   let(:script) { File.read(File.join(ACTION_ROOT, "bin/check_decision_records.rb")) }
 
   it "passes every input to the script through a variable the script reads" do
     expect(step.fetch("env").keys).to all(satisfy { |name| script.include?(%("#{name}")) })
+    env_values = steps.flat_map { |candidate| candidate.fetch("env", {}).values }
     action.fetch("inputs").each_key do |input|
-      expect(step.fetch("env").values).to include("${{ inputs.#{input} }}")
+      expect(env_values).to include("${{ inputs.#{input} }}")
     end
+  end
+
+  it "passes the base branch the fetch step resolves to the check" do
+    base_step = steps.find { |candidate| candidate["id"] == "base" }
+
+    expect(steps.index(base_step)).to be < steps.index(step)
+    expect(step.fetch("env").fetch("DECISION_RECORDS_BASE")).to eq("${{ steps.base.outputs.ref }}")
   end
 
   it "fails a run with problems and annotates them for GitHub" do

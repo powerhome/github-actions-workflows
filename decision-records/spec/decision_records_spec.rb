@@ -103,20 +103,9 @@ RSpec.describe DecisionRecords do
       )
     end
 
-    it "reports a gap against the record after it" do
+    it "leaves gaps alone without a base branch" do
       write("docs/decisions/0001-a.md", adr)
-      write("docs/decisions/0002-b.md", adr)
-      write("docs/decisions/0004-ahead.md", adr)
-
-      expect(problems(adr_dirs: ["docs/decisions"])).to eq(
-        ["docs/decisions/0004-ahead.md: number 0003 is missing before this record; " \
-         "number records from the highest on the default branch, with no gaps"]
-      )
-    end
-
-    it "does not count 0000 as the start of the series" do
-      write("docs/decisions/0000-foundations.md", adr)
-      write("docs/decisions/0001-a.md", adr)
+      write("docs/decisions/0004-b.md", adr)
 
       expect(problems(adr_dirs: ["docs/decisions"])).to be_empty
     end
@@ -206,6 +195,72 @@ RSpec.describe DecisionRecords do
       write("docs/cir/0001-two.md", cir(number: "0001"))
 
       expect(problems(cir_dirs: ["docs/cir"])).to contain_exactly(a_string_including("number 0001 is shared"))
+    end
+  end
+
+  describe "records added beyond the default branch" do
+    def git(*args)
+      system("git", "-C", @root, *args, out: File::NULL, err: File::NULL, exception: true)
+    end
+
+    # Commits what is written so far as the default branch, and returns its ref.
+    def commit_base
+      git("init", "-q")
+      git("add", "-A")
+      git("-c", "user.name=spec", "-c", "user.email=spec@example.com", "commit", "-q", "-m", "base")
+      "HEAD"
+    end
+
+    before do
+      write("docs/decisions/0001-a.md", adr)
+      write("docs/decisions/0002-b.md", adr)
+      write("docs/decisions/0005-after-a-gap.md", adr)
+    end
+
+    it "accepts the next numbers after the highest on the default branch, keeping old gaps" do
+      base = commit_base
+      write("docs/decisions/0006-new.md", adr)
+      write("docs/decisions/0007-newer.md", adr)
+
+      expect(problems(adr_dirs: ["docs/decisions"], base:)).to be_empty
+    end
+
+    it "reports a new record that skips a number" do
+      base = commit_base
+      write("docs/decisions/0007-ahead.md", adr)
+
+      expect(problems(adr_dirs: ["docs/decisions"], base:)).to eq(
+        ["docs/decisions/0007-ahead.md: a new record takes 0006, the next number after the highest on HEAD, " \
+         "not 0007"]
+      )
+    end
+
+    it "reports a new record that fills an old gap" do
+      base = commit_base
+      write("docs/decisions/0003-in-the-gap.md", adr)
+
+      expect(problems(adr_dirs: ["docs/decisions"], base:)).to eq(
+        ["docs/decisions/0003-in-the-gap.md: a new record takes 0006, the next number after the highest on HEAD, " \
+         "not 0003"]
+      )
+    end
+
+    it "reports a race lost to the default branch only as a shared number" do
+      base = commit_base
+      write("docs/decisions/0005-lost-the-race.md", adr)
+
+      expect(problems(adr_dirs: ["docs/decisions"], base:)).to contain_exactly(
+        a_string_including("number 0005 is shared by 0005-after-a-gap.md, 0005-lost-the-race.md")
+      )
+    end
+
+    it "counts pre-migration names on the default branch" do
+      write("docs/cir/CIR-012-old.md", cir(number: "0012"))
+      base = commit_base
+      write("docs/cir/0013-new.md", cir(number: "0013"))
+
+      found = problems(cir_dirs: ["docs/cir"], base:)
+      expect(found).not_to include(a_string_including("a new record takes"))
     end
   end
 
