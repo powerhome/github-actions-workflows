@@ -8,7 +8,7 @@ For each node version it will:
 4. Run `yarn build`;
 5. Run `yarn test`;
 
-When the workflow is run in `main`, and the commit is tagged with a tag containing the package (see inputs) name, it will publish to npm (see secrets).
+When the workflow is run in `main`, and the commit is tagged with a tag starting with `v` and containing the package (see inputs) name, it will publish to npm (see secrets). Set `release-tag` to `false` to publish from any tag starting with `v`, such as the `v1.2.0` tags release-please creates. Tags starting with the package name and `-v`, such as the `my-package-v1.2.0` tags release-please creates in a repository with several packages, publish too.
 
 ## Installation 🛠
 
@@ -30,10 +30,12 @@ jobs:
 
 ## Inputs
 
-| **Input** | **Type** | **Required** | **Default**    |
-| --------- | -------- | ------------ | -------------- |
-| workdir   | string   | false        |                |
-| node      | string   | false        | '["22"]'       |
+| **Input**   | **Type** | **Required** | **Default**    |
+| ----------- | -------- | ------------ | -------------- |
+| package     | string   | true         |                |
+| release-tag | boolean  | false        | true           |
+| workdir     | string   | false        |                |
+| node        | string   | false        | '["22"]'       |
 
 ## Secrets
 
