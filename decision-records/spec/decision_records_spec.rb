@@ -217,7 +217,7 @@ RSpec.describe DecisionRecords do
       write("docs/decisions/0005-after-a-gap.md", adr)
     end
 
-    it "accepts the next numbers after the highest on the default branch, keeping old gaps" do
+    it "accepts numbers above the highest on the default branch, keeping old gaps" do
       base = commit_base
       write("docs/decisions/0006-new.md", adr)
       write("docs/decisions/0007-newer.md", adr)
@@ -225,14 +225,11 @@ RSpec.describe DecisionRecords do
       expect(problems(adr_dirs: ["docs/decisions"], base:)).to be_empty
     end
 
-    it "reports a new record that skips a number" do
+    it "accepts a new record that skips ahead" do
       base = commit_base
-      write("docs/decisions/0007-ahead.md", adr)
+      write("docs/decisions/0009-ahead.md", adr)
 
-      expect(problems(adr_dirs: ["docs/decisions"], base:)).to eq(
-        ["docs/decisions/0007-ahead.md: a new record takes 0006, the next number after the highest on HEAD, " \
-         "not 0007"]
-      )
+      expect(problems(adr_dirs: ["docs/decisions"], base:)).to be_empty
     end
 
     it "reports a new record that fills an old gap" do
@@ -240,8 +237,8 @@ RSpec.describe DecisionRecords do
       write("docs/decisions/0003-in-the-gap.md", adr)
 
       expect(problems(adr_dirs: ["docs/decisions"], base:)).to eq(
-        ["docs/decisions/0003-in-the-gap.md: a new record takes 0006, the next number after the highest on HEAD, " \
-         "not 0003"]
+        ["docs/decisions/0003-in-the-gap.md: a new record must be numbered higher than 0005, the highest on HEAD; " \
+         "take 0006"]
       )
     end
 
@@ -260,7 +257,7 @@ RSpec.describe DecisionRecords do
       write("docs/cir/0013-new.md", cir(number: "0013"))
 
       found = problems(cir_dirs: ["docs/cir"], base:)
-      expect(found).not_to include(a_string_including("a new record takes"))
+      expect(found).not_to include(a_string_including("a new record must be"))
     end
   end
 

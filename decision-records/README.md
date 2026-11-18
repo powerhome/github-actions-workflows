@@ -10,7 +10,7 @@ For every record directory:
 
 - Each record is named `NNNN-title-with-dashes.md`, in lower case. `README.md`, `index.md` and the directory's template (`adr-template.md` or `cir-template.md`) are not records.
 - No two records share a number. The error names the next number to renumber the later record to.
-- On a pull request, each record it adds takes the next number after the highest on the default branch, so no new gap opens. Gaps already on the default branch stay, because renumbering a merged record would give a number people already cite a second meaning.
+- On a pull request, each record it adds is numbered higher than every record on the default branch. It need not be the next number, but it can't fill an old gap. Gaps already on the default branch stay, because renumbering a merged record would give a number people already cite a second meaning.
 
 For ADRs:
 
@@ -31,7 +31,7 @@ Where `mkdocs.yml` lists record pages one by one, every record in that directory
 
 ## Usage
 
-Records are numbered from the default branch: a new record takes the highest number there, plus one. Open pull requests don't reserve numbers, so two can take the same one. The first to merge keeps it; the other merges the default branch in and renumbers its record, and this check fails it until it does.
+Records are numbered from the default branch: a new record is numbered above the highest there, normally the next number. Open pull requests don't reserve numbers, so two can take the same one. The first to merge keeps it; the other merges the default branch in and renumbers its record, and this check fails it until it does.
 
 A pull request's check only sees the default branch as it was when it ran, and doesn't run again when the default branch moves. Require branches to be up to date before merging, so the losing pull request has to merge the default branch in, which re-runs the check and fails on the duplicate before it lands. Also run the check on pushes to the default branch, as a backstop where up-to-date branches aren't required.
 

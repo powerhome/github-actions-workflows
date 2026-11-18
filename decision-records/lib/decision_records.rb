@@ -42,9 +42,9 @@ module_function
   # navigation if `mkdocs` names a config file that lists record pages one by one.
   #
   # With `base`, a git ref for the default branch, the records the working tree adds
-  # beyond it must take the next numbers after the highest on it, so no new gap opens.
-  # Gaps already on the default branch stay: renumbering a merged record would give a
-  # number people already cite a second meaning.
+  # beyond it must be numbered higher than every record on it. Gaps already on the default
+  # branch stay, and no old gap is filled: a merged record never changes its number, and a
+  # number people already cite never gains a second meaning.
   def check(root:, adr_dirs: [], cir_dirs: [], mkdocs: nil, base: nil)
     root = Pathname.new(root)
     problems = []
@@ -111,33 +111,27 @@ module_function
     [records, problems]
   end
 
-  # Records the working tree adds beyond `base` must continue its series: the first takes
-  # the highest number on `base` plus one, the next one more, and so on. A number that
-  # collides with a record on `base` is already reported as shared, so it is skipped here.
+  # Records the working tree adds beyond `base` must be numbered higher than every record
+  # on it. They need not be consecutive. A number that collides with a record on `base` is
+  # already reported as shared, so it is skipped here.
   def check_added(root, dir, base)
     base_names = names_on(root, base, dir)
     base_numbers = base_names.filter_map { |name| LEGACY_NUMBER.match(name)&.[](:number)&.to_i }
-    expected = (base_numbers.max || 0) + 1
+    highest = base_numbers.max || 0
     directory = root.join(dir)
     return [] unless directory.directory?
 
-    added = directory.children.select(&:file?).filter_map do |path|
+    directory.children.select(&:file?).sort.filter_map do |path|
       name = path.basename.to_s
       match = FILE_NAME.match(name)
-      [match[:number].to_i, path] if match && !base_names.include?(name)
-    end
+      next unless match && !base_names.include?(name)
 
-    added.sort_by { |number, path| [number, path.to_s] }.filter_map do |number, path|
-      next if base_numbers.include?(number)
-
-      if number == expected
-        expected += 1
-        next
-      end
+      number = match[:number].to_i
+      next if number > highest || base_numbers.include?(number)
 
       Problem.new(path: relative(root, path),
-                  message: "a new record takes #{format('%04d', expected)}, the next number after the highest on " \
-                           "#{base}, not #{format('%04d', number)}")
+                  message: "a new record must be numbered higher than #{format('%04d', highest)}, the highest on " \
+                           "#{base}; take #{format('%04d', highest + 1)}")
     end
   end
 
