@@ -22,6 +22,10 @@ Adds issues and pull requests to an organization project and sets their Status.
 
 Carries unfinished project items over to the current iteration when an iteration ends.
 
+[decision-records](decision-records.md) 📜
+
+Checks ADRs and change intent records for unique numbers, valid metadata and resolvable links (RFC 0110).
+
 ## Maintenance 🚧
 
 These packages are maintained by [Power's](https://github.com/powerhome) Heroes for Hire team.
