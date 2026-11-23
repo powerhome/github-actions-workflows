@@ -93,7 +93,7 @@ jobs:
     needs: [build, license-compliance]
     runs-on: ubuntu-latest
     name: Release
-    if: ${{ (contains(github.ref, 'refs/tags/v') && (contains(github.ref, inputs.package) || !inputs.release-tag)) || startsWith(github.ref, format('refs/tags/{0}-v', inputs.package)) }}
+    if: ${{ (contains(github.ref, 'refs/tags/v') && (contains(github.ref, inputs.package) || !inputs.release-tag)) || startsWith(github.ref, format('refs/tags/{0}-v', inputs.package)) || startsWith(github.ref, format('refs/tags/{0}/v', inputs.package)) }}
     steps:
       - uses: actions/checkout@v7
       - name: Set up Node ${{ env.NODE_RELEASE_VERSION }}
