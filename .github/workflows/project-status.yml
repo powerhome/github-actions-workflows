@@ -78,7 +78,7 @@ jobs:
     steps:
       - name: Mint project App token
         id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
           client-id: ${{ inputs.client-id }}
           private-key: ${{ secrets.private-key }}
@@ -89,7 +89,7 @@ jobs:
 
       - name: Add to project
         id: add
-        uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd # v2.0.0
+        uses: actions/add-to-project@f2c1f1fa649a891be84948ea89b5dfba1526ef05 # v2.0.1
         with:
           project-url: https://github.com/orgs/${{ inputs.project-owner }}/projects/${{ inputs.project-number }}
           github-token: ${{ steps.app-token.outputs.token }}
