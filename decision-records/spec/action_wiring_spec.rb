@@ -51,6 +51,21 @@ RSpec.describe "decision-records action wiring" do
     end
   end
 
+  it "passes a run with only warnings, annotating them as warnings" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "docs/cir"))
+      File.write(File.join(root, "docs/cir/0001-a.md"), "# CIR-0001: Do a thing\n\n## Intent\n\nWhy.\n")
+
+      env = { "GITHUB_ACTIONS" => "true", "GITHUB_WORKSPACE" => root, "DECISION_RECORDS_CIR_DIRS" => "docs/cir" }
+      script = File.join(ACTION_ROOT, "bin/check_decision_records.rb")
+      stdout, _stderr, status = Open3.capture3(env, RbConfig.ruby, script)
+
+      expect(status.exitstatus).to eq(0)
+      expect(stdout).to include("::warning file=docs/cir/0001-a.md::missing the ## Behavior section")
+      expect(stdout).not_to include("::error")
+    end
+  end
+
   it "passes a clean run from the command line" do
     Dir.mktmpdir do |root|
       FileUtils.mkdir_p(File.join(root, "docs/cir"))

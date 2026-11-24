@@ -10,10 +10,21 @@ require "yaml"
 #
 # The checks are deliberately mechanical. Whether a record says something sensible is for
 # review; whether its number is unique, its metadata parses and its links resolve is not.
+# Those objective problems are errors and fail a build. A missing section or a title in the
+# wrong shape is only a warning: failing on it teaches an agent to add the heading with
+# filler under it, and a record is there to explain, not to fill in a form.
 module DecisionRecords
-  Problem = Struct.new(:path, :message, keyword_init: true) do
+  Problem = Struct.new(:path, :message, :severity, keyword_init: true) do
+    def initialize(severity: :error, **fields)
+      super
+    end
+
+    def warning?
+      severity == :warning
+    end
+
     def to_s
-      "#{path}: #{message}"
+      "#{path}: #{warning? ? 'warning: ' : ''}#{message}"
     end
   end
 
@@ -196,13 +207,14 @@ module_function
     problems = []
     title = body.lines.map(&:chomp).find { |line| line.start_with?("# ") }
     if title.nil?
-      problems << Problem.new(path: where, message: "missing a # title")
+      problems << Problem.new(path: where, severity: :warning, message: "missing a # title")
     elsif title.match?(/\A#\s+(?:ADR[- ]?)?\d+[.:]?\s/i)
-      problems << Problem.new(path: where, message: "the title should state the decision without a number; " \
-                                                    "the number is in the file name")
+      problems << Problem.new(path: where, severity: :warning,
+                              message: "the title should state the decision without a number; " \
+                                       "the number is in the file name")
     end
     missing_sections(body, ADR_SECTIONS).each do |section|
-      problems << Problem.new(path: where, message: "missing the ## #{section} section")
+      problems << Problem.new(path: where, severity: :warning, message: "missing the ## #{section} section")
     end
     problems
   end
@@ -215,18 +227,20 @@ module_function
     title = text.lines.map(&:chomp).find { |line| line.start_with?("# ") }
     match = title && CIR_TITLE.match(title)
     if match.nil?
-      problems << Problem.new(path: where, message: "title must be \"# CIR-#{number}: <what the change does>\"")
+      problems << Problem.new(path: where, severity: :warning,
+                              message: "title should be \"# CIR-#{number}: <what the change does>\"")
     elsif match[:number] != number
       problems << Problem.new(path: where, message: "title says CIR-#{match[:number]} but the file is #{number}")
     end
 
     missing_sections(text, CIR_SECTIONS).each do |section|
-      problems << Problem.new(path: where, message: "missing the ## #{section} section")
+      problems << Problem.new(path: where, severity: :warning, message: "missing the ## #{section} section")
     end
 
     date_section = section_text(text, "Date")
     if date_section && !date_section.match?(/^\d{4}-\d{2}-\d{2}\s*$/)
-      problems << Problem.new(path: where, message: "the Date section needs a date in YYYY-MM-DD form")
+      problems << Problem.new(path: where, severity: :warning,
+                              message: "the Date section needs a date in YYYY-MM-DD form")
     end
 
     text.scan(CIR_SUPERSEDES).flatten.each do |superseded|

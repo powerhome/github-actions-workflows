@@ -6,6 +6,8 @@ The checks are mechanical. Whether a record says something sensible is for revie
 
 ## What it checks
 
+Objective problems are errors and fail the build: numbering, file names, ADR front matter, supersession links, a CIR title whose number disagrees with its file, and the MkDocs nav. Missing sections and titles in the wrong shape are warnings, annotated on the pull request without failing it. Failing on them would teach an agent to add the heading with filler under it.
+
 For every record directory:
 
 - Each record is named `NNNN-title-with-dashes.md`, in lower case. `README.md`, `index.md` and the directory's template (`adr-template.md` or `cir-template.md`) are not records.
@@ -18,13 +20,13 @@ For ADRs:
 - `status` is `proposed`, `accepted`, `rejected`, `deprecated` or `superseded by ADR-NNNN`, and a superseding ADR exists.
 - `date` is `YYYY-MM-DD`.
 - `decision-makers` is set on every ADR that is not `proposed`.
-- The `#` title states the decision without a number.
-- The MADR sections Context and Problem Statement, Considered Options and Decision Outcome are present. Headings may be in title or sentence case.
+- Warning: the `#` title states the decision without a number.
+- Warning: the MADR sections Context and Problem Statement, Considered Options and Decision Outcome are present. Headings may be in title or sentence case.
 
 For CIRs:
 
-- The title is `# CIR-NNNN: <what the change does>`, with the file's number.
-- The sections Intent, Behavior, Constraints, Decisions and Date are present, and Date holds a `YYYY-MM-DD` date.
+- The title's number matches the file's. Warning: the title is `# CIR-NNNN: <what the change does>`.
+- Warning: the sections Intent, Behavior, Constraints, Decisions and Date are present, and Date holds a `YYYY-MM-DD` date. Confirmation is optional.
 - Every `Supersedes: CIR-NNNN` line names a CIR that exists.
 
 Where `mkdocs.yml` lists record pages one by one, every record in that directory must be listed. A nav that collects records by glob, or leaves them to a plugin, is not checked.
@@ -72,7 +74,7 @@ ruby decision-records/bin/check_decision_records.rb --root path/to/repo \
   --adr docs/decisions --cir docs/cir --mkdocs mkdocs.yml --base origin/main
 ```
 
-`--adr` and `--cir` repeat for several directories. `--base` names the default branch to check new records against; leave it out on the default branch itself. It exits 1 when it finds a problem, and prints each as `path: message`.
+`--adr` and `--cir` repeat for several directories. `--base` names the default branch to check new records against; leave it out on the default branch itself. It exits 1 when it finds an error, and 0 when it finds only warnings. It prints each problem as `path: message`, with warnings marked `warning:`.
 
 ## Tests
 

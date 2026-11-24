@@ -54,16 +54,20 @@ annotate = ENV["GITHUB_ACTIONS"] == "true"
 
 problems.each do |problem|
   if annotate
-    puts "::error file=#{problem.path}::#{problem.message}"
+    puts "::#{problem.warning? ? 'warning' : 'error'} file=#{problem.path}::#{problem.message}"
   else
     warn problem
   end
 end
 
 checked = (options[:adr_dirs] + options[:cir_dirs]).join(", ")
+errors, warnings = problems.partition { |problem| !problem.warning? }
 if problems.empty?
   puts "Decision records in #{checked} follow RFC 0110."
+elsif errors.empty?
+  puts "#{warnings.size} warning(s) in #{checked}, and no errors."
 else
-  warn "#{problems.size} problem(s) in #{checked}. See https://github.com/powerhome/rfcs/pull/240 for the format."
+  warn "#{errors.size} error(s) and #{warnings.size} warning(s) in #{checked}. " \
+       "See https://github.com/powerhome/rfcs/pull/240 for the format."
   exit 1
 end

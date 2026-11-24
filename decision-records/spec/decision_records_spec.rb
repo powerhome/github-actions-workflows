@@ -152,6 +152,23 @@ RSpec.describe DecisionRecords do
       )
     end
 
+    it "reports missing sections and a numbered title as warnings, not errors" do
+      write("docs/decisions/0001-a.md", adr(title: "1. Use tiers").sub("## Considered Options", "## Alternatives"))
+
+      found = described_class.check(root: @root, adr_dirs: ["docs/decisions"])
+      expect(found).to all(be_warning)
+      expect(found.map(&:to_s)).to include(a_string_including("warning: missing the ## Considered Options section"))
+    end
+
+    it "reports objective problems as errors" do
+      write("docs/decisions/0001-a.md", adr(status: '"done"'))
+      write("docs/decisions/0001-b.md", adr)
+
+      found = described_class.check(root: @root, adr_dirs: ["docs/decisions"])
+      expect(found).not_to be_empty
+      expect(found.none?(&:warning?)).to be(true)
+    end
+
     it "accepts section headings in sentence case" do
       write("docs/decisions/0001-a.md", adr.sub("Context and Problem Statement", "Context and problem statement"))
 
