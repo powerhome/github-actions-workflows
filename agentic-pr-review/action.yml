@@ -110,7 +110,7 @@ runs:
         } >> "${GITHUB_OUTPUT}"
 
     - name: Check out repository
-      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         ref: ${{ steps.pr_gate.outputs.head_sha }}
         fetch-depth: 1
@@ -123,7 +123,7 @@ runs:
       run: git fetch --depth=1 origin "$BASE_SHA"
 
     - name: Fetch through merge-base
-      uses: rmacklin/fetch-through-merge-base@bfe4d03a86f9afa52bc1a70e9814fc92a07f7b75 # v0
+      uses: rmacklin/fetch-through-merge-base@bfe4d03a86f9afa52bc1a70e9814fc92a07f7b75 # v0.3.0
       with:
         base_ref: ${{ steps.pr_gate.outputs.base_sha }}
         head_ref: ${{ steps.pr_gate.outputs.head_sha }}
